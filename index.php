@@ -31,6 +31,15 @@ try {
     die($e->getMessage());
 }
 
+// Проверяем и добавляем нужные колонки если их нет
+try {
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT");
+    $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
+} catch (PDOException $e) {
+    // Колонки уже есть или ошибка - игнорируем
+}
+
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 # =========================
@@ -116,17 +125,22 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
 
     $id = (int)$m[1];
 
-    $stmt = $pdo->prepare("
-        SELECT page_url
-        FROM manga_pages
-        WHERE manga_id=?
-        ORDER BY page_order
-    ");
-
-    $stmt->execute([$id]);
+    // Проверяем есть ли колонка page_url
+    try {
+        $stmt = $pdo->prepare("
+            SELECT page_url
+            FROM manga_pages
+            WHERE manga_id=?
+            ORDER BY page_order
+        ");
+        $stmt->execute([$id]);
+        $pages = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        $pages = [];
+    }
 
     echo json_encode([
-        'pages' => $stmt->fetchAll(PDO::FETCH_COLUMN)
+        'pages' => $pages
     ]);
 
     exit;
@@ -326,7 +340,6 @@ async function init(){
         
         render();
         
-        // Предзагрузка следующей страницы
         if (pages.length > 1) {
             const preload = new Image();
             preload.src = pages[1];
@@ -348,7 +361,6 @@ function render(){
     document.getElementById('counter').innerText =
         (current + 1) + ' / ' + pages.length;
         
-    // Предзагрузка следующей страницы
     if (current + 1 < pages.length) {
         const preload = new Image();
         preload.src = pages[current + 1];
@@ -389,7 +401,6 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// Свайпы для мобильных
 let touchStartX = 0;
 let touchEndX = 0;
 
@@ -422,20 +433,36 @@ if (preg_match('#^/read/(\d+)$#', $path, $m)) {
 
     $id = (int)$m[1];
 
-    $stmt = $pdo->prepare("
-        SELECT id, title, description, cover_imgbb_url, telegraph_url, likes
-        FROM manga
-        WHERE id=?
-    ");
-
-    $stmt->execute([$id]);
-
-    $manga = $stmt->fetch();
+    // Получаем данные манги с проверкой на существование колонок
+    try {
+        // Пробуем получить telegraph_url
+        $stmt = $pdo->prepare("
+            SELECT id, title, description, cover_imgbb_url, telegraph_url, likes, file_id
+            FROM manga
+            WHERE id=?
+        ");
+        $stmt->execute([$id]);
+        $manga = $stmt->fetch();
+    } catch (PDOException $e) {
+        // Если колонки нет, пробуем без них
+        $stmt = $pdo->prepare("
+            SELECT id, title, description, cover_imgbb_url, likes, file_id
+            FROM manga
+            WHERE id=?
+        ");
+        $stmt->execute([$id]);
+        $manga = $stmt->fetch();
+        $manga['telegraph_url'] = $manga['file_id'] ?? null;
+    }
 
     if (!$manga) {
         http_response_code(404);
         die('404');
     }
+    
+    // Определяем URL для чтения
+    $readUrl = !empty($manga['telegraph_url']) ? $manga['telegraph_url'] : ($manga['file_id'] ?? '#');
+    $coverUrl = $manga['cover_imgbb_url'] ?? '';
 
 ?>
 
@@ -635,12 +662,13 @@ body{
 
     <div class="box">
 
-        <img
-            class="cover"
-            src="<?= htmlspecialchars($manga['cover_imgbb_url'] ?? '') ?>"
-            onerror="this.src='https://placehold.co/400x600/1a1a2e/7c5cff?text=No+Cover'"
-            alt="<?= htmlspecialchars($manga['title']) ?>"
-        >
+        <?php if (!empty($coverUrl)): ?>
+            <img class="cover" src="<?= htmlspecialchars($coverUrl) ?>" alt="<?= htmlspecialchars($manga['title']) ?>">
+        <?php else: ?>
+            <div class="cover" style="background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0a 100%); display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 64px;">📖</span>
+            </div>
+        <?php endif; ?>
 
         <div class="info">
 
@@ -662,8 +690,8 @@ body{
                     📖 Читать онлайн
                 </a>
 
-                <?php if (!empty($manga['telegraph_url'])): ?>
-                    <a class="btn secondary" target="_blank" href="<?= htmlspecialchars($manga['telegraph_url']) ?>">
+                <?php if (!empty($readUrl) && $readUrl !== '#'): ?>
+                    <a class="btn secondary" target="_blank" href="<?= htmlspecialchars($readUrl) ?>">
                         📄 Читать в Telegraph
                     </a>
                 <?php endif; ?>
@@ -746,11 +774,6 @@ header{
     -webkit-text-fill-color: transparent;
     background-clip: text;
     letter-spacing: -0.5px;
-}
-
-.logo span {
-    background: none;
-    -webkit-text-fill-color: var(--accent);
 }
 
 .search{
@@ -942,7 +965,7 @@ header{
 <header>
 
     <div class="logo">
-        BLACKWATCH<span>MANGA</span>
+        BLACKWATCH<span style="background: none; -webkit-text-fill-color: var(--accent);">MANGA</span>
     </div>
 
     <input
@@ -993,7 +1016,6 @@ async function load(reset = false){
         hasMore = true;
     }
 
-    // Показываем скелетон при первой загрузке
     if (page === 0 && grid.children.length === 0) {
         grid.innerHTML = '<div class="loading-state">📖 Загрузка манги...</div>';
     }
@@ -1026,19 +1048,16 @@ async function load(reset = false){
 
         data.items.forEach(m => {
 
-            const coverUrl = m.cover_display || 'https://placehold.co/400x600/1a1a2e/7c5cff?text=No+Cover';
+            const coverUrl = m.cover_display || '';
 
             grid.insertAdjacentHTML('beforeend', `
 
                 <a class="card" href="/read/${m.id}">
 
-                    <img
-                        class="cover"
-                        src="${coverUrl}"
-                        loading="lazy"
-                        alt="${escapeHtml(m.title)}"
-                        onerror="this.src='https://placehold.co/400x600/1a1a2e/7c5cff?text=Error'"
-                    >
+                    ${coverUrl ? 
+                        `<img class="cover" src="${coverUrl}" loading="lazy" alt="${escapeHtml(m.title)}" onerror="this.src=''">` :
+                        `<div class="cover" style="display: flex; align-items: center; justify-content: center;"><span style="font-size: 48px;">📖</span></div>`
+                    }
 
                     <div class="info">
 
@@ -1079,7 +1098,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Дебаунс для поиска
 let searchTimeout;
 searchInput.addEventListener('input', e => {
     clearTimeout(searchTimeout);
@@ -1091,10 +1109,8 @@ searchInput.addEventListener('input', e => {
 
 moreBtn.onclick = () => load();
 
-// Загружаем первую страницу
 load();
 
-// Бесконечный скролл (опционально)
 let scrollTimeout;
 window.addEventListener('scroll', () => {
     if (scrollTimeout) clearTimeout(scrollTimeout);
