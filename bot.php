@@ -1,4 +1,7 @@
 <?php
+// ОТЛАДКА - временно, потом удалить
+file_put_contents('bot_debug.txt', date('Y-m-d H:i:s') . ' - ' . file_get_contents("php://input") . "\n", FILE_APPEND);
+
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('log_errors', 1);
@@ -1158,7 +1161,7 @@ if (isset($update['message'])) {
 }
 
 // =============================================
-// ФУНКЦИИ (ОСТАЛЬНЫЕ)
+// ФУНКЦИИ
 // =============================================
 
 function getArchiveData($pdo, $admins, $page) {
@@ -1209,7 +1212,7 @@ function getSearchData($pdo, $query, $page) {
     if ($page > 0) $nav[] = ['text' => '⬅️ Назад', 'callback_data' => 'search_page_' . urlencode($q) . '_' . ($page - 1)];
     $totalPages = ceil($total / $limit);
     if ($totalPages > 1) $nav[] = ['text' => ($page + 1) . " / " . $totalPages, 'callback_data' => 'none'];
-    if (($offset + $limit) < $total) $nav[] = ['text' => 'Вперёд ➡️', 'callback_data' => 'search_page_' . urlencode($q) . '_' . ($page + 1)];
+        if (($offset + $limit) < $total) $nav[] = ['text' => 'Вперёд ➡️', 'callback_data' => 'search_page_' . urlencode($q) . '_' . ($page + 1)];
     if (!empty($nav)) $btns[] = $nav;
     return ['text' => $headerText . "\n_Выберите произведение из списка:_", 'reply_markup' => json_encode(['inline_keyboard' => $btns])];
 }
@@ -1246,19 +1249,27 @@ function sendEditMangaMenu($chatId, $m, $apiUrl) {
     $mId = $m['id'];
     $desc = mb_substr(strip_tags($m['description'] ?? ''), 0, 80);
     $text = "✏️ *Редактирование манги*\n\n📖 *Название:* {$m['title']}\n📝 *Описание:* _{$desc}..._\n🔗 *Ссылка:* {$m['telegraph_url']}\n🖼 *Обложка:* " . (!empty($m['cover_imgbb_url']) ? "✅ Есть" : "❌ Нет") . "\n\n_Выберите что изменить:_";
-    $kb = ['inline_keyboard' => [[['text' => '🖼 Изменить обложку', 'callback_data' => 'editfield_cover_' . $mId], ['text' => '📖 Изменить название', 'callback_data' => 'editfield_title_' . $mId]], [['text' => '📝 Изменить описание', 'callback_data' => 'editfield_desc_' . $mId], ['text' => '🔗 Изменить ссылку', 'callback_data' => 'editfield_link_' . $mId]], [['text' => '🗑 Удалить мангу', 'callback_data' => 'delete_confirm_' . $mId]]]];
-    if (!empty($m['cover_imgbb_url'])) tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['cover_imgbb_url'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
-    else tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
-}
-
-function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
-    if (!$m) return;
-    $text = "📖 *" . $m['title'] . "*\n\n" . $m['description'] . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
-    $readButtons = [['text' => '📖 Читать (Telegra.ph)', 'url' => $m['telegraph_url']]];
-    if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
-    $kb = ['inline_keyboard' => [$readButtons, [['text' => '⏳ Читаю сейчас', 'callback_data' => 'stat_now_' . $m['id']], ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']]], [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]]];
-    if (!empty($m['cover_imgbb_url'])) tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['cover_imgbb_url'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
-    else tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+    $kb = ['inline_keyboard' => [
+        [['text' => '🖼 Изменить обложку', 'callback_data' => 'editfield_cover_' . $mId], ['text' => '📖 Изменить название', 'callback_data' => 'editfield_title_' . $mId]],
+        [['text' => '📝 Изменить описание', 'callback_data' => 'editfield_desc_' . $mId], ['text' => '🔗 Изменить ссылку', 'callback_data' => 'editfield_link_' . $mId]],
+        [['text' => '🗑 Удалить мангу', 'callback_data' => 'delete_confirm_' . $mId]]
+    ]];
+    if (!empty($m['cover_imgbb_url'])) {
+        tgPost($apiUrl . "/sendPhoto", [
+            'chat_id' => $chatId,
+            'photo' => $m['cover_imgbb_url'],
+            'caption' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => $kb
+        ]);
+    } else {
+        tgPost($apiUrl . "/sendMessage", [
+            'chat_id' => $chatId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => $kb
+        ]);
+    }
 }
 
 function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
@@ -1292,12 +1303,12 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
 function updateMangaMessage($chatId, $msgId, $m, $apiUrl) {
     $text = "📖 *" . $m['title'] . "*\n\n" . $m['description'] . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
     $kb = ['inline_keyboard' => [
-        [['text' => '🔗 ЧИТАТЬ ГЛАВУ', 'url' => $m['telegraph_url']]],
+        [['text' => '📖 Читать (Telegra.ph)', 'url' => $m['telegraph_url']]],
         [['text' => '⏳ Читаю сейчас', 'callback_data' => 'stat_now_' . $m['id']], ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']]],
         [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
     ]];
     $method = !empty($m['cover_imgbb_url']) ? "editMessageCaption" : "editMessageText";
-    $param  = !empty($m['cover_imgbb_url']) ? "caption" : "text";
+    $param = !empty($m['cover_imgbb_url']) ? "caption" : "text";
     tgPost($apiUrl . "/$method", [
         'chat_id' => $chatId,
         'message_id' => $msgId,
@@ -1332,7 +1343,7 @@ function sendLibrary($chatId, $pdo, $apiUrl) {
 function sendSimpleMsg($chatId, $text, $apiUrl, $kb = null) {
     $data = ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown'];
     if ($kb) {
-        $data['reply_markup'] = is_string($kb) ? json_decode($kb) : $kb;
+        $data['reply_markup'] = is_string($kb) ? json_decode($kb, true) : $kb;
     }
     return tgPost($apiUrl . "/sendMessage", $data);
 }

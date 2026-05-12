@@ -31,6 +31,8 @@ try {
 try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
 } catch (Exception $e) {}
 
@@ -48,12 +50,12 @@ if ($path === '/api/manga') {
     $offset = $page * $limit;
 
     if ($q) {
-        $stmt = $pdo->prepare("SELECT id, title, likes, cover_imgbb_url FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY id DESC LIMIT ? OFFSET ?");
+        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY id DESC LIMIT ? OFFSET ?");
         $stmt->execute(["%{$q}%", $limit, $offset]);
         $count = $pdo->prepare("SELECT COUNT(*) FROM manga WHERE LOWER(title) LIKE LOWER(?)");
         $count->execute(["%{$q}%"]);
     } else {
-        $stmt = $pdo->prepare("SELECT id, title, likes, cover_imgbb_url FROM manga ORDER BY id DESC LIMIT ? OFFSET ?");
+        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url FROM manga ORDER BY id DESC LIMIT ? OFFSET ?");
         $stmt->execute([$limit, $offset]);
         $count = $pdo->query("SELECT COUNT(*) FROM manga");
     }
@@ -64,6 +66,7 @@ if ($path === '/api/manga') {
             'id' => (int)$m['id'],
             'title' => $m['title'],
             'likes' => (int)$m['likes'],
+            'dislikes' => (int)$m['dislikes'],
             'cover_display' => $m['cover_imgbb_url'] ?? null
         ];
     }
@@ -82,6 +85,86 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     $stmt = $pdo->prepare("SELECT page_url FROM manga_pages WHERE manga_id=? ORDER BY page_order");
     $stmt->execute([$id]);
     echo json_encode(['pages' => $stmt->fetchAll(PDO::FETCH_COLUMN)]);
+    exit;
+}
+
+# =========================
+# API VOTE (ЛАЙК/ДИЗЛАЙК)
+# =========================
+
+if ($path === '/api/vote' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mangaId = (int)($input['manga_id'] ?? 0);
+    $voteType = $input['vote_type'] ?? '';
+    
+    // Получаем или создаём user_id из сессии
+    session_start();
+    if (!isset($_SESSION['user_id'])) {
+        $_SESSION['user_id'] = rand(100000, 999999);
+    }
+    $userId = $_SESSION['user_id'];
+    
+    if ($mangaId && in_array($voteType, ['like', 'dislike'])) {
+        // Проверяем существующий голос
+        $check = $pdo->prepare("SELECT vote_type FROM votes WHERE user_id = ? AND manga_id = ?");
+        $check->execute([$userId, $mangaId]);
+        $existing = $check->fetch();
+        
+        if ($existing) {
+            if ($existing['vote_type'] !== $voteType) {
+                // Меняем голос
+                $pdo->prepare("UPDATE votes SET vote_type = ? WHERE user_id = ? AND manga_id = ?")->execute([$voteType, $userId, $mangaId]);
+                if ($voteType == 'like') {
+                    $pdo->prepare("UPDATE manga SET likes = likes + 1, dislikes = dislikes - 1 WHERE id = ?")->execute([$mangaId]);
+                } else {
+                    $pdo->prepare("UPDATE manga SET dislikes = dislikes + 1, likes = likes - 1 WHERE id = ?")->execute([$mangaId]);
+                }
+            }
+        } else {
+            // Новый голос
+            $pdo->prepare("INSERT INTO votes (user_id, manga_id, vote_type) VALUES (?, ?, ?)")->execute([$userId, $mangaId, $voteType]);
+            if ($voteType == 'like') {
+                $pdo->prepare("UPDATE manga SET likes = likes + 1 WHERE id = ?")->execute([$mangaId]);
+            } else {
+                $pdo->prepare("UPDATE manga SET dislikes = dislikes + 1 WHERE id = ?")->execute([$mangaId]);
+            }
+        }
+        
+        // Получаем обновлённые данные
+        $stmt = $pdo->prepare("SELECT likes, dislikes FROM manga WHERE id = ?");
+        $stmt->execute([$mangaId]);
+        $stats = $stmt->fetch();
+        
+        echo json_encode(['success' => true, 'likes' => $stats['likes'], 'dislikes' => $stats['dislikes']]);
+        exit;
+    }
+    echo json_encode(['success' => false]);
+    exit;
+}
+
+# =========================
+# API STATUS (ЧИТАЮ/ПРОЧИТАНО)
+# =========================
+
+if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mangaId = (int)($input['manga_id'] ?? 0);
+    $status = $input['status'] ?? '';
+    
+    session_start();
+    if (!isset($_SESSION['user_id'])) {
+        $_SESSION['user_id'] = rand(100000, 999999);
+    }
+    $userId = $_SESSION['user_id'];
+    
+    if ($mangaId && in_array($status, ['now', 'read'])) {
+        $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$userId, $mangaId, $status]);
+        echo json_encode(['success' => true]);
+        exit;
+    }
+    echo json_encode(['success' => false]);
     exit;
 }
 
@@ -151,12 +234,12 @@ init();
 <?php exit; }
 
 # =========================
-# MANGA PAGE (СТРАНИЦА МАНГИ)
+# MANGA PAGE (СТРАНИЦА МАНГИ) С КНОПКАМИ
 # =========================
 
 if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $id = (int)$m[1];
-    $stmt = $pdo->prepare("SELECT id, title, description, cover_imgbb_url, telegraph_url, likes FROM manga WHERE id=?");
+    $stmt = $pdo->prepare("SELECT id, title, description, cover_imgbb_url, telegraph_url, likes, dislikes FROM manga WHERE id=?");
     $stmt->execute([$id]);
     $manga = $stmt->fetch();
     if (!$manga) { http_response_code(404); die('404'); }
@@ -170,7 +253,7 @@ if (preg_match('#^/read/(\d+)$#', $path, $m)) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= htmlspecialchars($manga['title']) ?> - BLACKWATCH MANGA</title>
 <style>
-:root{--bg:#07070b;--card:#101018;--soft:#181824;--border:#26263a;--text:#f3f3f7;--muted:#8e8ea0;--accent:#7c5cff}
+:root{--bg:#07070b;--card:#101018;--soft:#181824;--border:#26263a;--text:#f3f3f7;--muted:#8e8ea0;--accent:#7c5cff;--like:#ff6b6b;--dislike:#6b6b6b}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 .wrap{max-width:1100px;margin:auto;padding:40px 20px}
@@ -181,15 +264,30 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .info{flex:1}
 .title{font-size:42px;font-weight:800;background:linear-gradient(135deg,#fff 0%,var(--accent)100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:16px}
 .desc{color:var(--muted);line-height:1.7;margin-top:20px;font-size:16px}
-.likes{margin-top:20px;font-size:18px;color:#ffd166;display:inline-flex;align-items:center;gap:8px;background:rgba(255,209,102,0.1);padding:8px 16px;border-radius:40px}
-.buttons{display:flex;gap:14px;margin-top:30px;flex-wrap:wrap}
+.stats{display:flex;gap:20px;margin-top:20px;flex-wrap:wrap}
+.likes-count,.dislikes-count{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:40px;font-size:16px}
+.likes-count{background:rgba(255,107,107,0.15);color:var(--like)}
+.dislikes-count{background:rgba(107,107,107,0.15);color:var(--dislike)}
+.status-buttons{display:flex;gap:14px;margin-top:20px;flex-wrap:wrap}
+.status-btn{padding:10px 20px;border-radius:30px;border:none;font-weight:600;cursor:pointer;transition:all 0.2s;background:var(--soft);color:var(--text)}
+.status-btn.active{background:var(--accent);color:#fff}
+.status-btn:hover{transform:translateY(-2px)}
+.vote-buttons{display:flex;gap:14px;margin-top:20px;flex-wrap:wrap}
+.vote-btn{padding:12px 24px;border-radius:40px;border:none;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
+.vote-like{background:rgba(255,107,107,0.2);color:var(--like)}
+.vote-like:hover{background:var(--like);color:#fff;transform:translateY(-2px)}
+.vote-dislike{background:rgba(107,107,107,0.2);color:var(--dislike)}
+.vote-dislike:hover{background:var(--dislike);color:#fff;transform:translateY(-2px)}
+.read-buttons{display:flex;gap:14px;margin-top:20px;flex-wrap:wrap}
 .btn{padding:14px 28px;border-radius:14px;text-decoration:none;font-weight:600;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
 .btn:hover{transform:translateY(-2px)}
 .btn:active{transform:translateY(0)}
 .primary{background:var(--accent);color:#fff;border:none}
 .secondary{background:var(--soft);color:var(--text);border:1px solid var(--border)}
 .secondary:hover{border-color:var(--accent);background:var(--card)}
-@media(max-width:768px){.box{padding:20px;gap:25px}.cover{width:100%;max-width:250px;margin:0 auto}.title{font-size:28px;text-align:center}.desc{font-size:14px;text-align:center}.likes{justify-content:center}.buttons{justify-content:center}.back-link{margin-bottom:20px}}
+@media(max-width:768px){.box{padding:20px;gap:25px}.cover{width:100%;max-width:250px;margin:0 auto}.title{font-size:28px;text-align:center}.desc{font-size:14px;text-align:center}.stats{justify-content:center}.status-buttons{justify-content:center}.vote-buttons{justify-content:center}.read-buttons{justify-content:center}.back-link{margin-bottom:20px}}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.9);color:#fff;padding:12px 24px;border-radius:50px;z-index:1000;font-size:14px;animation:fadeOut 2s ease forwards}
+@keyframes fadeOut{0%{opacity:1}70%{opacity:1}100%{opacity:0;visibility:hidden}}
 </style>
 </head>
 <body>
@@ -204,8 +302,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div class="info">
 <div class="title"><?= htmlspecialchars($manga['title']) ?></div>
 <div class="desc"><?= nl2br(htmlspecialchars($manga['description'] ?? 'Описание отсутствует')) ?></div>
-<div class="likes">❤ <?= (int)$manga['likes'] ?> лайков</div>
-<div class="buttons">
+<div class="stats">
+<div class="likes-count" id="likes-count">❤ <span id="likes"><?= (int)$manga['likes'] ?></span></div>
+<div class="dislikes-count" id="dislikes-count">💔 <span id="dislikes"><?= (int)$manga['dislikes'] ?></span></div>
+</div>
+<div class="status-buttons">
+<button class="status-btn" id="status-now" onclick="setStatus('now')">⏳ Читаю сейчас</button>
+<button class="status-btn" id="status-read" onclick="setStatus('read')">✅ Прочитано</button>
+</div>
+<div class="vote-buttons">
+<button class="vote-btn vote-like" onclick="vote('like')">👍 Лайк</button>
+<button class="vote-btn vote-dislike" onclick="vote('dislike')">👎 Дизлайк</button>
+</div>
+<div class="read-buttons">
 <a class="btn primary" href="/view/<?= $id ?>">📖 Читать онлайн</a>
 <?php if(!empty($telegraphUrl)): ?>
 <a class="btn secondary" target="_blank" href="<?= htmlspecialchars($telegraphUrl) ?>">📄 Читать в Telegraph</a>
@@ -214,6 +323,47 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 </div>
 </div>
+<script>
+let currentStatus = null;
+async function vote(type){
+    try{
+        const res=await fetch('/api/vote',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({manga_id:<?= $id ?>,vote_type:type})
+        });
+        const data=await res.json();
+        if(data.success){
+            document.getElementById('likes').innerText=data.likes;
+            document.getElementById('dislikes').innerText=data.dislikes;
+            showToast(type=='like'?'👍 Лайк учтён!':'👎 Дизлайк учтён!');
+        }
+    }catch(e){console.error(e)}
+}
+async function setStatus(status){
+    try{
+        const res=await fetch('/api/status',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({manga_id:<?= $id ?>,status:status})
+        });
+        const data=await res.json();
+        if(data.success){
+            document.querySelectorAll('.status-btn').forEach(btn=>btn.classList.remove('active'));
+            document.getElementById(`status-${status}`).classList.add('active');
+            currentStatus=status;
+            showToast(status=='now'?'📖 Добавлено в "Читаю сейчас"!':'✅ Добавлено в "Прочитано"!');
+        }
+    }catch(e){console.error(e)}
+}
+function showToast(msg){
+    let toast=document.createElement('div');
+    toast.className='toast';
+    toast.innerText=msg;
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(),2000);
+}
+</script>
 </body>
 </html>
 <?php exit; }
