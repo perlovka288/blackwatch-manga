@@ -1,8 +1,4 @@
 <?php
-// =============================================
-// BLACKWATCH — MangaBot Web Catalog
-// Render.com + Neon PostgreSQL
-// =============================================
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 // --- DB Connection ---
@@ -18,13 +14,13 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
 } catch (PDOException $e) {
-    die('DB Error: ' . $e->getMessage());
+    die('DB Error: ' . $e->getMessage());
 }
 $botUsername = getenv('BOT_USERNAME') ?: 'Manga123Manga123bot';
-$siteUrl     = rtrim(getenv('SITE_URL') ?: '[blackwatch-manga.onrender.com](https://blackwatch-manga.onrender.com)', '/');
+$siteUrl     = rtrim(getenv('SITE_URL') ?: 'https://blackwatch-manga.onrender.com', '/');
 // --- Routing ---
 $path = rtrim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/') ?: '/';
-// === API: manga pages ===
+// === API: manga pages ===
 if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     header('Content-Type: application/json; charset=utf-8');
     $id = (int)$m[1];
@@ -41,7 +37,7 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     }
     exit;
 }
-// === API: manga search ===
+// === API: manga search ===
 if ($path === '/api/manga') {
     header('Content-Type: application/json; charset=utf-8');
     $q      = trim($_GET['q'] ?? '');
@@ -86,16 +82,16 @@ if ($path === '/api/manga') {
     ]);
     exit;
 }
-// === Reader page ===
+// === Reader page ===
 if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $id = (int)$m[1];
     renderReader($pdo, $id, $siteUrl, $botUsername);
     exit;
 }
-// === Main catalog ===
+// === Main catalog ===
 renderCatalog($pdo, $siteUrl, $botUsername);
 // =======================================================
-// Catalog Renderer
+// Catalog Renderer
 // =======================================================
 function renderCatalog($pdo, $siteUrl, $botUsername)
 {
@@ -112,8 +108,8 @@ function renderCatalog($pdo, $siteUrl, $botUsername)
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BLACKWATCH — Каталог манги</title>
-<link href="[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap)" rel="stylesheet">
+<title>BLACKWATCH — Каталог манги</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
  --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--accent:#3b82f6;
@@ -141,39 +137,39 @@ border-radius:12px;overflow:hidden;text-decoration:none;color:var(--text)}
 <header>
   <a href="/" class="header-logo">BLACKWATCH<span>манга</span></a>
   <div class="search-box">
-    <input id="searchInput" placeholder="Поиск манги ..." autocomplete="off">
+    <input id="searchInput" placeholder="Поиск манги ..." autocomplete="off">
   </div>
 </header>
 <section style="padding:40px 20px;text-align:center">
-  <h1 style="font-family:'Bebas Neue',sans-serif;letter-spacing:8px;margin:0">BLACKWATCH</h1>
+  <h1 style="font-family:'Bebas Neue',sans-serif;letter-spacing:8px;margin:0">BLACKWATCH</h1>
   <span style="color:var(--accent);letter-spacing:4px;text-transform:uppercase">манга</span>
 </section>
 <?php if($top): ?>
-<section style="max-width:1200px;margin:auto;padding:0 20px 40px">
-  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">🔥 Топ по лайкам</div>
+<section style="max-width:1200px;margin:auto;padding:0 20px 40px">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">🔥 Топ по лайкам</div>
   <div style="display:flex;gap:16px;overflow-x:auto;padding-bottom:6px">
   <?php foreach($top as $t):
         $img=$t['cover_imgbb_url']?:$t['cover_id']; ?>
-    <a href="/read/<?= $t['id'] ?>" class="manga-card" style="width:200px;flex-shrink:0">
-      <?php if($img): ?><img src="<?= htmlspecialchars($img) ?>" class="manga-cover" loading="lazy"><?php endif; ?>
+    <a href="/read/<?= $t['id'] ?>" class="manga-card" style="width:200px;flex-shrink:0">
+      <?php if($img): ?><img src="<?= htmlspecialchars($img) ?>" class="manga-cover" loading="lazy"><?php endif; ?>
       <div class="manga-info">
-        <div class="manga-title"><?= htmlspecialchars($t['title']) ?></div>
-        <div class="manga-likes">❤ <?= (int)$t['likes'] ?></div>
+        <div class="manga-title"><?= htmlspecialchars($t['title']) ?></div>
+        <div class="manga-likes">❤ <?= (int)$t['likes'] ?></div>
       </div>
     </a>
-  <?php endforeach; ?>
+  <?php endforeach; ?>
   </div>
 </section>
-<?php endif; ?>
-<section class="catalog-section" style="max-width:1200px;margin:auto;padding:0 20px 80px">
+<?php endif; ?>
+<section class="catalog-section" style="max-width:1200px;margin:auto;padding:0 20px 80px">
   <div class="catalog-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-    <div class="section-label">📚 Каталог</div>
-    <div class="total-count" style="font-size:13px;color:var(--muted)">Всего: <strong><?= $total ?></strong></div>
+    <div class="section-label">📚 Каталог</div>
+    <div class="total-count" style="font-size:13px;color:var(--muted)">Всего: <strong><?= $total ?></strong></div>
   </div>
   <div id="mangaGrid" class="manga-grid"></div>
   <div style="text-align:center;margin-top:32px">
-    <button id="loadMoreBtn" style="padding:10px 24px;border:1px solid var(--border);
-    background:var(--bg2);color:var(--text);border-radius:8px">Загрузить ещё</button>
+    <button id="loadMoreBtn" style="padding:10px 24px;border:1px solid var(--border);
+    background:var(--bg2);color:var(--text);border-radius:8px">Загрузить ещё</button>
   </div>
 </section>
 <script>
@@ -186,7 +182,7 @@ async function load(reset=false){
  const res=await fetch(`/api/manga?q=${encodeURIComponent(q)}&page=${page}`);
  const d=await res.json();
  if(reset)grid.innerHTML='';
- if(!d.items.length&&page===0){grid.innerHTML='<p>Ничего не найдено</p>';btn.style.display='none';return;}
+ if(!d.items.length&&page===0){grid.innerHTML='<p>Ничего не найдено</p>';btn.style.display='none';return;}
  d.items.forEach(m=>{
    const url=m.cover_display||'',title=m.title.replace(/^❤️\s*/,'');
    grid.insertAdjacentHTML('beforeend',
@@ -194,7 +190,7 @@ async function load(reset=false){
      ${url?`<img src="${url}" class="manga-cover" onerror="this.style.display='none'">`
            :`<div class='manga-cover' style='display:flex;align-items:center;justify-content:center'>📖</div>`}
      <div class='manga-info'><div class='manga-title'>${title}</div>
-     ${m.likes>0?`<div class='manga-likes'>❤ ${m.likes}</div>`:''}</div></a>`);
+     ${m.likes>0?`<div class='manga-likes'>❤ ${m.likes}</div>`:''}</div></a>`);
  });
  hasMore=(page+1)*d.limit<d.total;btn.style.display=hasMore?'inline-block':'none';page++;
  isLoading=false;
@@ -208,28 +204,28 @@ load(true);
 <?php
 }
 // =======================================================
-// Reader Renderer
+// Reader Renderer
 // =======================================================
 function renderReader($pdo,$id,$siteUrl,$botUsername){
  $stmt=$pdo->prepare('SELECT * FROM manga WHERE id=?');$stmt->execute([$id]);$m=$stmt->fetch();
- if(!$m){http_response_code(404);echo '<h1>404 Манга не найдена</h1>';return;}
+ if(!$m){http_response_code(404);echo '<h1>404 Манга не найдена</h1>';return;}
  $pages=$pdo->prepare('SELECT page_url FROM manga_pages WHERE manga_id=? ORDER BY page_order');
  $pages->execute([$id]);$list=$pages->fetchAll(PDO::FETCH_COLUMN);
  $title=htmlspecialchars(preg_replace('/^❤️\s*/u','',$m['title']));
  $cover=$m['cover_imgbb_url']?:($m['cover_id']??'');
 ?>
 <!DOCTYPE html><html lang="ru"><head>
-<meta charset="utf-8"><title><?= $title ?> — BLACKWATCH Reader</title>
+<meta charset="utf-8"><title><?= $title ?> — BLACKWATCH Reader</title>
 <style>
 body{background:#0a0a0f;color:#f0f0f5;font-family:sans-serif;text-align:center}
 img{max-width:100%}
 </style></head><body>
-<a href="/" style="color:#3b82f6;text-decoration:none">&larr; Назад</a>
-<h2><?= $title ?></h2>
+<a href="/" style="color:#3b82f6;text-decoration:none">&larr; Назад</a>
+<h2><?= $title ?></h2>
 <?php if($list): foreach($list as $p): ?>
-<img src="<?= htmlspecialchars($p) ?>" loading="lazy"><br>
+<img src="<?= htmlspecialchars($p) ?>" loading="lazy"><br>
 <?php endforeach; else: ?>
-<p>Нет страниц. <a href="<?= htmlspecialchars($m['file_id']) ?>" target="_blank">Читать на Telegraph</a></p>
+<p>Нет страниц. <a href="<?= htmlspecialchars($m['file_id']) ?>" target="_blank">Читать на Telegraph</a></p>
 <?php endif; ?>
 </body></html>
-<?php } ?>
+<?php }
