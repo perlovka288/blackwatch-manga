@@ -31,6 +31,25 @@ $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = parse_url($requestUri, PHP_URL_PATH);
 $path = rtrim($path, '/') ?: '/';
 
+
+if (isset($_GET['ajax'])) {
+    $offset = (int)$_GET['offset'];
+    $stmt = $pdo->prepare("SELECT * FROM manga ORDER BY id DESC LIMIT 12 OFFSET ?");
+    $stmt->execute([$offset]);
+    $mangas = $stmt->fetchAll();
+
+    foreach ($mangas as $m) {
+        echo '
+        <a href="/read/'.$m['id'].'" class="manga-card">
+            <img src="'.$m['cover_id'].'" class="manga-cover">
+            <div class="manga-info">
+                <div class="manga-title">'.htmlspecialchars($m['title']).'</div>
+                <div class="manga-likes">❤️ '.$m['likes'].'</div>
+            </div>
+        </a>';
+    }
+    exit; // Важно остановить выполнение, чтобы не грузить весь сайт целиком
+}
 // /read/123 — ридер манги
 if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $mangaId = (int)$m[1];
@@ -46,22 +65,35 @@ if ($path === '/api/manga') {
     $limit = 12;
     $offset = $page * $limit;
 
-    if ($q) {
-        $total = $pdo->prepare("SELECT COUNT(*) FROM manga WHERE title LIKE ?");
-        $total->execute(["%$q%"]);
-        $total = $total->fetchColumn();
-        $stmt = $pdo->prepare("SELECT id, title, description, cover_id, likes, file_id FROM manga WHERE title LIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");
-        $stmt->execute(["%$q%"]);
-    } else {
-        $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
-        $stmt = $pdo->prepare("SELECT id, title, description, cover_id, likes, file_id FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");
-        $stmt->execute();
-    }
-    $items = $stmt->fetchAll();
-    echo json_encode(['items' => $items, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
-    exit;
-}
+ if ($q) {
+    // Подсчет общего количества с фильтром
+    $totalStmt = $pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");
+    $totalStmt->execute(["%$q%"]);
+    $total = $totalStmt->fetchColumn();
 
+    // Запрос данных. Используем ILIKE для поиска без учета регистра (фишка Postgres)
+    // Я добавил поиск по cover_id и принудительно привел LIMIT/OFFSET к INT
+    $stmt = $pdo->prepare("
+        SELECT id, title, description, cover_id, likes, file_id 
+        FROM manga 
+        WHERE title ILIKE ? 
+        ORDER BY id DESC 
+        LIMIT " . (int)$limit . " OFFSET " . (int)$offset
+    );
+    $stmt->execute(["%$q%"]);
+} else {
+    // Подсчет всех записей
+    $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
+
+    // Запрос всех данных
+    $stmt = $pdo->prepare("
+        SELECT id, title, description, cover_id, likes, file_id 
+        FROM manga 
+        ORDER BY id DESC 
+        LIMIT " . (int)$limit . " OFFSET " . (int)$offset
+    );
+    $stmt->execute();
+}
 // /api/pages/123 — страницы манги для ридера (AJAX)
 if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     header('Content-Type: application/json; charset=utf-8');
@@ -93,404 +125,132 @@ function renderCatalog($pdo, $siteUrl, $botUsername) {
     // Последние 12 для первоначальной загрузки
     $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 ?>
+Чтобы сайт выглядел именно так, как ты хочешь (с огромным заголовком BLACKWATCH по центру и синей подписью МАНГА), вот тебе полный код блока от начала документа до конца шапки.
+
+Просто удали всё, что у тебя идет от <!DOCTYPE html> до начала поиска, и вставь этот кусок:
+
+HTML
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MangaBot — Каталог манги</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0a0f;
-    --bg2: #111118;
-    --bg3: #1a1a24;
-    --accent: #e63946;
-    --accent2: #ff6b6b;
-    --gold: #ffd166;
-    --text: #f0f0f5;
-    --muted: #7a7a9a;
-    --border: #2a2a3a;
-    --card-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLACKWATCH — Каталог манги</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --bg2: #111118;
+        --bg3: #1a1a24;
+        --accent: #3b82f6; /* Тот самый синий цвет */
+        --accent2: #60a5fa;
+        --gold: #ffd166;
+        --text: #f0f0f5;
+        --muted: #7a7a9a;
+        --border: #2a2a3a;
+        --card-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Inter', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', sans-serif;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
 
-  /* ШАПКА */
-  header {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: rgba(10,10,15,0.92);
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 64px;
-  }
+      /* ПРИЛИПАЮЩАЯ ВЕРХНЯЯ ПАНЕЛЬ */
+ <section class="brand-hero">
+    <h1>BLACKWATCH</h1>
+    <span>манга</span>
+</section>
 
-  .logo {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 28px;
-    letter-spacing: 3px;
-    color: var(--text);
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .logo span { color: var(--accent); }
+<div class="search-wrap">
+  <form action="/" method="GET" class="search-box">
+    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 10px; color: var(--muted);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" name="q" id="searchInput" placeholder="Поиск манги по названию..." value="<?= htmlspecialchars($_GET['q'] ?? '') ?>" autocomplete="off">
+    <?php if (!empty($_GET['q'])): ?>
+      <a href="/" style="color: var(--muted); text-decoration: none; padding: 5px;">✕</a>
+    <?php endif; ?>
+  </form>
+</div>
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+<?php if (!empty($topManga) && empty($_GET['q'])): ?>
+<section class="hero-section">
+    <div class="section-label">Популярное сейчас</div>
+    <div class="hero-slider">
+        <?php foreach ($topManga as $m): ?>
+            <a href="/read/<?= $m['id'] ?>" class="hero-card">
+                <div class="hero-card-bg">
+                    <?php if (!empty($m['cover_id'])): ?>
+                        <img src="<?= $m['cover_id'] ?>" class="hero-card-img" alt="<?= htmlspecialchars($m['title'] ?? '') ?>">
+                    <?php endif; ?>
+                </div>
+                <div class="hero-card-overlay">
+                    <div class="hero-card-title"><?= htmlspecialchars($m['title'] ?? '') ?></div>
+                    <div class="hero-card-likes">
+                        <span class="heart">❤️</span> <?= $m['likes'] ?>
+                    </div>
+                </div>
+            </a>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
 
-  .tg-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #229ED9;
-    color: #fff;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity .2s;
-  }
-  .tg-btn:hover { opacity: .85; }
-  .tg-btn svg { width: 18px; height: 18px; }
+<section class="catalog-section">
+    <div class="catalog-header">
+        <div class="section-label"><?= !empty($_GET['q']) ? 'Результаты поиска' : 'Весь каталог' ?></div>
+        <div class="total-count">Всего: <strong><?= $total ?></strong></div>
+    </div>
 
-  /* ПОИСК */
-  .search-wrap {
-    padding: 32px 24px 0;
-    max-width: 700px;
-    margin: 0 auto;
-  }
+    <div class="manga-grid" id="mangaGrid">
+        <?php
+        // Запрос для карточек (последние добавленные)
+        $q = $_GET['q'] ?? '';
+        if ($q) {
+            $stmt = $pdo->prepare("SELECT * FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT 12");
+            $stmt->execute(['%' . $q . '%']);
+        } else {
+            $stmt = $pdo->query("SELECT * FROM manga ORDER BY id DESC LIMIT 12");
+        }
+        $mangas = $stmt->fetchAll();
 
-  .search-box {
-    display: flex;
-    align-items: center;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 0 16px;
-    transition: border-color .2s;
-  }
-  .search-box:focus-within { border-color: var(--accent); }
+        foreach ($mangas as $m): ?>
+            <a href="/read/<?= $m['id'] ?>" class="manga-card">
+                <?php if (!empty($m['cover_id'])): ?>
+                    <img src="<?= $m['cover_id'] ?>" class="manga-cover" alt="<?= htmlspecialchars($m['title'] ?? '') ?>">
+                <?php else: ?>
+                    <div class="manga-cover-placeholder">📖</div>
+                <?php endif; ?>
+                <div class="manga-info">
+                    <div class="manga-title"><?= htmlspecialchars($m['title'] ?? '') ?></div>
+                    <div class="manga-likes"><span class="heart">❤️</span> <?= $m['likes'] ?></div>
+                </div>
+            </a>
+        <?php endforeach; ?>
+    </div>
 
-  .search-icon {
-    color: var(--muted);
-    margin-right: 10px;
-    flex-shrink: 0;
-  }
+    <?php if ($total > 12 && empty($q)): ?>
+    <div class="load-more-wrap">
+        <button id="loadMoreBtn" class="visible">Показать еще</button>
+    </div>
+    <?php endif; ?>
+</section>
 
-  #searchInput {
-    flex: 1;
-    background: none;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-size: 16px;
-    padding: 14px 0;
-    font-family: inherit;
-  }
-  #searchInput::placeholder { color: var(--muted); }
+<section class="brand-hero">
+    <h1>BLACKWATCH</h1>
+    <span>манга</span>
+</section>
 
-  .search-clear {
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    padding: 4px;
-    display: none;
-    border-radius: 4px;
-  }
-  .search-clear:hover { color: var(--text); }
-
-  /* HERO SLIDER (топ по лайкам) */
-  .hero-section {
-    padding: 28px 24px 0;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .section-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 14px;
-  }
-
-  .hero-slider {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-  .hero-slider::-webkit-scrollbar { display: none; }
-
-  .hero-card {
-    flex-shrink: 0;
-    width: 280px;
-    height: 160px;
-    border-radius: 14px;
-    overflow: hidden;
-    scroll-snap-align: start;
-    position: relative;
-    cursor: pointer;
-    transition: transform .25s;
-    text-decoration: none;
-  }
-  .hero-card:hover { transform: scale(1.02); }
-
-  .hero-card-bg {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    overflow: hidden;
-  }
-
-  .hero-card-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    opacity: 0.55;
-    transition: opacity .3s;
-  }
-  .hero-card:hover .hero-card-img { opacity: 0.7; }
-
-  .hero-card-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 60%);
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: 16px;
-  }
-
-  .hero-card-title {
-    font-family: 'Noto Sans JP', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.3;
-    color: #fff;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-  }
-
-  .hero-card-likes {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--gold);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  /* КАТАЛОГ */
-  .catalog-section {
-    padding: 32px 24px 80px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .catalog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-
-  .total-count {
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .total-count strong { color: var(--text); }
-
-  .manga-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 20px;
-  }
-
-  @media (max-width: 600px) {
-    .manga-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  }
-
-  .manga-card {
-    background: var(--bg2);
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: transform .2s, box-shadow .2s, border-color .2s;
-    text-decoration: none;
-    display: block;
-    animation: fadeIn .4s ease;
-  }
-  .manga-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--card-shadow);
-    border-color: var(--accent);
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .manga-cover {
-    width: 100%;
-    aspect-ratio: 2/3;
-    object-fit: cover;
-    background: var(--bg3);
-    display: block;
-  }
-
-  .manga-cover-placeholder {
-    width: 100%;
-    aspect-ratio: 2/3;
-    background: linear-gradient(135deg, var(--bg3) 0%, #1e1e2e 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40px;
-  }
-
-  .manga-info {
-    padding: 10px 12px 12px;
-  }
-
-  .manga-title {
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.35;
-    font-family: 'Noto Sans JP', sans-serif;
-    color: var(--text);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .manga-likes {
-    margin-top: 6px;
-    font-size: 11px;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .manga-likes .heart { color: var(--accent); }
-
-  /* LOAD MORE */
-  .load-more-wrap {
-    text-align: center;
-    margin-top: 36px;
-  }
-
-  #loadMoreBtn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 12px 32px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .2s, border-color .2s;
-    display: none;
-  }
-  #loadMoreBtn:hover { background: var(--bg3); border-color: var(--accent); }
-  #loadMoreBtn.visible { display: inline-block; }
-
-  /* СКЕЛЕТОН */
-  .skeleton {
-    background: linear-gradient(90deg, var(--bg3) 25%, #22223a 50%, var(--bg3) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-    border-radius: 8px;
-  }
-
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  .skeleton-card {
-    background: var(--bg2);
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-  }
-  .skeleton-cover {
-    width: 100%;
-    aspect-ratio: 2/3;
-    background: linear-gradient(90deg, var(--bg3) 25%, #22223a 50%, var(--bg3) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-  }
-  .skeleton-text {
-    height: 12px;
-    margin: 10px 12px 6px;
-    background: linear-gradient(90deg, var(--bg3) 25%, #22223a 50%, var(--bg3) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-    border-radius: 4px;
-  }
-  .skeleton-text.short { width: 60%; margin-bottom: 12px; }
-
-  /* ПУСТО */
-  .empty-state {
-    text-align: center;
-    padding: 80px 20px;
-    color: var(--muted);
-  }
-  .empty-state .emoji { font-size: 48px; margin-bottom: 16px; }
-  .empty-state p { font-size: 16px; }
-
-  /* ДЕКОРАТИВНАЯ ЛИНИЯ */
-  .divider {
-    height: 1px;
-    background: linear-gradient(to right, transparent, var(--border), transparent);
-    margin: 0 24px;
-  }
-
-  /* Скрытый hero если нет топа */
-  .hero-section.hidden { display: none; }
-</style>
-</head>
-<body>
-
-<header>
-  <a href="/" class="logo">Manga<span>Bot</span></a>
-  <div class="header-right">
-    <a href="https://t.me/<?= htmlspecialchars($botUsername) ?>" target="_blank" class="tg-btn">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/></svg>
-      Бот в Telegram
-    </a>
-  </div>
+<div class="search-wrap">
+  <form action="/" method="GET" class="search-box">
+    <input type="text" name="q" id="searchInput" placeholder="Найти мангу..." value="<?= htmlspecialchars($q ?? '') ?>">
+  </form>
+</div>
 </header>
 
 <div class="search-wrap">
@@ -650,6 +410,28 @@ clearBtn.addEventListener('click', () => {
   currentQuery = '';
   loadManga(true);
 });
+</script>
+let offset = 12;
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+const mangaGrid = document.getElementById('mangaGrid');
+
+if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', async () => {
+        loadMoreBtn.innerText = 'Загрузка...';
+        
+        // Отправляем запрос на сервер за следующей порцией
+        const response = await fetch(`?ajax=1&offset=${offset}`);
+        const html = await response.text();
+        
+        if (html.trim().length > 0) {
+            mangaGrid.insertAdjacentHTML('beforeend', html);
+            offset += 12;
+            loadMoreBtn.innerText = 'Показать еще';
+        } else {
+            loadMoreBtn.style.display = 'none'; // Если манги больше нет
+        }
+    });
+}
 </script>
 </body>
 </html>

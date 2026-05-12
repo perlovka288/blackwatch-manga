@@ -6,23 +6,11 @@ ini_set('log_errors', 1);
 set_time_limit(900);
 ini_set('memory_limit', '512M');
 
-// =============================================
-// RENDER.COM: подключение через ENV переменные
-// Установить в Render → Environment Variables:
-//   BOT_TOKEN     = токен вашего бота
-//   DB_HOST       = хост MySQL (из Railway)
-//   DB_PORT       = порт (обычно 3306 или другой из Railway)
-//   DB_NAME       = имя базы (railway)
-//   DB_USER       = пользователь (root)
-//   DB_PASS       = пароль
-//   SITE_URL      = URL вашего сайта на Render, напр. https://blackwatch-manga.onrender.com
-// =============================================
-
 $token  = getenv('BOT_TOKEN');
 $apiUrl = "https://api.telegram.org/bot$token";
 $siteUrl = rtrim(getenv('SITE_URL') ?: 'https://blackwatch-manga.onrender.com', '/');
 
-// PDO подключение к MySQL (Railway DB)
+// PDO подключение к PostgreSQL (Neon)
 try {
     $dsn = sprintf(
         'pgsql:host=%s;port=%s;dbname=%s;sslmode=require',
@@ -39,7 +27,7 @@ try {
     die("DB Error: " . $e->getMessage());
 }
 
-// Создание таблицы архива если не существует
+// Создание таблиц если не существует
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (
         id SERIAL PRIMARY KEY,
@@ -50,7 +38,6 @@ try {
     )");
 } catch (Exception $e) {}
 
-// Создание таблицы меток (тегов) админов
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (
         user_id BIGINT PRIMARY KEY,
@@ -58,7 +45,6 @@ try {
     )");
 } catch (Exception $e) {}
 
-// Создание таблицы manga_pages для хранения страниц ридера сайта
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (
         id SERIAL PRIMARY KEY,
@@ -66,6 +52,18 @@ try {
         page_url TEXT NOT NULL,
         page_order INT NOT NULL DEFAULT 0
     )");
+} catch (Exception $e) {}
+
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value TEXT NOT NULL
+    )");
+} catch (Exception $e) {}
+
+// FIX: Добавляем колонку cover_imgbb_url если нет (для хранения ImgBB URL обложки)
+try {
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
 } catch (Exception $e) {}
 
 $superAdmins = [1710365896, 1181510470];
@@ -133,10 +131,6 @@ function uploadToImgbb($tempFile, $apiKey) {
 
 function getPromoImageUrl($pdo, $imgbbKey) {
     try {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS bot_settings (
-            setting_key VARCHAR(100) PRIMARY KEY,
-            setting_value TEXT NOT NULL
-        )");
         $stmt = $pdo->prepare("SELECT setting_value FROM bot_settings WHERE setting_key = 'promo_imgbb_url'");
         $stmt->execute();
         $row = $stmt->fetch();
@@ -145,7 +139,6 @@ function getPromoImageUrl($pdo, $imgbbKey) {
         }
     } catch (Exception $e) {}
 
-    // На Render.com promo.jpg лежит рядом с bot.php
     $promoPath = __DIR__ . '/promo.jpg';
     if (!file_exists($promoPath)) return null;
 
@@ -170,6 +163,29 @@ function getPromoImageUrl($pdo, $imgbbKey) {
     }
 
     return $url;
+}
+
+// FIX: загрузка обложки на ImgBB и сохранение URL
+function uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $mangaId) {
+    $fileDataJson = @file_get_contents($apiUrl . "/getFile?file_id=" . $coverId);
+    $fileData = json_decode($fileDataJson, true);
+    if (!isset($fileData['result']['file_path'])) return false;
+
+    $fullPath = "https://api.telegram.org/file/bot$token/" . $fileData['result']['file_path'];
+    $tempFile = downloadFile($fullPath);
+    if (!$tempFile) return false;
+
+    $imgUrl = uploadToImgbb($tempFile, $imgbbKey);
+    @unlink($tempFile);
+
+    if ($imgUrl && $mangaId) {
+        try {
+            $pdo->prepare("UPDATE manga SET cover_imgbb_url = ? WHERE id = ?")
+                ->execute([$imgUrl, $mangaId]);
+        } catch (Exception $e) {}
+    }
+
+    return $imgUrl;
 }
 
 function extractAndSortZip($zipPath, $extractDir) {
@@ -325,12 +341,7 @@ function createTelegraphPage($title, $fileIds, $token, $apiUrl) {
     return $res['result']['url'] ?? false;
 }
 
-// =============================================
-// НОВОЕ: сохраняем страницы ImgBB в manga_pages
-// для веб-ридера сайта
-// =============================================
 function saveMangaPages($pdo, $mangaId, $imgUrls) {
-    // Удаляем старые если есть
     $pdo->prepare("DELETE FROM manga_pages WHERE manga_id = ?")->execute([$mangaId]);
     $stmt = $pdo->prepare("INSERT INTO manga_pages (manga_id, page_url, page_order) VALUES (?, ?, ?)");
     foreach ($imgUrls as $i => $url) {
@@ -455,11 +466,8 @@ if (isset($update['callback_query'])) {
         exit;
     }
 
-    // НОВОЕ: кнопка "Читать на сайте" в боте
     if (strpos($data, 'read_web_') === 0) {
-        $mId = str_replace('read_web_', '', $data);
         tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id']]);
-        // Просто открываем ссылку на сайт — она уже в URL кнопки, это callback заглушка
         exit;
     }
 
@@ -643,6 +651,9 @@ if (isset($update['callback_query'])) {
             if ($coverId) {
                 $pdo->prepare("UPDATE manga SET cover_id = ? WHERE id = ?")->execute([$coverId, $mId]);
 
+                // FIX: загружаем обложку на ImgBB для отображения на сайте
+                uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $mId);
+
                 $titleStmt = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
                 $titleStmt->execute([$mId]);
                 $titleRow = $titleStmt->fetch();
@@ -673,9 +684,9 @@ if (isset($update['message'])) {
     $stmtState->execute([$chatId]);
     $userState = $stmtState->fetch();
 
-    // Регистрируем пользователя
+    // FIX: PostgreSQL не поддерживает INSERT IGNORE — используем ON CONFLICT DO NOTHING
     try {
-        $pdo->prepare("INSERT IGNORE INTO users (user_id) VALUES (?)")->execute([$chatId]);
+        $pdo->prepare("INSERT INTO users (user_id) VALUES (?) ON CONFLICT (user_id) DO NOTHING")->execute([$chatId]);
     } catch (Exception $e) {}
 
     if (in_array($chatId, $admins)) {
@@ -704,8 +715,9 @@ if (isset($update['message'])) {
             $stateData = json_decode($userState['pages'], true);
             $targetAdminId = $stateData['target_admin'] ?? null;
             if ($targetAdminId && !empty($text)) {
-                $pdo->prepare("INSERT INTO admin_tags (user_id, tag_name) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET tag_name = EXCLUDED.tag_name ON DUPLICATE KEY UPDATE tag_name = ?")
-                    ->execute([$targetAdminId, $text, $text]);
+                // FIX: PostgreSQL синтаксис ON CONFLICT
+                $pdo->prepare("INSERT INTO admin_tags (user_id, tag_name) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET tag_name = EXCLUDED.tag_name")
+                    ->execute([$targetAdminId, $text]);
                 $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
                 logArchive($pdo, 'set_tag', "Установлена метка «$text» для ID $targetAdminId", $chatId);
                 sendSimpleMsg($chatId, "✅ *Метка установлена!*\n\nАдминистратор `$targetAdminId` теперь называется: *$text*", $apiUrl);
@@ -723,6 +735,10 @@ if (isset($update['message'])) {
                     if (isset($message['photo'])) {
                         $coverId = end($message['photo'])['file_id'];
                         $pdo->prepare("UPDATE manga SET cover_id = ? WHERE id = ?")->execute([$coverId, $mId]);
+
+                        // FIX: загружаем обложку на ImgBB
+                        uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $mId);
+
                         $stmt = $pdo->prepare("SELECT * FROM manga WHERE id = ?");
                         $stmt->execute([$mId]);
                         $m = $stmt->fetch();
@@ -784,6 +800,8 @@ if (isset($update['message'])) {
 
                 if (count($found) === 1) {
                     $pdo->prepare("UPDATE manga SET cover_id = ? WHERE id = ?")->execute([$coverId, $found[0]['id']]);
+                    // FIX: загружаем обложку на ImgBB
+                    uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $found[0]['id']);
                     logArchive($pdo, 'set_cover', "Установлена обложка для манги: {$found[0]['title']}", $chatId);
                     tgPost($apiUrl . "/sendPhoto", [
                         'chat_id'    => $chatId,
@@ -983,12 +1001,11 @@ if (isset($update['message'])) {
 
                 if ($telegraphLink) {
                     $titleWithHeart = '❤️ ' . $userState['title'];
-                    // Получаем ImgBB URLs из temp_data (pages — это file_ids, нужно преобразовать)
-                    $fileIds = json_decode($userState['pages'], true);
-                    
                     $pdo->prepare("INSERT INTO manga (title, file_id, description, cover_id, added_by) VALUES (?, ?, ?, ?, ?)")
                         ->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverId, $chatId]);
                     $newMangaId = $pdo->lastInsertId();
+                    // FIX: загружаем обложку на ImgBB
+                    uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $newMangaId);
                     logArchive($pdo, 'add_manga', "Опубликована манга: {$userState['title']}", $chatId);
                     sendSimpleMsg($chatId, "🚀 *Успех!* Манга добавлена в каталог.\n\n🔗 Ссылка: $telegraphLink", $apiUrl, $adminKeyboard);
                 } else {
@@ -1051,6 +1068,9 @@ if (isset($update['message'])) {
 
                     // Сохраняем страницы для веб-ридера
                     saveMangaPages($pdo, $newMangaId, $imgUrls);
+
+                    // FIX: загружаем обложку на ImgBB
+                    uploadCoverToImgbb($pdo, $imgbbKey, $token, $apiUrl, $coverId, $newMangaId);
 
                     logArchive($pdo, 'add_manga', "Опубликована манга (ZIP): {$userState['title']}", $chatId);
                     sendSimpleMsg($chatId,
@@ -1195,7 +1215,8 @@ if (isset($update['message'])) {
             break;
 
         case "🎲 Случайная манга":
-            $stmt = $pdo->prepare("SELECT m.* FROM manga m LEFT JOIN user_manga_status s ON m.id = s.manga_id AND s.user_id = ? WHERE s.status IS NULL OR s.status != 'read' ORDER BY RAND() LIMIT 1");
+            // FIX: RAND() → RANDOM() для PostgreSQL
+            $stmt = $pdo->prepare("SELECT m.* FROM manga m LEFT JOIN user_manga_status s ON m.id = s.manga_id AND s.user_id = ? WHERE s.status IS NULL OR s.status != 'read' ORDER BY RANDOM() LIMIT 1");
             $stmt->execute([$chatId]);
             $random = $stmt->fetch();
             if ($random) {
@@ -1236,7 +1257,8 @@ function getArchiveData($pdo, $admins, $page) {
     $offset = $page * $limit;
     $total  = $pdo->query("SELECT COUNT(*) FROM bot_archive")->fetchColumn();
 
-    $stmt = $pdo->prepare("SELECT *, DATE_FORMAT(created_at, '%d.%m.%Y %H:%i') as formatted_time FROM bot_archive ORDER BY created_at DESC LIMIT $limit OFFSET $offset");
+    // FIX: DATE_FORMAT → to_char для PostgreSQL
+    $stmt = $pdo->prepare("SELECT *, to_char(created_at, 'DD.MM.YYYY HH24:MI') as formatted_time FROM bot_archive ORDER BY created_at DESC LIMIT $limit OFFSET $offset");
     $stmt->execute();
     $rows = $stmt->fetchAll();
 
@@ -1443,7 +1465,6 @@ function sendEditMangaMenu($chatId, $m, $apiUrl) {
     }
 }
 
-// sendMangaCard теперь принимает $siteUrl и добавляет кнопку сайта
 function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     if (!$m) return;
     $text = "📖 *" . $m['title'] . "*\n\n" . $m['description'] . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
@@ -1452,7 +1473,6 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
         ['text' => '📖 Читать (Telegra.ph)', 'url' => $m['file_id']],
     ];
     
-    // Добавляем кнопку сайта если есть URL
     if ($siteUrl) {
         $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
     }
@@ -1532,4 +1552,3 @@ function sendSimpleMsg($chatId, $text, $apiUrl, $kb = null) {
     }
     return tgPost($apiUrl . "/sendMessage", $data);
 }
-
