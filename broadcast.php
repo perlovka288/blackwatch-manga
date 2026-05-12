@@ -1,9 +1,17 @@
 <?php
-require_once __DIR__ . '/../core/db.php';
-$config = require __DIR__ . '/../config.php';
-
-$token  = $config['bot_token'];
+$dsn = sprintf(
+    'pgsql:host=%s;port=%s;dbname=%s;sslmode=require',
+    getenv('DB_HOST'),
+    getenv('DB_PORT') ?: '5432',
+    getenv('DB_NAME')
+);
+$pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+]);
+$token  = getenv('BOT_TOKEN');
 $apiUrl = "https://api.telegram.org/bot$token";
+// ... остальной код
 
 // 1. Берем мангу, добавленную за последние 24 часа. 
 // ВАЖНО: У тебя в таблице manga должна быть колонка created_at
