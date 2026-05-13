@@ -1,8 +1,8 @@
 <?php
-ob_start(); // Буферизуем весь вывод — предотвращает HTML/warnings в JSON-ответах
+ob_start();
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Не выводим ошибки в тело ответа (ломает JSON)
-ini_set('log_errors', 1);     // Пишем ошибки в лог
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 # =========================
 # DATABASE (Neon PostgreSQL)
@@ -200,22 +200,9 @@ function saveMangaPages($pdo, $mangaId, $pageUrls) {
 # API ADD MANGA — добавление манги через сайт (только для админов)
 # =========================
 if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Сразу JSON-заголовок + перехват любых ошибок
     header('Content-Type: application/json');
-    ini_set('max_execution_time', 600);
+    ini_set('max_execution_time', 300);
     ini_set('memory_limit', '512M');
-    ini_set('max_file_uploads', 200);
-
-    // Перехватчик фатальных ошибок PHP — всегда вернём валидный JSON
-    register_shutdown_function(function() {
-        $err = error_get_last();
-        if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-            if (!headers_sent()) header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'error' => 'PHP Fatal: ' . $err['message'] . ' (line ' . $err['line'] . ')']);
-        }
-    });
-
-    try {
 
     $userId = getEffectiveUserId($pdo);
     if (!isAdmin($userId, $hardcodedAdmins)) {
@@ -233,13 +220,13 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- ОБЛОЖКА ---
     $coverImgbbUrl = null;
-    if (!empty($_FILES['cover']['tmp_name']) && $_FILES['cover']['error'] === UPLOAD_ERR_OK) {
+    if (!empty($_FILES['cover']['tmp_name']) && $_FILES['cover']['error'] === 0) {
         $coverImgbbUrl = uploadToImgbb($_FILES['cover']['tmp_name'], $imgbbKeys);
     }
 
     // --- СТРАНИЦЫ: вариант 1 — ZIP ---
     $pageUrls = [];
-    if (!empty($_FILES['zip']['tmp_name']) && $_FILES['zip']['error'] === UPLOAD_ERR_OK) {
+    if (!empty($_FILES['zip']['tmp_name']) && $_FILES['zip']['error'] === 0) {
         $zipTmp = $_FILES['zip']['tmp_name'];
         $zip = new ZipArchive();
         if ($zip->open($zipTmp) === true) {
@@ -248,6 +235,7 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $zip->extractTo($tmpDir);
             $zip->close();
 
+            // Собираем все изображения
             $allFiles = [];
             $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tmpDir));
             foreach ($it as $file) {
@@ -258,6 +246,7 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+            // Сортировка по имени
             usort($allFiles, function($a, $b) {
                 return strnatcasecmp(basename($a), basename($b));
             });
@@ -267,36 +256,21 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($url) $pageUrls[] = $url;
             }
 
+            // Удаляем tmp
             array_map('unlink', glob("$tmpDir/*.*"));
             @rmdir($tmpDir);
         }
     }
 
-    // --- СТРАНИЦЫ: вариант 2 — фото (photos[]) ---
-    if (empty($pageUrls)) {
-        $tmpPaths = [];
-
-        // Стандартный массив: photos[] через FormData.append('photos[]', file)
-        if (!empty($_FILES['photos']['name']) && is_array($_FILES['photos']['name'])) {
-            $count = count($_FILES['photos']['name']);
-            for ($i = 0; $i < $count; $i++) {
-                $errCode = $_FILES['photos']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
-                $tmp     = $_FILES['photos']['tmp_name'][$i] ?? '';
-                if ($errCode === UPLOAD_ERR_OK && $tmp && file_exists($tmp) && filesize($tmp) > 0) {
-                    $tmpPaths[] = $tmp;
-                }
+    // --- СТРАНИЦЫ: вариант 2 — фото ---
+    if (empty($pageUrls) && !empty($_FILES['photos'])) {
+        $photos = $_FILES['photos'];
+        $count  = count($photos['name']);
+        for ($i = 0; $i < $count; $i++) {
+            if ($photos['error'][$i] === 0 && !empty($photos['tmp_name'][$i])) {
+                $url = uploadToImgbb($photos['tmp_name'][$i], $imgbbKeys);
+                if ($url) $pageUrls[] = $url;
             }
-        }
-        // На случай если пришёл одиночный файл без массива
-        elseif (!empty($_FILES['photos']['tmp_name']) && !is_array($_FILES['photos']['tmp_name'])) {
-            if ($_FILES['photos']['error'] === UPLOAD_ERR_OK && file_exists($_FILES['photos']['tmp_name'])) {
-                $tmpPaths[] = $_FILES['photos']['tmp_name'];
-            }
-        }
-
-        foreach ($tmpPaths as $tmpPath) {
-            $url = uploadToImgbb($tmpPath, $imgbbKeys);
-            if ($url) $pageUrls[] = $url;
         }
     }
 
@@ -307,27 +281,13 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $telegraphLink = createTelegraphPage($titleWithHeart, $pageUrls);
     }
 
-    // --- СОХРАНЯЕМ В БД (PostgreSQL — используем RETURNING id) ---
+    // --- СОХРАНЯЕМ В БД ---
     $titleWithHeart = '♥ ' . $title;
-    $insertStmt = $pdo->prepare(
-        "INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by)
-         VALUES (?, ?, ?, ?, ?)
-         RETURNING id"
-    );
-    $insertStmt->execute([$titleWithHeart, $telegraphLink, $description, $coverImgbbUrl, $userId]);
-    $insertRow  = $insertStmt->fetch(PDO::FETCH_ASSOC);
-    $newMangaId = (int)($insertRow['id'] ?? 0);
+    $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by) VALUES (?, ?, ?, ?, ?)")
+        ->execute([$titleWithHeart, $telegraphLink, $description, $coverImgbbUrl, $userId]);
+    $newMangaId = (int)$pdo->lastInsertId();
 
-    if (!$newMangaId) {
-        // Fallback — попробуем lastInsertId (работает не всегда с pgsql)
-        $newMangaId = (int)$pdo->lastInsertId();
-    }
-
-    if (!$newMangaId) {
-        echo json_encode(['success' => false, 'error' => 'Не удалось получить ID новой манги из БД']);
-        exit;
-    }
-
+    // Сохраняем страницы в manga_pages
     if (!empty($pageUrls)) {
         saveMangaPages($pdo, $newMangaId, $pageUrls);
     }
@@ -335,16 +295,12 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
 
     echo json_encode([
-        'success'   => true,
-        'manga_id'  => $newMangaId,
-        'telegraph' => $telegraphLink,
-        'pages'     => count($pageUrls),
-        'site_url'  => "{$siteUrl}/read/{$newMangaId}",
+        'success'    => true,
+        'manga_id'   => $newMangaId,
+        'telegraph'  => $telegraphLink,
+        'pages'      => count($pageUrls),
+        'site_url'   => "{$siteUrl}/read/{$newMangaId}",
     ]);
-
-    } catch (Throwable $e) {
-        echo json_encode(['success' => false, 'error' => 'Исключение: ' . $e->getMessage()]);
-    }
     exit;
 }
 
@@ -361,8 +317,84 @@ if ($path === '/api/check-admin') {
 
 
 # =========================
-# API MANGA — каталог
+# API IMGBB-KEYS — отдаёт ключи только админам (для загрузки из браузера)
 # =========================
+if ($path === '/api/imgbb-keys') {
+    header('Content-Type: application/json');
+    $userId = getEffectiveUserId($pdo);
+    if (!isAdmin($userId, $hardcodedAdmins)) {
+        echo json_encode(['success' => false, 'keys' => []]);
+        exit;
+    }
+    echo json_encode(['success' => true, 'keys' => $imgbbKeys]);
+    exit;
+}
+
+
+# =========================
+# API SAVE-MANGA — принимает только текст + готовые URL (без файлов, без лимита)
+# =========================
+if ($path === '/api/save-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+
+    try {
+        $userId = getEffectiveUserId($pdo);
+        if (!isAdmin($userId, $hardcodedAdmins)) {
+            echo json_encode(['success' => false, 'error' => 'Нет прав доступа']);
+            exit;
+        }
+
+        $input       = json_decode(file_get_contents('php://input'), true);
+        $title       = trim($input['title'] ?? '');
+        $description = trim($input['description'] ?? '');
+        $coverUrl    = trim($input['cover_url'] ?? '');
+        $pageUrls    = array_values(array_filter($input['page_urls'] ?? []));
+
+        if (!$title) {
+            echo json_encode(['success' => false, 'error' => 'Название обязательно']);
+            exit;
+        }
+
+        // Telegraph — создаём из готовых URL-ов
+        $telegraphLink = null;
+        if (!empty($pageUrls)) {
+            $telegraphLink = createTelegraphPage('♥ ' . $title, $pageUrls);
+        }
+
+        // Сохраняем в БД (PostgreSQL — RETURNING id)
+        $insertStmt = $pdo->prepare(
+            "INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by)
+             VALUES (?, ?, ?, ?, ?) RETURNING id"
+        );
+        $insertStmt->execute(['♥ ' . $title, $telegraphLink, $description, $coverUrl ?: null, $userId]);
+        $row        = $insertStmt->fetch(PDO::FETCH_ASSOC);
+        $newMangaId = (int)($row['id'] ?? 0);
+        if (!$newMangaId) $newMangaId = (int)$pdo->lastInsertId();
+
+        if (!$newMangaId) {
+            echo json_encode(['success' => false, 'error' => 'Не удалось получить ID новой манги']);
+            exit;
+        }
+
+        if (!empty($pageUrls)) {
+            saveMangaPages($pdo, $newMangaId, $pageUrls);
+        }
+
+        $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
+        echo json_encode([
+            'success'   => true,
+            'manga_id'  => $newMangaId,
+            'telegraph' => $telegraphLink,
+            'pages'     => count($pageUrls),
+            'site_url'  => "{$siteUrl}/read/{$newMangaId}",
+        ]);
+
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => 'Исключение: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($path === '/api/manga') {
     header('Content-Type: application/json');
     $page   = max(0, (int)($_GET['page'] ?? 0));
@@ -1342,6 +1374,7 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 }
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <header>
@@ -1805,13 +1838,189 @@ function onCoverChange(input) {
     reader.readAsDataURL(file);
 }
 
-function onZipChange(input) {
+async function onZipChange(input) {
     const file = input.files[0];
     if (!file) return;
     zipFile = file;
     const mb = (file.size / 1024 / 1024).toFixed(1);
-    document.getElementById('zip-preview').innerHTML =
-        `<div class="preview-count">📦 ${escapeHtml(file.name)} (${mb} MB)</div>`;
+    const preview = document.getElementById('zip-preview');
+    preview.innerHTML = `<div class="preview-count">📦 ${escapeHtml(file.name)} (${mb} MB) — распаковываю...</div>`;
+
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const imageExts = ['jpg','jpeg','png','webp','gif'];
+        const entries = [];
+        zip.forEach((relPath, entry) => {
+            if (!entry.dir) {
+                const ext = relPath.split('.').pop().toLowerCase();
+                if (imageExts.includes(ext)) entries.push({ relPath, entry });
+            }
+        });
+        entries.sort((a, b) => a.relPath.localeCompare(b.relPath, undefined, { numeric: true, sensitivity: 'base' }));
+
+        const blobs = [];
+        for (const { relPath, entry } of entries) {
+            const ext  = relPath.split('.').pop().toLowerCase();
+            const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+            const blob = await entry.async('blob');
+            blobs.push(new File([blob], relPath.replace(/\//g, '_'), { type: mime }));
+        }
+
+        photoFiles = blobs;
+        zipFile    = null;
+        preview.innerHTML = `<div class="preview-count">📦 Распаковано: ${blobs.length} страниц</div>`;
+
+        blobs.slice(0, 5).forEach(f => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = document.createElement('img');
+                img.className = 'preview-img';
+                img.src = e.target.result;
+                preview.appendChild(img);
+            };
+            reader.readAsDataURL(f);
+        });
+    } catch(e) {
+        preview.innerHTML = `<div class="preview-count" style="color:#ff5050">❌ Ошибка распаковки: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+// ===== ЗАГРУЗКА ОДНОГО ФАЙЛА НА IMGBB =====
+async function uploadOneToImgbb(blob, keys) {
+    for (const key of keys) {
+        try {
+            const b64 = await new Promise((res, rej) => {
+                const reader = new FileReader();
+                reader.onload  = e => res(e.target.result.split(',')[1]);
+                reader.onerror = () => rej(new Error('read error'));
+                reader.readAsDataURL(blob);
+            });
+            const fd = new FormData();
+            fd.append('key',   key);
+            fd.append('image', b64);
+            const r = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
+            if (r.ok) {
+                const d = await r.json();
+                if (d?.data?.url) return d.data.url;
+            }
+        } catch(e) {}
+    }
+    return null;
+}
+
+async function submitManga() {
+    const title = document.getElementById('manga-title').value.trim();
+    const desc  = document.getElementById('manga-desc').value.trim();
+
+    if (!title) { showResult('error', '❌ Введи название манги!'); return; }
+
+    const hasPhotos = photoFiles.length > 0;
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    showResult('', '');
+
+    const progressBar  = document.getElementById('upload-progress');
+    const progressFill = document.getElementById('upload-progress-fill');
+    progressBar.classList.add('active');
+    progressFill.style.width = '2%';
+
+    try {
+        // 1. Получаем ключи ImgBB с сервера (только для админов)
+        const keysRes  = await fetch('/api/imgbb-keys?tg_user_id=' + getTgUser());
+        const keysData = await keysRes.json();
+        if (!keysData.success || !keysData.keys?.length) {
+            showResult('error', '❌ Нет доступа или ключи ImgBB не найдены');
+            btn.disabled = false; btn.classList.remove('loading');
+            return;
+        }
+        const keys = keysData.keys;
+
+        // 2. Загружаем обложку на ImgBB
+        let coverUrl = null;
+        if (coverFile) {
+            showResult('', '');
+            progressFill.style.width = '5%';
+            coverUrl = await uploadOneToImgbb(coverFile, keys);
+        }
+
+        // 3. Загружаем страницы на ImgBB по одной прямо из браузера
+        const pageUrls = [];
+        if (hasPhotos) {
+            const total = photoFiles.length;
+            for (let i = 0; i < total; i++) {
+                // Обновляем прогресс
+                const pct = 5 + Math.round(((i) / total) * 88);
+                progressFill.style.width = pct + '%';
+                btn.querySelector('.btn-text') && (btn.querySelector('.btn-text').textContent =
+                    `⬆️ ${i + 1} / ${total}`);
+
+                const url = await uploadOneToImgbb(photoFiles[i], keys);
+                if (url) pageUrls.push(url);
+            }
+        }
+
+        progressFill.style.width = '95%';
+        if (btn.querySelector('.btn-text')) btn.querySelector('.btn-text').textContent = '🚀 Сохраняю...';
+
+        // 4. Отправляем на сервер только текст + готовые URL (никаких файлов!)
+        const res = await fetch('/api/save-manga', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                description: desc,
+                cover_url:   coverUrl,
+                page_urls:   pageUrls,
+                tg_user_id:  getTgUser(),
+            })
+        });
+
+        const rawText = await res.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch(parseErr) {
+            const preview = rawText.replace(/<[^>]+>/g, '').trim().substring(0, 400);
+            showResult('error', '❌ Сервер вернул не JSON:<br><code style="font-size:11px;word-break:break-all">' + escapeHtml(preview) + '</code>');
+            btn.disabled = false; btn.classList.remove('loading');
+            return;
+        }
+
+        progressFill.style.width = '100%';
+
+        if (data.success) {
+            showResult('success',
+                `✅ <strong>Манга успешно добавлена!</strong><br>` +
+                (data.pages > 0 ? `📄 Страниц: ${data.pages}<br>` : '') +
+                (data.telegraph ? `🔗 Telegraph: <a href="${escapeHtml(data.telegraph)}" target="_blank">открыть</a><br>` : '') +
+                `🌐 <a href="${escapeHtml(data.site_url)}" target="_blank">Открыть на сайте →</a>`
+            );
+            setTimeout(() => { load(true); loadNew(); }, 1500);
+        } else {
+            showResult('error', '❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+
+    } catch(e) {
+        showResult('error', '❌ Ошибка: ' + e.message);
+    }
+
+    if (btn.querySelector('.btn-text')) btn.querySelector('.btn-text').textContent = '🚀 Опубликовать мангу';
+    btn.disabled = false;
+    btn.classList.remove('loading');
+}
+
+function showResult(type, msg) {
+    const banner = document.getElementById('result-banner');
+    if (!type || !msg) {
+        banner.className = 'result-banner';
+        banner.innerHTML = '';
+        return;
+    }
+    banner.className = 'result-banner ' + type + ' open';
+    banner.innerHTML = msg;
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function onPhotosChange(input) {
@@ -1851,103 +2060,6 @@ function onPhotosChange(input) {
         }
     });
 });
-
-async function submitManga() {
-    const title = document.getElementById('manga-title').value.trim();
-    const desc  = document.getElementById('manga-desc').value.trim();
-
-    if (!title) {
-        showResult('error', '❌ Введи название манги!');
-        return;
-    }
-
-    // Проверяем что есть хотя бы что-то
-    const hasZip    = currentTab === 'zip'    && zipFile;
-    const hasPhotos = currentTab === 'photos' && photoFiles.length > 0;
-
-    // Разрешаем публикацию даже без страниц (можно добавить потом)
-
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-    btn.classList.add('loading');
-    showResult('', '');
-
-    // Прогресс-анимация
-    const progressBar  = document.getElementById('upload-progress');
-    const progressFill = document.getElementById('upload-progress-fill');
-    progressBar.classList.add('active');
-
-    // Имитируем плавный прогресс во время загрузки
-    let fakeProgress = 0;
-    const progressInterval = setInterval(() => {
-        if (fakeProgress < 85) {
-            fakeProgress += Math.random() * 4 + 1;
-            progressFill.style.width = Math.min(85, fakeProgress) + '%';
-        }
-    }, 400);
-
-    try {
-        const formData = new FormData();
-        formData.append('title', title);
-        formData.append('description', desc);
-        formData.append('tg_user_id', getTgUser());
-
-        if (coverFile) formData.append('cover', coverFile);
-        if (hasZip)    formData.append('zip', zipFile);
-        if (hasPhotos) {
-            photoFiles.forEach(f => formData.append('photos[]', f));
-        }
-
-        const res  = await fetch('/api/add-manga', { method: 'POST', body: formData });
-        const rawText = await res.text();
-        let data;
-        try {
-            data = JSON.parse(rawText);
-        } catch(parseErr) {
-            // Сервер вернул не JSON — показываем первые 300 символов ответа для диагностики
-            const preview = rawText.replace(/<[^>]+>/g, '').trim().substring(0, 300);
-            showResult('error', '❌ Сервер вернул не JSON:<br><code style="font-size:11px;word-break:break-all">' + escapeHtml(preview) + '</code>');
-            clearInterval(progressInterval);
-            btn.disabled = false;
-            btn.classList.remove('loading');
-            return;
-        }
-
-        clearInterval(progressInterval);
-        progressFill.style.width = '100%';
-
-        if (data.success) {
-            showResult('success',
-                `✅ <strong>Манга успешно добавлена!</strong><br>` +
-                (data.pages > 0 ? `📄 Страниц загружено: ${data.pages}<br>` : '') +
-                (data.telegraph ? `🔗 Telegraph: <a href="${escapeHtml(data.telegraph)}" target="_blank">открыть</a><br>` : '') +
-                `🌐 <a href="${escapeHtml(data.site_url)}" target="_blank">Открыть на сайте →</a>`
-            );
-            // Перезагружаем каталог
-            setTimeout(() => { load(true); loadNew(); }, 1500);
-        } else {
-            showResult('error', '❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
-        }
-    } catch(e) {
-        clearInterval(progressInterval);
-        showResult('error', '❌ Ошибка соединения: ' + e.message);
-    }
-
-    btn.disabled = false;
-    btn.classList.remove('loading');
-}
-
-function showResult(type, msg) {
-    const banner = document.getElementById('result-banner');
-    if (!type || !msg) {
-        banner.className = 'result-banner';
-        banner.innerHTML = '';
-        return;
-    }
-    banner.className = 'result-banner ' + type + ' open';
-    banner.innerHTML = msg;
-    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
 
 // ===== INIT =====
 load();
