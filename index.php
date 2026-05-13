@@ -31,12 +31,41 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)");
 } catch (Exception $e) {}
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 session_start();
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
+
+# =========================
+# СПИСОК АДМИНОВ (из бота + из БД)
+# =========================
+$hardcodedAdmins = [1710365896, 1181510470];
+try {
+    $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
+    foreach ($stmtAdmins as $row) {
+        if (!in_array((int)$row['user_id'], $hardcodedAdmins)) {
+            $hardcodedAdmins[] = (int)$row['user_id'];
+        }
+    }
+} catch (Exception $e) {}
+
+function isAdmin($userId, $admins) {
+    return $userId > 0 && in_array((int)$userId, $admins);
+}
+
+# =========================
+# IMGBB KEYS (из бота)
+# =========================
+$imgbbKeys = [
+    '58ff4596fd55028a81cbf8c4e38388e1',
+    '6981ba08e7b2a8743aab2c8ea008f675',
+    'f9b8d27fa4029816d643c7814fd60c60',
+    '24dbed2ae9fea9369de6a7b68d0c3ee6',
+    'c3e6a55335c71a052c1a59b6a2d6d150',
+];
 
 # =========================
 # ПОЛУЧИТЬ ID ПОЛЬЗОВАТЕЛЯ
@@ -61,7 +90,7 @@ function getEffectiveUserId($pdo) {
 }
 
 # =========================
-# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: отправить уведомление в Telegram
+# TELEGRAM NOTIFY
 # =========================
 function sendTgNotify($userId, $text) {
     $botToken = getenv('BOT_TOKEN');
@@ -82,6 +111,208 @@ function sendTgNotify($userId, $text) {
     curl_close($ch);
 }
 
+# =========================
+# UPLOAD TO IMGBB
+# =========================
+function uploadToImgbb($filePathOrUrl, $apiKeys, $retries = 2) {
+    $keys = is_array($apiKeys) ? $apiKeys : [$apiKeys];
+    foreach ($keys as $key) {
+        for ($attempt = 0; $attempt <= $retries; $attempt++) {
+            try {
+                if (filter_var($filePathOrUrl, FILTER_VALIDATE_URL)) {
+                    $imageData = base64_encode(file_get_contents($filePathOrUrl));
+                } else {
+                    $imageData = base64_encode(file_get_contents($filePathOrUrl));
+                }
+                $ch = curl_init('https://api.imgbb.com/1/upload');
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, ['key' => $key, 'image' => $imageData]);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($httpCode === 200) {
+                    $data = json_decode($response, true);
+                    if (!empty($data['data']['url'])) {
+                        return $data['data']['url'];
+                    }
+                }
+            } catch (Exception $e) {}
+        }
+    }
+    return null;
+}
+
+# =========================
+# CREATE TELEGRAPH PAGE
+# =========================
+function createTelegraphPage($title, $imageUrls) {
+    $nodes = [];
+    $imageUrls = array_values(array_unique(array_filter($imageUrls)));
+    foreach ($imageUrls as $url) {
+        if (!empty($url)) {
+            $nodes[] = ['tag' => 'img', 'attrs' => ['src' => $url]];
+        }
+    }
+    if (empty($nodes)) return false;
+
+    $accessToken = '192627565eb929153713373081fb7dd3eb3701cf4a36a2f9243d3866f831';
+    $postData = http_build_query([
+        'access_token'   => $accessToken,
+        'title'          => mb_substr($title, 0, 256),
+        'author_name'    => 'MangaBot',
+        'content'        => json_encode($nodes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'return_content' => 'false',
+    ]);
+
+    $ch = curl_init("https://api.telegra.ph/createPage");
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $rawResponse = curl_exec($ch);
+    curl_close($ch);
+
+    $res = json_decode($rawResponse, true);
+    if (!isset($res['ok']) || !$res['ok']) return false;
+    return $res['result']['url'] ?? false;
+}
+
+# =========================
+# SAVE MANGA PAGES TO DB
+# =========================
+function saveMangaPages($pdo, $mangaId, $pageUrls) {
+    $pdo->prepare("DELETE FROM manga_pages WHERE manga_id = ?")->execute([$mangaId]);
+    $stmt = $pdo->prepare("INSERT INTO manga_pages (manga_id, page_url, page_order) VALUES (?, ?, ?)");
+    foreach ($pageUrls as $i => $url) {
+        if (!empty($url)) $stmt->execute([$mangaId, $url, $i]);
+    }
+}
+
+
+# =========================
+# API ADD MANGA — добавление манги через сайт (только для админов)
+# =========================
+if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    ini_set('max_execution_time', 300);
+    ini_set('memory_limit', '512M');
+
+    $userId = getEffectiveUserId($pdo);
+    if (!isAdmin($userId, $hardcodedAdmins)) {
+        echo json_encode(['success' => false, 'error' => 'Нет прав доступа']);
+        exit;
+    }
+
+    $title       = trim($_POST['title'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+
+    if (!$title) {
+        echo json_encode(['success' => false, 'error' => 'Название обязательно']);
+        exit;
+    }
+
+    // --- ОБЛОЖКА ---
+    $coverImgbbUrl = null;
+    if (!empty($_FILES['cover']['tmp_name']) && $_FILES['cover']['error'] === 0) {
+        $coverImgbbUrl = uploadToImgbb($_FILES['cover']['tmp_name'], $imgbbKeys);
+    }
+
+    // --- СТРАНИЦЫ: вариант 1 — ZIP ---
+    $pageUrls = [];
+    if (!empty($_FILES['zip']['tmp_name']) && $_FILES['zip']['error'] === 0) {
+        $zipTmp = $_FILES['zip']['tmp_name'];
+        $zip = new ZipArchive();
+        if ($zip->open($zipTmp) === true) {
+            $tmpDir = sys_get_temp_dir() . '/manga_zip_' . uniqid();
+            mkdir($tmpDir, 0777, true);
+            $zip->extractTo($tmpDir);
+            $zip->close();
+
+            // Собираем все изображения
+            $allFiles = [];
+            $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tmpDir));
+            foreach ($it as $file) {
+                if ($file->isFile()) {
+                    $ext = strtolower(pathinfo($file->getFilename(), PATHINFO_EXTENSION));
+                    if (in_array($ext, ['jpg','jpeg','png','webp','gif'])) {
+                        $allFiles[] = $file->getRealPath();
+                    }
+                }
+            }
+            // Сортировка по имени
+            usort($allFiles, function($a, $b) {
+                return strnatcasecmp(basename($a), basename($b));
+            });
+
+            foreach ($allFiles as $imgPath) {
+                $url = uploadToImgbb($imgPath, $imgbbKeys);
+                if ($url) $pageUrls[] = $url;
+            }
+
+            // Удаляем tmp
+            array_map('unlink', glob("$tmpDir/*.*"));
+            @rmdir($tmpDir);
+        }
+    }
+
+    // --- СТРАНИЦЫ: вариант 2 — фото ---
+    if (empty($pageUrls) && !empty($_FILES['photos'])) {
+        $photos = $_FILES['photos'];
+        $count  = count($photos['name']);
+        for ($i = 0; $i < $count; $i++) {
+            if ($photos['error'][$i] === 0 && !empty($photos['tmp_name'][$i])) {
+                $url = uploadToImgbb($photos['tmp_name'][$i], $imgbbKeys);
+                if ($url) $pageUrls[] = $url;
+            }
+        }
+    }
+
+    // --- TELEGRAPH ---
+    $telegraphLink = null;
+    if (!empty($pageUrls)) {
+        $titleWithHeart = '♥ ' . $title;
+        $telegraphLink = createTelegraphPage($titleWithHeart, $pageUrls);
+    }
+
+    // --- СОХРАНЯЕМ В БД ---
+    $titleWithHeart = '♥ ' . $title;
+    $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by) VALUES (?, ?, ?, ?, ?)")
+        ->execute([$titleWithHeart, $telegraphLink, $description, $coverImgbbUrl, $userId]);
+    $newMangaId = (int)$pdo->lastInsertId();
+
+    // Сохраняем страницы в manga_pages
+    if (!empty($pageUrls)) {
+        saveMangaPages($pdo, $newMangaId, $pageUrls);
+    }
+
+    $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
+
+    echo json_encode([
+        'success'    => true,
+        'manga_id'   => $newMangaId,
+        'telegraph'  => $telegraphLink,
+        'pages'      => count($pageUrls),
+        'site_url'   => "{$siteUrl}/read/{$newMangaId}",
+    ]);
+    exit;
+}
+
+
+# =========================
+# API CHECK ADMIN — проверить является ли пользователь админом
+# =========================
+if ($path === '/api/check-admin') {
+    header('Content-Type: application/json');
+    $userId = getEffectiveUserId($pdo);
+    echo json_encode(['is_admin' => isAdmin($userId, $hardcodedAdmins), 'user_id' => $userId]);
+    exit;
+}
+
 
 # =========================
 # API MANGA — каталог
@@ -90,7 +321,7 @@ if ($path === '/api/manga') {
     header('Content-Type: application/json');
     $page   = max(0, (int)($_GET['page'] ?? 0));
     $q      = trim($_GET['q'] ?? '');
-    $sort   = $_GET['sort'] ?? 'new'; // new | popular | alpha
+    $sort   = $_GET['sort'] ?? 'new';
     $limit  = 24;
     $offset = $page * $limit;
 
@@ -147,7 +378,7 @@ if ($path === '/api/new-manga') {
 }
 
 # =========================
-# API RANDOM MANGA — случайная (не прочитанная)
+# API RANDOM MANGA
 # =========================
 if ($path === '/api/random') {
     header('Content-Type: application/json');
@@ -165,7 +396,7 @@ if ($path === '/api/random') {
 }
 
 # =========================
-# API READING PROGRESS — сохранить/получить прогресс
+# API READING PROGRESS
 # =========================
 if ($path === '/api/progress' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -254,7 +485,7 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
             if (empty($pages)) {
                 $html = @file_get_contents($tUrl, false, $ctx);
                 if ($html) {
-                    preg_match_all('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $matches);
+                    preg_match_all('/<img[^>]+src=["\'']([^"\']+)["\''][^>]*>/i', $html, $matches);
                     foreach ($matches[1] ?? [] as $src) {
                         if (strpos($src, 'http') === 0) {
                             $pages[] = $src;
@@ -348,9 +579,7 @@ if ($path === '/api/vote' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 # =========================
-# API STATUS — сохранить статус читателя (now / read / will)
-# Синхронизация: сайт → Telegram бот (уведомление)
-# Синхронизация: бот → сайт (через общую БД, статус уже в таблице)
+# API STATUS
 # =========================
 if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -367,7 +596,6 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($mangaId && in_array($status, ['now', 'read', 'will'])) {
         $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$userId, $mangaId, $status]);
 
-        // Уведомляем Telegram если пользователь авторизован через TG
         $realTgUser = !empty($input['tg_user_id']) && is_numeric($input['tg_user_id']);
         if ($realTgUser && $userId > 0) {
             $stmtM = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
@@ -390,7 +618,7 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 # =========================
-# API LIBRARY — библиотека пользователя
+# API LIBRARY
 # =========================
 if ($path === '/api/library') {
     header('Content-Type: application/json');
@@ -403,7 +631,7 @@ if ($path === '/api/library') {
 
 
 # =========================
-# VIEWER (РИДЕР) — постраничный просмотр
+# VIEWER (РИДЕР)
 # =========================
 if (preg_match('#^/view/(\d+)$#', $path, $m)) {
     $id   = (int)$m[1];
@@ -652,13 +880,11 @@ $coverSrc = !empty($manga['cover_imgbb_url']) ? $manga['cover_imgbb_url'] : (!em
         <div class="stat-pill dislikes-count">💔 <span id="dislikes"><?= (int)$manga['dislikes'] ?></span></div>
     </div>
 
-    <!-- ГОЛОСОВАНИЕ -->
     <div class="vote-buttons">
         <button class="vote-btn vote-like"    onclick="vote('like')">👍 Лайк</button>
         <button class="vote-btn vote-dislike" onclick="vote('dislike')">👎 Дизлайк</button>
     </div>
 
-    <!-- СТАТУС ЧТЕНИЯ -->
     <div class="status-section">
         <div class="status-label">Мой статус</div>
         <div class="status-buttons">
@@ -668,7 +894,6 @@ $coverSrc = !empty($manga['cover_imgbb_url']) ? $manga['cover_imgbb_url'] : (!em
         </div>
     </div>
 
-    <!-- КНОПКИ ЧИТАТЬ -->
     <div class="read-buttons">
         <?php if ($hasPages): ?>
         <a class="btn primary" href="/view/<?= $id ?>">📖 Читать на сайте</a>
@@ -754,7 +979,7 @@ function showToast(msg) {
 
 
 # =========================
-# LIBRARY PAGE — Моя библиотека
+# LIBRARY PAGE
 # =========================
 if ($path === '/library') {
 ?>
@@ -846,7 +1071,7 @@ function cardHtml(m) {
     </a>`;
 }
 
-function sectionHtml(icon, title, items, statusClass) {
+function sectionHtml(icon, title, items) {
     const gridContent = items.length > 0
         ? items.map(cardHtml).join('')
         : `<div class="empty-section">Список пуст</div>`;
@@ -871,9 +1096,9 @@ async function load() {
         const read = data.items.filter(i => i.status === 'read');
 
         let html = '';
-        if (now.length  > 0) html += sectionHtml('📖', 'Читаю сейчас', now, 'now');
-        if (will.length > 0) html += sectionHtml('🔖', 'Буду читать',  will, 'will');
-        if (read.length > 0) html += sectionHtml('✅', 'Прочитано',    read, 'read');
+        if (now.length  > 0) html += sectionHtml('📖', 'Читаю сейчас', now);
+        if (will.length > 0) html += sectionHtml('🔖', 'Буду читать',  will);
+        if (read.length > 0) html += sectionHtml('✅', 'Прочитано',    read);
         if (!html) html = '<div class="empty-page">📭 У вас пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';
 
         content.innerHTML = html;
@@ -921,6 +1146,11 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .random-btn{display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:50px;color:var(--text);text-decoration:none;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap;font-family:inherit}
 .random-btn:hover{border-color:var(--accent);color:var(--accent)}
 
+/* ===== ADD MANGA BUTTON ===== */
+.add-manga-btn{display:none;align-items:center;gap:7px;padding:9px 18px;background:linear-gradient(135deg,#00c853,#00897b);border:none;border-radius:50px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;font-family:inherit}
+.add-manga-btn:hover{opacity:0.88;transform:translateY(-1px)}
+.add-manga-btn.visible{display:flex}
+
 /* ===== MAIN WRAP ===== */
 .wrap{max-width:1400px;margin:auto;padding:24px 20px}
 
@@ -947,13 +1177,11 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .slide-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
 .new-badge{position:absolute;top:7px;right:7px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:9px;font-weight:800;padding:3px 7px;border-radius:8px;letter-spacing:0.5px;text-transform:uppercase;box-shadow:0 2px 8px rgba(255,77,109,0.4)}
 
-/* ===== ПРОДОЛЖИТЬ ЧИТАТЬ — новый стиль ===== */
+/* ===== ПРОДОЛЖИТЬ ЧИТАТЬ ===== */
 .continue-section{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:20px 24px;margin-bottom:28px;position:relative;overflow:hidden}
 .continue-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#ffa500,#ff6b35,transparent)}
-/* Горизонтальный список карточек */
 .cont-list{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .cont-list::-webkit-scrollbar{display:none}
-/* Карточка "продолжить" — горизонтальная, как на скриншоте */
 .cont-card{flex:0 0 240px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);display:flex;gap:0;transition:all 0.25s;position:relative}
 .cont-card:hover{border-color:#ffa500;transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,165,0,0.12)}
 .cont-cover-wrap{width:60px;flex-shrink:0;position:relative}
@@ -962,11 +1190,9 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .cont-body{flex:1;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
 .cont-title{font-size:12px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:6px}
 .cont-chapter{font-size:10px;color:var(--muted);margin-bottom:8px}
-/* Прогресс-бар */
 .cont-bar-wrap{margin-bottom:8px}
 .cont-bar-bg{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden}
 .cont-bar-fill{height:100%;background:linear-gradient(90deg,#ffa500,#ff6b35);border-radius:2px;transition:width 0.4s}
-/* Кнопка продолжить */
 .cont-btn{display:inline-block;padding:5px 12px;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.4);border-radius:20px;color:#ffa500;font-size:10px;font-weight:700;text-align:center;transition:all 0.2s;white-space:nowrap;align-self:flex-start}
 .cont-card:hover .cont-btn{background:rgba(255,165,0,0.25);border-color:#ffa500}
 
@@ -992,6 +1218,63 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .load-more:hover{background:#6a4ee0;transform:translateY(-2px)}
 .empty{text-align:center;padding:80px 20px;color:var(--muted)}
 
+/* ===== MODAL ADD MANGA ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:28px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;padding:32px;position:relative;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.modal::-webkit-scrollbar{width:5px}
+.modal::-webkit-scrollbar-track{background:transparent}
+.modal::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px}
+.modal-close{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.modal-close:hover{background:rgba(255,80,80,0.15);color:#ff5050;border-color:#ff5050}
+.modal-title{font-size:22px;font-weight:800;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:24px}
+.form-group{margin-bottom:20px}
+.form-label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.form-input,.form-textarea{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:12px 16px;transition:border-color 0.2s;resize:none}
+.form-input:focus,.form-textarea:focus{outline:none;border-color:var(--accent)}
+.form-textarea{min-height:90px}
+
+/* File upload zones */
+.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.25s;position:relative;overflow:hidden}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(124,92,255,0.05)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-icon{font-size:34px;margin-bottom:10px}
+.upload-text{font-size:13px;color:var(--muted);line-height:1.5}
+.upload-text strong{color:var(--text)}
+.upload-preview{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.preview-img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.preview-cover{width:80px;height:110px;object-fit:cover;border-radius:10px;border:2px solid var(--accent)}
+.preview-count{background:rgba(124,92,255,0.15);border:1px solid var(--accent);border-radius:10px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--accent)}
+
+/* File type tabs */
+.file-tabs{display:flex;gap:8px;margin-bottom:14px}
+.file-tab{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;text-align:center}
+.file-tab:hover{border-color:var(--accent);color:var(--text)}
+.file-tab.active{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
+.file-panel{display:none}
+.file-panel.active{display:block}
+
+/* Submit */
+.submit-btn{width:100%;padding:16px;border-radius:16px;background:linear-gradient(135deg,var(--accent),#5a3fc0);border:none;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.2s;margin-top:8px;position:relative;overflow:hidden}
+.submit-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 24px rgba(124,92,255,0.35)}
+.submit-btn:disabled{opacity:0.5;cursor:not-allowed}
+.submit-btn .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
+.submit-btn.loading .btn-text{display:none}
+.submit-btn.loading .spinner{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Result banner */
+.result-banner{border-radius:16px;padding:18px 20px;margin-top:16px;font-size:14px;line-height:1.6;display:none}
+.result-banner.success{background:rgba(0,200,83,0.1);border:1px solid rgba(0,200,83,0.4);color:#00c853}
+.result-banner.error{background:rgba(255,80,80,0.1);border:1px solid rgba(255,80,80,0.4);color:#ff5050}
+.result-banner.open{display:block}
+.result-banner a{color:inherit;text-decoration:underline;font-weight:700}
+
+/* Progress bar upload */
+.upload-progress{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:12px;overflow:hidden;display:none}
+.upload-progress.active{display:block}
+.upload-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#00c853);border-radius:2px;width:0%;transition:width 0.4s}
+
 @media(max-width:900px){
     .header-right{gap:7px}
     .bot-link span.btn-text{display:none}
@@ -1002,6 +1285,8 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
     .header-inner{gap:8px}
     .lib-btn span.btn-text{display:none}
     .cont-card{flex:0 0 210px}
+    .add-manga-btn span.btn-text{display:none}
+    .modal{padding:22px 18px}
 }
 @media(max-width:480px){
     header{padding:10px 14px}
@@ -1018,6 +1303,10 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
         <a href="/" class="logo">BLACKWATCH<span style="color:var(--accent)">MANGA</span></a>
         <input id="search" class="search" placeholder="🔍 Поиск манги..." autocomplete="off">
         <div class="header-right">
+            <!-- Кнопка добавить мангу — показывается только для админов -->
+            <button class="add-manga-btn" id="add-manga-btn" onclick="openAddModal()" title="Добавить мангу">
+                ➕ <span class="btn-text">Добавить мангу</span>
+            </button>
             <a href="https://t.me/<?= htmlspecialchars($botUsername) ?>" target="_blank" class="bot-link">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/></svg>
                 <span class="btn-text">Бот</span>
@@ -1033,7 +1322,6 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 </header>
 
 <div class="wrap">
-
     <!-- ===== НОВИНКИ ЗА 24 ЧАСА ===== -->
     <div class="new-section" id="new-section" style="display:none">
         <div class="section-header">
@@ -1052,7 +1340,7 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
         </div>
     </div>
 
-    <!-- ===== ПРОДОЛЖИТЬ ЧИТАТЬ — горизонтальный список ===== -->
+    <!-- ===== ПРОДОЛЖИТЬ ЧИТАТЬ ===== -->
     <div class="continue-section" id="cont-section" style="display:none">
         <div class="section-header">
             <div class="section-title-row">
@@ -1076,7 +1364,82 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
     <button class="load-more" id="more" style="display:none">Загрузить ещё</button>
 </div>
 
+<!-- ===== МОДАЛЬНОЕ ОКНО: ДОБАВИТЬ МАНГУ ===== -->
+<div class="modal-overlay" id="add-modal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeAddModal()">✕</button>
+        <div class="modal-title">➕ Добавить мангу</div>
+
+        <!-- 1. ОБЛОЖКА -->
+        <div class="form-group">
+            <label class="form-label">1. Обложка</label>
+            <div class="upload-zone" id="cover-zone">
+                <input type="file" id="cover-input" accept="image/*" onchange="onCoverChange(this)">
+                <div class="upload-icon">🖼️</div>
+                <div class="upload-text"><strong>Кликни или перетащи</strong><br>JPG, PNG, WEBP</div>
+                <div class="upload-preview" id="cover-preview"></div>
+            </div>
+        </div>
+
+        <!-- 2. НАЗВАНИЕ -->
+        <div class="form-group">
+            <label class="form-label">2. Название манги</label>
+            <input type="text" class="form-input" id="manga-title" placeholder="Введи название..." maxlength="200">
+        </div>
+
+        <!-- 3. ОПИСАНИЕ -->
+        <div class="form-group">
+            <label class="form-label">3. Описание</label>
+            <textarea class="form-textarea" id="manga-desc" placeholder="Краткое описание манги..." rows="3"></textarea>
+        </div>
+
+        <!-- 4. СТРАНИЦЫ -->
+        <div class="form-group">
+            <label class="form-label">4. Страницы манги</label>
+            <div class="file-tabs">
+                <button class="file-tab active" id="tab-zip"    onclick="switchTab('zip')">📦 ZIP архив</button>
+                <button class="file-tab"        id="tab-photos" onclick="switchTab('photos')">🖼️ Фото по одному</button>
+            </div>
+
+            <!-- ZIP вариант -->
+            <div class="file-panel active" id="panel-zip">
+                <div class="upload-zone" id="zip-zone">
+                    <input type="file" id="zip-input" accept=".zip" onchange="onZipChange(this)">
+                    <div class="upload-icon">📦</div>
+                    <div class="upload-text"><strong>Загрузить ZIP</strong><br>Все страницы упакованные в архив<br><span style="font-size:11px;color:#666">Сортировка по имени файла</span></div>
+                    <div class="upload-preview" id="zip-preview"></div>
+                </div>
+            </div>
+
+            <!-- Фото вариант -->
+            <div class="file-panel" id="panel-photos">
+                <div class="upload-zone" id="photos-zone">
+                    <input type="file" id="photos-input" accept="image/*" multiple onchange="onPhotosChange(this)">
+                    <div class="upload-icon">📸</div>
+                    <div class="upload-text"><strong>Выбери все страницы</strong><br>Зажми Ctrl/Cmd для выбора нескольких файлов</div>
+                    <div class="upload-preview" id="photos-preview"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Прогресс -->
+        <div class="upload-progress" id="upload-progress">
+            <div class="upload-progress-fill" id="upload-progress-fill"></div>
+        </div>
+
+        <!-- Кнопка submit -->
+        <button class="submit-btn" id="submit-btn" onclick="submitManga()">
+            <span class="btn-text">🚀 Опубликовать мангу</span>
+            <div class="spinner"></div>
+        </button>
+
+        <!-- Результат -->
+        <div class="result-banner" id="result-banner"></div>
+    </div>
+</div>
+
 <script>
+// ===== INIT TG ID =====
 (function() {
     try {
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
@@ -1110,6 +1473,18 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ===== ПРОВЕРКА АДМИНА =====
+async function checkAdmin() {
+    try {
+        const tgId = getTgUser();
+        const res  = await fetch('/api/check-admin?tg_user_id=' + tgId);
+        const data = await res.json();
+        if (data.is_admin) {
+            document.getElementById('add-manga-btn').classList.add('visible');
+        }
+    } catch(e) {}
+}
+
 // ===== КАТАЛОГ =====
 let page = 0, q = '', loading = false, hasMore = true, currentSort = 'new';
 const grid        = document.getElementById('grid');
@@ -1139,7 +1514,7 @@ async function load(reset = false) {
         if (page === 0) {
             grid.innerHTML = '';
             statsDiv.innerHTML = q
-                ? `Найдено: <strong>${data.total}</strong> (из ${<?= (int)$total ?>} манг)`
+                ? `Найдено: <strong>${data.total}</strong> (из <?= (int)$total ?> манг)`
                 : `Всего манги: <strong>${data.total}</strong>`;
         }
         if (data.items.length === 0 && page === 0) {
@@ -1255,7 +1630,7 @@ function slideNew(dir) {
     updateNewArrows(total);
 }
 
-// ===== ПРОДОЛЖИТЬ ЧИТАТЬ — горизонтальные карточки =====
+// ===== ПРОДОЛЖИТЬ ЧИТАТЬ =====
 async function loadContinue() {
     try {
         const tgId = getTgUser();
@@ -1283,7 +1658,6 @@ async function loadContinue() {
             const tot = parseInt(m.total_pages) || 0;
             const pct = tot > 0 ? Math.min(100, Math.round((pg / tot) * 100)) : 0;
 
-            // Строка прогресса: "Глава N — X из Y"
             let chapterLine = '';
             if (tot > 0) {
                 chapterLine = `Глава 1 — ${pg} из ${tot}`;
@@ -1321,10 +1695,207 @@ async function loadContinue() {
     } catch(e) {}
 }
 
+// ===== MODAL: ДОБАВИТЬ МАНГУ =====
+let coverFile = null;
+let zipFile   = null;
+let photoFiles = [];
+let currentTab = 'zip';
+
+function openAddModal() {
+    document.getElementById('add-modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    resetForm();
+}
+
+function closeAddModal() {
+    document.getElementById('add-modal').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+// Закрыть по клику на оверлей
+document.getElementById('add-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddModal();
+});
+
+function resetForm() {
+    coverFile = null;
+    zipFile = null;
+    photoFiles = [];
+    document.getElementById('manga-title').value = '';
+    document.getElementById('manga-desc').value = '';
+    document.getElementById('cover-input').value = '';
+    document.getElementById('zip-input').value = '';
+    document.getElementById('photos-input').value = '';
+    document.getElementById('cover-preview').innerHTML = '';
+    document.getElementById('zip-preview').innerHTML = '';
+    document.getElementById('photos-preview').innerHTML = '';
+    const banner = document.getElementById('result-banner');
+    banner.className = 'result-banner';
+    banner.innerHTML = '';
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    document.getElementById('upload-progress').classList.remove('active');
+    document.getElementById('upload-progress-fill').style.width = '0%';
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tab-zip').classList.toggle('active', tab === 'zip');
+    document.getElementById('tab-photos').classList.toggle('active', tab === 'photos');
+    document.getElementById('panel-zip').classList.toggle('active', tab === 'zip');
+    document.getElementById('panel-photos').classList.toggle('active', tab === 'photos');
+}
+
+function onCoverChange(input) {
+    const file = input.files[0];
+    if (!file) return;
+    coverFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('cover-preview').innerHTML =
+            `<img class="preview-cover" src="${e.target.result}" alt="Обложка">`;
+    };
+    reader.readAsDataURL(file);
+}
+
+function onZipChange(input) {
+    const file = input.files[0];
+    if (!file) return;
+    zipFile = file;
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    document.getElementById('zip-preview').innerHTML =
+        `<div class="preview-count">📦 ${escapeHtml(file.name)} (${mb} MB)</div>`;
+}
+
+function onPhotosChange(input) {
+    photoFiles = Array.from(input.files);
+    if (!photoFiles.length) return;
+    const preview = document.getElementById('photos-preview');
+    preview.innerHTML = `<div class="preview-count">📸 ${photoFiles.length} фото</div>`;
+    // Показываем первые 5 превью
+    const toShow = photoFiles.slice(0, 5);
+    toShow.forEach(f => {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const img = document.createElement('img');
+            img.className = 'preview-img';
+            img.src = e.target.result;
+            preview.appendChild(img);
+        };
+        reader.readAsDataURL(f);
+    });
+}
+
+// Drag & drop support
+['cover-zone','zip-zone','photos-zone'].forEach(zoneId => {
+    const zone = document.getElementById(zoneId);
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag');
+        const input = zone.querySelector('input[type=file]');
+        if (input && e.dataTransfer.files.length) {
+            // Симулируем change event
+            const dt = new DataTransfer();
+            Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change'));
+        }
+    });
+});
+
+async function submitManga() {
+    const title = document.getElementById('manga-title').value.trim();
+    const desc  = document.getElementById('manga-desc').value.trim();
+
+    if (!title) {
+        showResult('error', '❌ Введи название манги!');
+        return;
+    }
+
+    // Проверяем что есть хотя бы что-то
+    const hasZip    = currentTab === 'zip'    && zipFile;
+    const hasPhotos = currentTab === 'photos' && photoFiles.length > 0;
+
+    // Разрешаем публикацию даже без страниц (можно добавить потом)
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    showResult('', '');
+
+    // Прогресс-анимация
+    const progressBar  = document.getElementById('upload-progress');
+    const progressFill = document.getElementById('upload-progress-fill');
+    progressBar.classList.add('active');
+
+    // Имитируем плавный прогресс во время загрузки
+    let fakeProgress = 0;
+    const progressInterval = setInterval(() => {
+        if (fakeProgress < 85) {
+            fakeProgress += Math.random() * 4 + 1;
+            progressFill.style.width = Math.min(85, fakeProgress) + '%';
+        }
+    }, 400);
+
+    try {
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('description', desc);
+        formData.append('tg_user_id', getTgUser());
+
+        if (coverFile) formData.append('cover', coverFile);
+        if (hasZip)    formData.append('zip', zipFile);
+        if (hasPhotos) {
+            photoFiles.forEach(f => formData.append('photos[]', f));
+        }
+
+        const res  = await fetch('/api/add-manga', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        clearInterval(progressInterval);
+        progressFill.style.width = '100%';
+
+        if (data.success) {
+            showResult('success',
+                `✅ <strong>Манга успешно добавлена!</strong><br>` +
+                (data.pages > 0 ? `📄 Страниц загружено: ${data.pages}<br>` : '') +
+                (data.telegraph ? `🔗 Telegraph: <a href="${escapeHtml(data.telegraph)}" target="_blank">открыть</a><br>` : '') +
+                `🌐 <a href="${escapeHtml(data.site_url)}" target="_blank">Открыть на сайте →</a>`
+            );
+            // Перезагружаем каталог
+            setTimeout(() => { load(true); loadNew(); }, 1500);
+        } else {
+            showResult('error', '❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch(e) {
+        clearInterval(progressInterval);
+        showResult('error', '❌ Ошибка соединения: ' + e.message);
+    }
+
+    btn.disabled = false;
+    btn.classList.remove('loading');
+}
+
+function showResult(type, msg) {
+    const banner = document.getElementById('result-banner');
+    if (!type || !msg) {
+        banner.className = 'result-banner';
+        banner.innerHTML = '';
+        return;
+    }
+    banner.className = 'result-banner ' + type + ' open';
+    banner.innerHTML = msg;
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 // ===== INIT =====
 load();
 loadNew();
 loadContinue();
+checkAdmin();
 </script>
 </body>
 </html>
