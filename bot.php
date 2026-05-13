@@ -961,10 +961,22 @@ if (isset($update['message'])) {
             sendSimpleMsg($chatId, "👋 *Добро пожаловать!*\n\n_Выберите действие:_", $apiUrl, getMainMenu($chatId, $admins));
             break;
         case "🌐 Сайт каталога":
-            sendSimpleMsg($chatId, "🌐 *Открыть каталог на сайте:*\n\n{$siteUrl}", $apiUrl);
+            sendSimpleMsg($chatId, "🌐 *Открыть каталог на сайте:*\n\n{$siteUrl}?tg_user_id={$chatId}", $apiUrl);
             break;
         case "⚙️ АДМИН-ПАНЕЛЬ":
             if (in_array($chatId, $admins)) sendSimpleMsg($chatId, "🛡 *Панель управления*", $apiUrl, $adminKeyboard);
+            break;
+        case "➕ Добавить через альбом":
+            if (in_array($chatId, $admins)) {
+                $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_pages', '[]') ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId]);
+                sendSimpleMsg($chatId, "📷 *Шаг 1 из 4:* Отправляйте фото страниц по одному.\n\nКогда все страницы будут загружены — напишите *стоп*.", $apiUrl);
+            }
+            break;
+        case "📦 Добавить через ZIP":
+            if (in_array($chatId, $admins)) {
+                $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_zip', '[]') ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId]);
+                sendSimpleMsg($chatId, "📦 *Шаг 1 из 4:* Отправьте ZIP-архив со страницами манги.\n\n⚠️ _Максимальный размер: 20 МБ (ограничение Telegram)._", $apiUrl);
+            }
             break;
         case "📊 Статистика админов":
             if (in_array($chatId, $admins)) {
@@ -1164,7 +1176,7 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     $text = "📖 *" . $m['title'] . "*\n\n" . ($m['description'] ?? '') . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
     $readButtons = [];
     if (!empty($m['telegraph_url'])) $readButtons[] = ['text' => '📖 Читать (Telegra.ph)', 'url' => $m['telegraph_url']];
-    if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
+    if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id'] . '?tg_user_id=' . $chatId];
     $kb = ['inline_keyboard' => [
         $readButtons,
         [

@@ -257,6 +257,36 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // ИСПРАВЛЕНО: добавлен 'will' (буду читать)
     if ($mangaId && in_array($status, ['now', 'read', 'will'])) {
         $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$userId, $mangaId, $status]);
+
+        // Уведомляем Telegram бота если пользователь авторизован через TG
+        $realTgUser = !empty($input['tg_user_id']) && is_numeric($input['tg_user_id']);
+        if ($realTgUser && $userId > 0) {
+            $botToken = getenv('BOT_TOKEN');
+            if ($botToken) {
+                $stmtM = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
+                $stmtM->execute([$mangaId]);
+                $mangaRow = $stmtM->fetch();
+                $mangaTitle = $mangaRow['title'] ?? "Манга #$mangaId";
+                $labels = ['now' => '📖 Читаю', 'will' => '🔖 Буду читать', 'read' => '✅ Прочитано'];
+                $label = $labels[$status] ?? $status;
+                $tgMsg = "🔄 *Статус обновлён с сайта*\n\n📖 *$mangaTitle*\n\n$label";
+                $tgData = json_encode([
+                    'chat_id'    => $userId,
+                    'text'       => $tgMsg,
+                    'parse_mode' => 'Markdown'
+                ]);
+                $ch = curl_init("https://api.telegram.org/bot{$botToken}/sendMessage");
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $tgData);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                @curl_exec($ch);
+                curl_close($ch);
+            }
+        }
+
         echo json_encode(['success' => true, 'user_id' => $userId]);
         exit;
     }
@@ -541,11 +571,16 @@ function getTgUser() {
             return id;
         }
     } catch(e) {}
+    // Проверяем URL параметр
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTgId = urlParams.get('tg_user_id');
+    if (urlTgId) {
+        document.cookie = 'tg_user_id=' + urlTgId + ';max-age=' + (86400*30) + ';path=/';
+        return urlTgId;
+    }
     const match = document.cookie.match(/tg_user_id=(\d+)/);
     return match ? match[1] : '';
 }
-
-async function vote(type) {
     try {
         const res = await fetch('/api/vote', {
             method: 'POST',
@@ -656,6 +691,12 @@ function getTgUser() {
             return id;
         }
     } catch(e) {}
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTgId = urlParams.get('tg_user_id');
+    if (urlTgId) {
+        document.cookie = 'tg_user_id=' + urlTgId + ';max-age=' + (86400*30) + ';path=/';
+        return urlTgId;
+    }
     const match = document.cookie.match(/tg_user_id=(\d+)/);
     return match ? match[1] : '';
 }
