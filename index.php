@@ -581,6 +581,8 @@ function getTgUser() {
     const match = document.cookie.match(/tg_user_id=(\d+)/);
     return match ? match[1] : '';
 }
+
+async function vote(type) {
     try {
         const res = await fetch('/api/vote', {
             method: 'POST',

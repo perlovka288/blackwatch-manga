@@ -59,7 +59,15 @@ try {
     }
 } catch (Exception $e) {}
 
-$imgbbKey = '58ff4596fd55028a81cbf8c4e38388e1';
+// Пул ImgBB ключей — ротация при ошибке лимита
+$imgbbKeys = [
+    '58ff4596fd55028a81cbf8c4e38388e1', // ключ 1 (оригинальный)
+    '6981ba08e7b2a8743aab2c8ea008f675', // ключ 2
+    'f9b8d27fa4029816d643c7814fd60c60', // ключ 3
+    '24dbed2ae9fea9369de6a7b68d0c3ee6', // ключ 4
+    'c3e6a55335c71a052c1a59b6a2d6d150', // ключ 5
+];
+$imgbbKey = $imgbbKeys[0]; // для обратной совместимости
 
 // =============================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -98,37 +106,46 @@ function downloadFile($url) {
     return false;
 }
 
-// ИСПРАВЛЕНО: retry-логика для ImgBB (3 попытки с паузой)
-function uploadToImgbb($tempFile, $apiKey, $retries = 3) {
+// Ротация ImgBB ключей: перебирает все ключи пока не загрузит
+function uploadToImgbb($tempFile, $apiKeyOrKeys, $retries = 2) {
     if (!file_exists($tempFile) || filesize($tempFile) === 0) return false;
     $imageData = base64_encode(file_get_contents($tempFile));
-    for ($attempt = 1; $attempt <= $retries; $attempt++) {
-        $ch = curl_init('https://api.imgbb.com/1/upload');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, ['key' => $apiKey, 'image' => $imageData]);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 90);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 20);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        $response = curl_exec($ch);
-        $curlErr  = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+    $keys = is_array($apiKeyOrKeys) ? $apiKeyOrKeys : [$apiKeyOrKeys];
+    foreach ($keys as $keyIndex => $apiKey) {
+        for ($attempt = 1; $attempt <= $retries; $attempt++) {
+            $ch = curl_init('https://api.imgbb.com/1/upload');
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, ['key' => $apiKey, 'image' => $imageData]);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 20);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            $response = curl_exec($ch);
+            $curlErr  = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
 
-        if ($curlErr) {
-            error_log("ImgBB cURL error (attempt $attempt): $curlErr");
+            if ($curlErr) {
+                error_log("ImgBB cURL error (key#$keyIndex attempt $attempt): $curlErr");
+                if ($attempt < $retries) sleep(1);
+                continue;
+            }
+
+            $res = json_decode($response, true);
+            if (!empty($res['data']['url'])) {
+                return $res['data']['url'];
+            }
+
+            // Если лимит превышен (400/429) — сразу переходим к следующему ключу
+            $errMsg = $res['error']['message'] ?? '';
+            if ($httpCode === 400 || $httpCode === 429 || stripos($errMsg, 'limit') !== false || stripos($errMsg, 'quota') !== false) {
+                error_log("ImgBB key#$keyIndex limit hit (HTTP $httpCode), switching key. Response: $response");
+                break 1; // выходим из retry-цикла, идём к следующему ключу
+            }
+
+            error_log("ImgBB API error (key#$keyIndex attempt $attempt, HTTP $httpCode): $response");
             if ($attempt < $retries) sleep(2);
-            continue;
         }
-
-        $res = json_decode($response, true);
-        if (!empty($res['data']['url'])) {
-            return $res['data']['url'];
-        }
-
-        // Логируем ответ ImgBB для диагностики
-        error_log("ImgBB API error (attempt $attempt, HTTP $httpCode): $response");
-        if ($attempt < $retries) sleep(3);
     }
     return false;
 }
@@ -145,7 +162,8 @@ function getTelegramImageUrl($token, $fileId) {
     return "https://api.telegram.org/file/bot{$token}/" . $data['result']['file_path'];
 }
 
-function getPromoImageUrl($pdo, $imgbbKey) {
+function getPromoImageUrl($pdo, $imgbbKeyOrKeys) {
+    $imgbbKey = is_array($imgbbKeyOrKeys) ? $imgbbKeyOrKeys[0] : $imgbbKeyOrKeys;
     try {
         $stmt = $pdo->prepare("SELECT setting_value FROM bot_settings WHERE setting_key = 'promo_imgbb_url'");
         $stmt->execute();
@@ -541,6 +559,14 @@ if (isset($update['callback_query'])) {
         exit;
     }
 
+    // ОТМЕНА ZIP / АЛЬБОМ загрузки
+    if ($data === 'cancel_upload') {
+        $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
+        tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id'], 'text' => '❌ Загрузка отменена']);
+        tgPost($apiUrl . "/editMessageText", ['chat_id' => $chatId, 'message_id' => $msgId, 'text' => "❌ *Загрузка отменена.*", 'parse_mode' => 'Markdown']);
+        exit;
+    }
+
     // РАССМОТРЕНО ПРЕДЛОЖКА
     if (strpos($data, 'done_suggest_') === 0) {
         $sId = (int)str_replace('done_suggest_', '', $data);
@@ -576,7 +602,7 @@ if (isset($update['callback_query'])) {
             if ($imageUrl) {
                 $tempFile = downloadFile($imageUrl);
                 if ($tempFile) {
-                    $imgbbUrl = uploadToImgbb($tempFile, $imgbbKey);
+                    $imgbbUrl = uploadToImgbb($tempFile, $imgbbKeys);
                     @unlink($tempFile);
                     if ($imgbbUrl) $pdo->prepare("UPDATE manga SET cover_imgbb_url = ? WHERE id = ?")->execute([$imgbbUrl, $mId]);
                 }
@@ -613,6 +639,16 @@ if (isset($update['message'])) {
         $pdo->prepare("INSERT INTO users (user_id) VALUES (?) ON CONFLICT (user_id) DO NOTHING")->execute([$chatId]);
     } catch (Exception $e) {}
 
+    // Команда отмены загрузки в любой момент
+    if ($userState && in_array(mb_strtolower(trim($text)), ['/cancel', 'отмена', '/stop'])) {
+        $step = $userState['step'] ?? '';
+        if (strpos($step, 'zip') !== false || strpos($step, 'wait_pages') !== false || strpos($step, 'wait_title') !== false || strpos($step, 'wait_desc') !== false || strpos($step, 'wait_cover') !== false) {
+            $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
+            sendSimpleMsg($chatId, "❌ *Загрузка отменена.*", $apiUrl, in_array($chatId, $admins) ? $adminKeyboard : null);
+            exit;
+        }
+    }
+
     if (in_array($chatId, $admins)) {
 
         // --- Шаги редактирования ---
@@ -629,7 +665,7 @@ if (isset($update['message'])) {
                         if ($imageUrl) {
                             $tempFile = downloadFile($imageUrl);
                             if ($tempFile) {
-                                $imgbbUrl = uploadToImgbb($tempFile, $imgbbKey);
+                                $imgbbUrl = uploadToImgbb($tempFile, $imgbbKeys);
                                 @unlink($tempFile);
                                 if ($imgbbUrl) {
                                     $pdo->prepare("UPDATE manga SET cover_imgbb_url = ? WHERE id = ?")->execute([$imgbbUrl, $mId]);
@@ -693,7 +729,7 @@ if (isset($update['message'])) {
                 if (count($found) === 1) {
                     $tempFile = downloadFile($imageUrl);
                     if ($tempFile) {
-                        $imgbbUrl = uploadToImgbb($tempFile, $imgbbKey);
+                        $imgbbUrl = uploadToImgbb($tempFile, $imgbbKeys);
                         @unlink($tempFile);
                         if ($imgbbUrl) $pdo->prepare("UPDATE manga SET cover_imgbb_url = ? WHERE id = ?")->execute([$imgbbUrl, $found[0]['id']]);
                     }
@@ -747,7 +783,7 @@ if (isset($update['message'])) {
                 $imgUrls = [];
                 $failCount = 0;
                 foreach ($extractedFiles as $imgPath) {
-                    $url = uploadToImgbb($imgPath, $imgbbKey);
+                    $url = uploadToImgbb($imgPath, $imgbbKeys);
                     @unlink($imgPath);
                     if ($url) {
                         $imgUrls[] = $url;
@@ -802,7 +838,7 @@ if (isset($update['message'])) {
                         if ($tgUrl) {
                             $temp = downloadFile($tgUrl);
                             if ($temp) {
-                                $upl = uploadToImgbb($temp, $imgbbKey);
+                                $upl = uploadToImgbb($temp, $imgbbKeys);
                                 @unlink($temp);
                                 if ($upl) {
                                     $imgbbUrls[] = $upl;
@@ -855,11 +891,11 @@ if (isset($update['message'])) {
                     if ($coverUrl) {
                         $tempFile = downloadFile($coverUrl);
                         if ($tempFile) {
-                            $coverImgbbUrl = uploadToImgbb($tempFile, $imgbbKey);
+                            $coverImgbbUrl = uploadToImgbb($tempFile, $imgbbKeys);
                             @unlink($tempFile);
                         }
                     }
-                    $telegraphLink = createTelegraphPage($userState['title'], $pageUrls, $token, $pdo, $imgbbKey);
+                    $telegraphLink = createTelegraphPage($userState['title'], $pageUrls, $token, $pdo, $imgbbKeys);
                     if ($telegraphLink) {
                         $titleWithHeart = '❤️ ' . $userState['title'];
                         $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, file_id, added_by) VALUES (?, ?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $coverFileId, $chatId]);
@@ -881,7 +917,8 @@ if (isset($update['message'])) {
             if ($userState['step'] == 'wait_title_zip') {
                 if (!empty(trim($text))) {
                     $pdo->prepare("UPDATE temp_data SET title = ?, step = 'wait_desc_zip' WHERE user_id = ?")->execute([trim($text), $chatId]);
-                    sendSimpleMsg($chatId, "📝 *Шаг 3 из 4:* Введите *описание* манги:", $apiUrl);
+                    $cancelKb = ['inline_keyboard' => [[['text' => '🛑 Отменить загрузку', 'callback_data' => 'cancel_upload']]]];
+                    tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => "📝 *Шаг 3 из 4:* Введите *описание* манги:", 'parse_mode' => 'Markdown', 'reply_markup' => $cancelKb]);
                 }
                 exit;
             }
@@ -889,7 +926,8 @@ if (isset($update['message'])) {
             if ($userState['step'] == 'wait_desc_zip') {
                 if (!empty(trim($text))) {
                     $pdo->prepare("UPDATE temp_data SET description = ?, step = 'wait_cover_zip' WHERE user_id = ?")->execute([trim($text), $chatId]);
-                    sendSimpleMsg($chatId, "🖼 *Шаг 4 из 4:* Отправьте фото, которое станет *обложкой*:", $apiUrl);
+                    $cancelKb = ['inline_keyboard' => [[['text' => '🛑 Отменить загрузку', 'callback_data' => 'cancel_upload']]]];
+                    tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => "🖼 *Шаг 4 из 4:* Отправьте фото, которое станет *обложкой*:", 'parse_mode' => 'Markdown', 'reply_markup' => $cancelKb]);
                 }
                 exit;
             }
@@ -906,11 +944,11 @@ if (isset($update['message'])) {
                     if ($coverUrl) {
                         $tempFile = downloadFile($coverUrl);
                         if ($tempFile) {
-                            $coverImgbbUrl = uploadToImgbb($tempFile, $imgbbKey);
+                            $coverImgbbUrl = uploadToImgbb($tempFile, $imgbbKeys);
                             @unlink($tempFile);
                         }
                     }
-                    $telegraphLink = createTelegraphPage($userState['title'], $imgUrls, $token, $pdo, $imgbbKey);
+                    $telegraphLink = createTelegraphPage($userState['title'], $imgUrls, $token, $pdo, $imgbbKeys);
                     if ($telegraphLink) {
                         $titleWithHeart = '❤️ ' . $userState['title'];
                         $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, file_id, added_by) VALUES (?, ?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $coverFileId, $chatId]);
@@ -975,7 +1013,8 @@ if (isset($update['message'])) {
         case "📦 Добавить через ZIP":
             if (in_array($chatId, $admins)) {
                 $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_zip', '[]') ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId]);
-                sendSimpleMsg($chatId, "📦 *Шаг 1 из 4:* Отправьте ZIP-архив со страницами манги.\n\n⚠️ _Максимальный размер: 20 МБ (ограничение Telegram)._", $apiUrl);
+                $cancelKb = ['inline_keyboard' => [[['text' => '🛑 Отменить загрузку', 'callback_data' => 'cancel_upload']]]];
+                tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => "📦 *Шаг 1 из 4:* Отправьте ZIP-архив со страницами манги.\n\n⚠️ _Максимальный размер: 20 МБ (ограничение Telegram)._", 'parse_mode' => 'Markdown', 'reply_markup' => $cancelKb]);
             }
             break;
         case "📊 Статистика админов":
