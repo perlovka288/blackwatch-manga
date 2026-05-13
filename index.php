@@ -1089,12 +1089,17 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 function getTgUser() {
     try {
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
-            return window.Telegram.WebApp.initDataUnsafe.user.id;
+            const id = window.Telegram.WebApp.initDataUnsafe.user.id;
+            document.cookie = 'tg_user_id=' + id + ';max-age=' + (86400*30) + ';path=/';
+            return id;
         }
     } catch(e) {}
     const urlParams = new URLSearchParams(window.location.search);
     const urlTgId = urlParams.get('tg_user_id');
-    if (urlTgId) return urlTgId;
+    if (urlTgId) {
+        document.cookie = 'tg_user_id=' + urlTgId + ';max-age=' + (86400*30) + ';path=/';
+        return urlTgId;
+    }
     const match = document.cookie.match(/tg_user_id=(\d+)/);
     return match ? match[1] : '';
 }
@@ -1254,8 +1259,8 @@ function slideNew(dir) {
 async function loadContinue() {
     try {
         const tgId = getTgUser();
-        if (!tgId) return;
-        const res  = await fetch('/api/progress?tg_user_id=' + tgId);
+        const url = tgId ? '/api/progress?tg_user_id=' + tgId : '/api/progress';
+        const res  = await fetch(url);
         const data = await res.json();
         const items = (data.items || []).filter(i => i);
         const section = document.getElementById('cont-section');
