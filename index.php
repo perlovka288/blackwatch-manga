@@ -29,9 +29,7 @@ try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
     $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
-    // ИСПРАВЛЕНО: статус теперь поддерживает 'will' (буду читать)
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
-    // Добавляем таблицу для хранения прогресса чтения (страница)
     $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))");
 } catch (Exception $e) {}
 
@@ -60,6 +58,28 @@ function getEffectiveUserId($pdo) {
         return (int)$_COOKIE['tg_user_id'];
     }
     return (int)$_SESSION['guest_id'];
+}
+
+# =========================
+# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: отправить уведомление в Telegram
+# =========================
+function sendTgNotify($userId, $text) {
+    $botToken = getenv('BOT_TOKEN');
+    if (!$botToken || !$userId) return;
+    $tgData = json_encode([
+        'chat_id'    => $userId,
+        'text'       => $text,
+        'parse_mode' => 'Markdown'
+    ]);
+    $ch = curl_init("https://api.telegram.org/bot{$botToken}/sendMessage");
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $tgData);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    @curl_exec($ch);
+    curl_close($ch);
 }
 
 
@@ -132,14 +152,12 @@ if ($path === '/api/new-manga') {
 if ($path === '/api/random') {
     header('Content-Type: application/json');
     $userId = getEffectiveUserId($pdo);
-    // Исключаем манги со статусом 'read' для этого пользователя
     $stmt = $pdo->prepare("SELECT id FROM manga WHERE id NOT IN (SELECT manga_id FROM user_manga_status WHERE user_id = ? AND status = 'read') ORDER BY RANDOM() LIMIT 1");
     $stmt->execute([$userId]);
     $row = $stmt->fetch();
     if ($row) {
         echo json_encode(['id' => (int)$row['id']]);
     } else {
-        // Если все прочитаны — выдаём любую
         $row2 = $pdo->query("SELECT id FROM manga ORDER BY RANDOM() LIMIT 1")->fetch();
         echo json_encode(['id' => $row2 ? (int)$row2['id'] : null]);
     }
@@ -169,7 +187,6 @@ if ($path === '/api/progress' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($path === '/api/progress') {
     header('Content-Type: application/json');
     $userId = getEffectiveUserId($pdo);
-    // Получаем список манги "читаю сейчас" с прогрессом
     $stmt = $pdo->prepare("
         SELECT m.id, m.title, m.cover_imgbb_url, m.file_id,
                rp.page_num, rp.total_pages, rp.updated_at,
@@ -332,6 +349,8 @@ if ($path === '/api/vote' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 # =========================
 # API STATUS — сохранить статус читателя (now / read / will)
+# Синхронизация: сайт → Telegram бот (уведомление)
+# Синхронизация: бот → сайт (через общую БД, статус уже в таблице)
 # =========================
 if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -345,37 +364,21 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $mangaId = (int)($input['manga_id'] ?? 0);
     $status  = $input['status'] ?? '';
 
-    // ИСПРАВЛЕНО: добавлен 'will' (буду читать)
     if ($mangaId && in_array($status, ['now', 'read', 'will'])) {
         $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$userId, $mangaId, $status]);
 
-        // Уведомляем Telegram бота если пользователь авторизован через TG
+        // Уведомляем Telegram если пользователь авторизован через TG
         $realTgUser = !empty($input['tg_user_id']) && is_numeric($input['tg_user_id']);
         if ($realTgUser && $userId > 0) {
-            $botToken = getenv('BOT_TOKEN');
-            if ($botToken) {
-                $stmtM = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
-                $stmtM->execute([$mangaId]);
-                $mangaRow = $stmtM->fetch();
-                $mangaTitle = $mangaRow['title'] ?? "Манга #$mangaId";
-                $labels = ['now' => '📖 Читаю', 'will' => '🔖 Буду читать', 'read' => '✅ Прочитано'];
-                $label = $labels[$status] ?? $status;
-                $tgMsg = "🔄 *Статус обновлён с сайта*\n\n📖 *$mangaTitle*\n\n$label";
-                $tgData = json_encode([
-                    'chat_id'    => $userId,
-                    'text'       => $tgMsg,
-                    'parse_mode' => 'Markdown'
-                ]);
-                $ch = curl_init("https://api.telegram.org/bot{$botToken}/sendMessage");
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $tgData);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                @curl_exec($ch);
-                curl_close($ch);
-            }
+            $stmtM = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
+            $stmtM->execute([$mangaId]);
+            $mangaRow   = $stmtM->fetch();
+            $mangaTitle = $mangaRow['title'] ?? "Манга #$mangaId";
+            $labels = ['now' => '📖 Читаю', 'will' => '🔖 Буду читать', 'read' => '✅ Прочитано'];
+            $label  = $labels[$status] ?? $status;
+            $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
+            $tgMsg  = "🔄 *Статус обновлён с сайта*\n\n📖 *{$mangaTitle}*\n\n{$label}\n\n[Открыть мангу]({$siteUrl}/read/{$mangaId}?tg_user_id={$userId})";
+            sendTgNotify($userId, $tgMsg);
         }
 
         echo json_encode(['success' => true, 'user_id' => $userId]);
@@ -475,13 +478,11 @@ function getTgUser() {
     return match ? match[1] : '';
 }
 
-// Восстановить прогресс из localStorage
 function getSavedPage() {
     try { return parseInt(localStorage.getItem('progress_' + mangaId) || '0'); } catch(e) { return 0; }
 }
 function saveProgress(p) {
     try { localStorage.setItem('progress_' + mangaId, p); } catch(e) {}
-    // Сохраняем на сервер
     fetch('/api/progress', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -564,12 +565,10 @@ if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $manga = $stmt->fetch();
     if (!$manga) { http_response_code(404); die('404 - Манга не найдена'); }
 
-    // Проверяем наличие страниц
     $pagesCount = $pdo->prepare("SELECT COUNT(*) FROM manga_pages WHERE manga_id = ? AND page_url IS NOT NULL AND page_url != ''");
     $pagesCount->execute([$id]);
     $hasPages = (int)$pagesCount->fetchColumn() > 0;
 
-    // Текущий статус пользователя для этой манги
     $userId = getEffectiveUserId($pdo);
     $stmtStatus = $pdo->prepare("SELECT status FROM user_manga_status WHERE user_id = ? AND manga_id = ?");
     $stmtStatus->execute([$userId, $id]);
@@ -756,7 +755,6 @@ function showToast(msg) {
 
 # =========================
 # LIBRARY PAGE — Моя библиотека
-# ИСПРАВЛЕНО: 3 секции: Читаю / Буду читать / Прочитано
 # =========================
 if ($path === '/library') {
 ?>
@@ -894,7 +892,6 @@ load();
 # HOME (КАТАЛОГ)
 # =========================
 $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
-// Ссылка на бота из env
 $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
 ?>
 <!DOCTYPE html>
@@ -917,27 +914,23 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .search:focus{outline:none;border-color:var(--accent)}
 .search::placeholder{color:var(--muted)}
 .header-right{display:flex;align-items:center;gap:10px;margin-left:auto}
-/* Кнопка бота */
 .bot-link{display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(124,92,255,0.12);border:1px solid rgba(124,92,255,0.35);border-radius:50px;color:var(--accent);text-decoration:none;font-size:13px;font-weight:600;transition:all 0.2s;white-space:nowrap}
 .bot-link:hover{background:rgba(124,92,255,0.22);border-color:var(--accent)}
-/* Кнопка библиотеки */
 .lib-btn{display:flex;align-items:center;gap:7px;padding:9px 18px;background:var(--accent);border:none;border-radius:50px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;font-family:inherit}
 .lib-btn:hover{background:#6a4ee0;transform:translateY(-1px)}
-/* Кнопка случайная манга */
 .random-btn{display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:50px;color:var(--text);text-decoration:none;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap;font-family:inherit}
 .random-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ===== MAIN WRAP ===== */
 .wrap{max-width:1400px;margin:auto;padding:24px 20px}
 
-/* ===== НОВИНКИ (NEW SECTION) ===== */
+/* ===== НОВИНКИ ===== */
 .new-section{background:linear-gradient(135deg,rgba(124,92,255,0.08) 0%,rgba(16,16,24,0.9) 100%);border:1px solid rgba(124,92,255,0.25);border-radius:22px;padding:22px 22px 18px;margin-bottom:28px;position:relative;overflow:hidden}
 .new-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),transparent)}
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .section-title-row{display:flex;align-items:center;gap:10px}
 .section-label{font-size:17px;font-weight:800;color:#fff}
 .section-count{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:3px 10px;border-radius:20px}
-/* Стрелки-слайдер */
 .slider-wrap{position:relative}
 .slider-track-outer{overflow:hidden;border-radius:14px}
 .slider-track{display:flex;gap:14px;transition:transform 0.35s cubic-bezier(.4,0,.2,1);will-change:transform}
@@ -946,31 +939,36 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .slider-arrow.left{left:-14px}
 .slider-arrow.right{right:-14px}
 .slider-arrow.hidden{opacity:0;pointer-events:none}
-
-/* Карточки в слайдере */
 .slide-card{flex:0 0 140px;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s;position:relative}
 .slide-card:hover{transform:translateY(-4px);border-color:var(--accent)}
 .slide-cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .slide-cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
 .slide-info{padding:10px}
 .slide-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
-/* NEW Badge */
 .new-badge{position:absolute;top:7px;right:7px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:9px;font-weight:800;padding:3px 7px;border-radius:8px;letter-spacing:0.5px;text-transform:uppercase;box-shadow:0 2px 8px rgba(255,77,109,0.4)}
 
-/* ===== CONTINUE READING ===== */
-.continue-section{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:22px 22px 18px;margin-bottom:28px;position:relative}
-.continue-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#ffa500,transparent)}
-
-/* Continue card */
-.cont-card{flex:0 0 160px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:16px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s;display:flex;flex-direction:column}
-.cont-card:hover{transform:translateY(-4px);border-color:#ffa500}
-.cont-cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
-.cont-cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.cont-info{padding:10px}
-.cont-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:6px}
-.cont-progress{font-size:10px;color:var(--muted)}
-.cont-bar{height:3px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:5px;overflow:hidden}
-.cont-bar-fill{height:100%;background:linear-gradient(90deg,#ffa500,#ff6b35);border-radius:2px;transition:width 0.3s}
+/* ===== ПРОДОЛЖИТЬ ЧИТАТЬ — новый стиль ===== */
+.continue-section{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:20px 24px;margin-bottom:28px;position:relative;overflow:hidden}
+.continue-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#ffa500,#ff6b35,transparent)}
+/* Горизонтальный список карточек */
+.cont-list{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.cont-list::-webkit-scrollbar{display:none}
+/* Карточка "продолжить" — горизонтальная, как на скриншоте */
+.cont-card{flex:0 0 240px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);display:flex;gap:0;transition:all 0.25s;position:relative}
+.cont-card:hover{border-color:#ffa500;transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,165,0,0.12)}
+.cont-cover-wrap{width:60px;flex-shrink:0;position:relative}
+.cont-cover{width:100%;height:100%;object-fit:cover;display:block;min-height:90px}
+.cont-cover-ph{width:100%;min-height:90px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
+.cont-body{flex:1;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
+.cont-title{font-size:12px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:6px}
+.cont-chapter{font-size:10px;color:var(--muted);margin-bottom:8px}
+/* Прогресс-бар */
+.cont-bar-wrap{margin-bottom:8px}
+.cont-bar-bg{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden}
+.cont-bar-fill{height:100%;background:linear-gradient(90deg,#ffa500,#ff6b35);border-radius:2px;transition:width 0.4s}
+/* Кнопка продолжить */
+.cont-btn{display:inline-block;padding:5px 12px;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.4);border-radius:20px;color:#ffa500;font-size:10px;font-weight:700;text-align:center;transition:all 0.2s;white-space:nowrap;align-self:flex-start}
+.cont-card:hover .cont-btn{background:rgba(255,165,0,0.25);border-color:#ffa500}
 
 /* ===== FILTERS ===== */
 .filters{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
@@ -988,13 +986,11 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .info{padding:14px}
 .title{font-size:13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
 .likes{margin-top:8px;color:#ffd166;font-size:12px}
-/* NEW badge на карточках каталога */
 .card-new-badge{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:9px;font-weight:800;padding:3px 8px;border-radius:8px;letter-spacing:0.5px;text-transform:uppercase;box-shadow:0 2px 8px rgba(255,77,109,0.4)}
 
 .load-more{margin:40px auto;display:block;padding:14px 36px;background:var(--accent);color:#fff;border:none;border-radius:50px;cursor:pointer;font-size:15px;font-weight:600;font-family:inherit;transition:all 0.2s}
 .load-more:hover{background:#6a4ee0;transform:translateY(-2px)}
 .empty{text-align:center;padding:80px 20px;color:var(--muted)}
-.empty-slider{color:var(--muted);font-size:13px;padding:10px 0}
 
 @media(max-width:900px){
     .header-right{gap:7px}
@@ -1005,6 +1001,7 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
     .grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:14px}
     .header-inner{gap:8px}
     .lib-btn span.btn-text{display:none}
+    .cont-card{flex:0 0 210px}
 }
 @media(max-width:480px){
     header{padding:10px 14px}
@@ -1055,7 +1052,7 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
         </div>
     </div>
 
-    <!-- ===== ПРОДОЛЖИТЬ ЧТЕНИЕ ===== -->
+    <!-- ===== ПРОДОЛЖИТЬ ЧИТАТЬ — горизонтальный список ===== -->
     <div class="continue-section" id="cont-section" style="display:none">
         <div class="section-header">
             <div class="section-title-row">
@@ -1064,16 +1061,10 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
                 <div class="section-count" id="cont-count">0</div>
             </div>
         </div>
-        <div class="slider-wrap" id="cont-slider-wrap">
-            <button class="slider-arrow left hidden" id="cont-prev" onclick="slideCont(-1)">&#8592;</button>
-            <div class="slider-track-outer">
-                <div class="slider-track" id="cont-track"></div>
-            </div>
-            <button class="slider-arrow right hidden" id="cont-next" onclick="slideCont(1)">&#8594;</button>
-        </div>
+        <div class="cont-list" id="cont-list"></div>
     </div>
 
-    <!-- ===== ФИЛЬТРЫ + СТАТИСТИКА ===== -->
+    <!-- ===== ФИЛЬТРЫ ===== -->
     <div class="filters">
         <button class="filter-btn active" id="f-new"     onclick="setFilter('new')">🆕 Новые</button>
         <button class="filter-btn"        id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
@@ -1208,7 +1199,7 @@ async function goRandom() {
 
 // ===== СЛАЙДЕР НОВИНОК =====
 let newOffset = 0;
-const NEW_CARD_W = 154; // 140px + 14px gap
+const NEW_CARD_W = 154;
 
 async function loadNew() {
     try {
@@ -1259,23 +1250,21 @@ function slideNew(dir) {
     updateNewArrows(total);
 }
 
-// ===== СЛАЙДЕР "ПРОДОЛЖИТЬ ЧИТАТЬ" =====
-let contOffset = 0;
-const CONT_CARD_W = 174; // 160px + 14px gap
-
+// ===== ПРОДОЛЖИТЬ ЧИТАТЬ — горизонтальные карточки =====
 async function loadContinue() {
     try {
         const tgId = getTgUser();
         if (!tgId) return;
         const res  = await fetch('/api/progress?tg_user_id=' + tgId);
         const data = await res.json();
-        const items = (data.items || []).filter(i => i); // filter nulls
+        const items = (data.items || []).filter(i => i);
         const section = document.getElementById('cont-section');
-        const track   = document.getElementById('cont-track');
+        const list    = document.getElementById('cont-list');
         if (items.length === 0) return;
         section.style.display = 'block';
         document.getElementById('cont-count').textContent = items.length;
-        track.innerHTML = items.map(m => {
+
+        list.innerHTML = items.map(m => {
             let coverSrc = m.cover_imgbb_url || '';
             if (!coverSrc && m.file_id) coverSrc = '/api/cover/' + m.file_id;
             const cid = 'cc-' + m.id, pid = 'cp-' + m.id;
@@ -1284,43 +1273,47 @@ async function loadContinue() {
                        onerror="document.getElementById('${cid}').style.display='none';document.getElementById('${pid}').style.display='flex'">`
                 : '';
             const phStyle = coverSrc ? 'display:none' : 'display:flex';
-            const pg   = parseInt(m.page_num) || 1;
-            const tot  = parseInt(m.total_pages) || 0;
-            const pct  = tot > 0 ? Math.round((pg / tot) * 100) : 0;
-            const progressHtml = tot > 0
-                ? `<div class="cont-progress">Стр. ${pg} из ${tot}</div>
-                   <div class="cont-bar"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`
-                : `<div class="cont-progress">${m.status === 'will' ? '🔖 Буду читать' : '📖 Читаю'}</div>`;
-            return `<a class="cont-card" href="/read/${m.id}">
-                ${imgHtml}
-                <div class="cont-cover-ph" id="${pid}" style="${phStyle}"><span style="font-size:36px">📖</span></div>
-                <div class="cont-info">
-                    <div class="cont-title">${escapeHtml(m.title)}</div>
-                    ${progressHtml}
+
+            const pg  = parseInt(m.page_num) || 1;
+            const tot = parseInt(m.total_pages) || 0;
+            const pct = tot > 0 ? Math.min(100, Math.round((pg / tot) * 100)) : 0;
+
+            // Строка прогресса: "Глава N — X из Y"
+            let chapterLine = '';
+            if (tot > 0) {
+                chapterLine = `Глава 1 — ${pg} из ${tot}`;
+            } else if (m.status === 'will') {
+                chapterLine = '🔖 Буду читать';
+            } else {
+                chapterLine = '📖 Читаю';
+            }
+
+            const barHtml = tot > 0
+                ? `<div class="cont-bar-wrap">
+                       <div class="cont-bar-bg">
+                           <div class="cont-bar-fill" style="width:${pct}%"></div>
+                       </div>
+                   </div>`
+                : '';
+
+            const btnLabel = m.status === 'will' ? '▶ Начать' : '▶ Продолжить';
+
+            return `<a class="cont-card" href="/view/${m.id}">
+                <div class="cont-cover-wrap">
+                    ${imgHtml}
+                    <div class="cont-cover-ph" id="${pid}" style="${phStyle}"><span style="font-size:22px">📖</span></div>
+                </div>
+                <div class="cont-body">
+                    <div>
+                        <div class="cont-title">${escapeHtml(m.title)}</div>
+                        <div class="cont-chapter">${chapterLine}</div>
+                        ${barHtml}
+                    </div>
+                    <span class="cont-btn">${btnLabel}</span>
                 </div>
             </a>`;
         }).join('');
-        updateContArrows(items.length);
     } catch(e) {}
-}
-
-function updateContArrows(total) {
-    const outer = document.querySelector('#cont-slider-wrap .slider-track-outer');
-    const visible = Math.floor(outer.offsetWidth / CONT_CARD_W);
-    const maxOffset = Math.max(0, total - visible);
-    document.getElementById('cont-prev').classList.toggle('hidden', contOffset <= 0);
-    document.getElementById('cont-next').classList.toggle('hidden', contOffset >= maxOffset);
-    document.getElementById('cont-track').style.transform = `translateX(-${contOffset * CONT_CARD_W}px)`;
-}
-
-function slideCont(dir) {
-    const track  = document.getElementById('cont-track');
-    const total  = track.children.length;
-    const outer  = document.querySelector('#cont-slider-wrap .slider-track-outer');
-    const visible = Math.floor(outer.offsetWidth / CONT_CARD_W);
-    const maxOffset = Math.max(0, total - visible);
-    contOffset = Math.max(0, Math.min(maxOffset, contOffset + dir));
-    updateContArrows(total);
 }
 
 // ===== INIT =====
