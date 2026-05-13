@@ -29,7 +29,7 @@ try {
 
 // Создание таблиц если не существует
 try {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, telegraph_url TEXT, cover_imgbb_url TEXT, file_id TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, file_id TEXT, description TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, cover_imgbb_url TEXT, telegraph_url TEXT)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
@@ -45,6 +45,8 @@ try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS file_id TEXT");
+    // Снимаем NOT NULL с file_id если он есть (исправление старой структуры)
+    $pdo->exec("ALTER TABLE manga ALTER COLUMN file_id DROP NOT NULL");
 } catch (Exception $e) {}
 
 $superAdmins = [1710365896, 1181510470];
@@ -250,18 +252,19 @@ function createTelegraphPage($title, $imageUrls, $token, $pdo, $imgbbKey) {
     $accessToken = '192627565eb929153713373081fb7dd3eb3701cf4a36a2f9243d3866f831';
 
     // ИСПРАВЛЕНИЕ: используем JSON вместо form-encoded для надёжности
-    $payload = json_encode([
+    // Telegraph API требует form-encoded, а content — JSON-строка внутри
+    $postData = http_build_query([
         'access_token'   => $accessToken,
         'title'          => mb_substr($title, 0, 256),
         'author_name'    => 'MangaBot',
         'content'        => json_encode($nodes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        'return_content' => false,
-    ], JSON_UNESCAPED_UNICODE);
+        'return_content' => 'false',
+    ]);
 
     $ch = curl_init("https://api.telegra.ph/createPage");
     curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     // ИСПРАВЛЕНИЕ: увеличен timeout до 120с для Render
     curl_setopt($ch, CURLOPT_TIMEOUT, 120);
@@ -361,7 +364,7 @@ if (isset($update['callback_query'])) {
                 $pdo->prepare("UPDATE manga SET $oldCol = $oldCol - 1, $newCol = $newCol + 1 WHERE id = ?")->execute([$mId]);
                 $stmt = $pdo->prepare("SELECT * FROM manga WHERE id = ?");
                 $stmt->execute([$mId]);
-                updateMangaMessage($chatId, $msgId, $stmt->fetch(), $apiUrl);
+                updateMangaMessage($chatId, $msgId, $stmt->fetch(), $apiUrl, $siteUrl);
             }
         } else {
             $col = ($type == 'like') ? 'likes' : 'dislikes';
@@ -369,7 +372,7 @@ if (isset($update['callback_query'])) {
             $pdo->prepare("UPDATE manga SET $col = $col + 1 WHERE id = ?")->execute([$mId]);
             $stmt = $pdo->prepare("SELECT * FROM manga WHERE id = ?");
             $stmt->execute([$mId]);
-            updateMangaMessage($chatId, $msgId, $stmt->fetch(), $apiUrl);
+            updateMangaMessage($chatId, $msgId, $stmt->fetch(), $apiUrl, $siteUrl);
         }
         tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id']]);
         exit;
@@ -1159,7 +1162,6 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
     $kb = ['inline_keyboard' => [
         $readButtons,
-        [['text' => '⏳ Читаю сейчас', 'callback_data' => 'stat_now_' . $m['id']], ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']]],
         [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
     ]];
     if (!empty($m['cover_imgbb_url'])) {
@@ -1173,11 +1175,13 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     }
 }
 
-function updateMangaMessage($chatId, $msgId, $m, $apiUrl) {
+function updateMangaMessage($chatId, $msgId, $m, $apiUrl, $siteUrl = '') {
     $text = "📖 *" . $m['title'] . "*\n\n" . ($m['description'] ?? '') . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
-    $kb   = ['inline_keyboard' => [
-        [['text' => '📖 Читать (Telegra.ph)', 'url' => $m['telegraph_url']]],
-        [['text' => '⏳ Читаю сейчас', 'callback_data' => 'stat_now_' . $m['id']], ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']]],
+    $readButtons = [];
+    if (!empty($m['telegraph_url'])) $readButtons[] = ['text' => '📖 Читать (Telegra.ph)', 'url' => $m['telegraph_url']];
+    if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
+    $kb = ['inline_keyboard' => [
+        $readButtons,
         [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
     ]];
     $method = !empty($m['cover_imgbb_url']) ? "editMessageCaption" : "editMessageText";

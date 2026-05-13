@@ -109,19 +109,45 @@ if ($path === '/api/manga') {
 if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     header('Content-Type: application/json');
     $id   = (int)$m[1];
-    // ИСПРАВЛЕНО: выбираем page_url, сортируем по page_order
     $stmt = $pdo->prepare("SELECT page_url FROM manga_pages WHERE manga_id = ? AND page_url IS NOT NULL AND page_url != '' ORDER BY page_order ASC");
     $stmt->execute([$id]);
     $pages = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // Если нет в manga_pages — пробуем получить из telegraph (fallback)
     if (empty($pages)) {
+        // Пробуем достать страницы из Telegraph
         $mangaStmt = $pdo->prepare("SELECT telegraph_url FROM manga WHERE id = ?");
         $mangaStmt->execute([$id]);
         $manga = $mangaStmt->fetch();
-        // Возвращаем пустой массив — фронт покажет кнопку Telegraph
-        echo json_encode(['pages' => [], 'telegraph_url' => $manga['telegraph_url'] ?? null]);
-        exit;
+        $tUrl  = $manga['telegraph_url'] ?? null;
+
+        if ($tUrl) {
+            // Парсим Telegraph страницу чтобы достать img src
+            $html = @file_get_contents($tUrl);
+            if ($html) {
+                preg_match_all('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $matches);
+                if (!empty($matches[1])) {
+                    $pages = array_values(array_filter($matches[1], function($u) {
+                        return strpos($u, '/') === 0
+                            ? false // относительные ссылки telegraph пропускаем
+                            : true;
+                    }));
+                    // telegraph хранит img как /file/..., добавляем хост
+                    $pages = array_map(function($u) {
+                        if (strpos($u, 'http') === 0) return $u;
+                        return 'https://telegra.ph' . $u;
+                    }, $pages);
+                    // Убираем первое изображение если это промо (ibb.co)
+                    if (!empty($pages) && strpos($pages[0], 'ibb.co') !== false) {
+                        array_shift($pages);
+                    }
+                }
+            }
+        }
+
+        if (empty($pages)) {
+            echo json_encode(['pages' => [], 'telegraph_url' => $tUrl]);
+            exit;
+        }
     }
 
     echo json_encode(['pages' => array_values($pages)]);
@@ -425,20 +451,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
         <div class="stat-pill likes-count">❤️ <span id="likes"><?= (int)$manga['likes'] ?></span> лайков</div>
         <div class="stat-pill dislikes-count">💔 <span id="dislikes"><?= (int)$manga['dislikes'] ?></span></div>
     </div>
-    <div class="status-buttons">
-        <button class="status-btn" id="status-now"  onclick="setStatus('now')">⏳ Читаю сейчас</button>
-        <button class="status-btn" id="status-read" onclick="setStatus('read')">✅ Прочитано</button>
-    </div>
     <div class="vote-buttons">
         <button class="vote-btn vote-like"    onclick="vote('like')">👍 Лайк</button>
         <button class="vote-btn vote-dislike" onclick="vote('dislike')">👎 Дизлайк</button>
     </div>
     <div class="read-buttons">
         <?php if ($hasPages): ?>
-        <a class="btn primary" href="/view/<?= $id ?>">📖 Читать онлайн</a>
+        <a class="btn primary" href="/view/<?= $id ?>">📖 Читать на сайте</a>
         <?php endif; ?>
         <?php if (!empty($manga['telegraph_url'])): ?>
-        <a class="btn secondary" target="_blank" href="<?= htmlspecialchars($manga['telegraph_url']) ?>">📄 Telegraph</a>
+        <a class="btn secondary" target="_blank" href="<?= htmlspecialchars($manga['telegraph_url']) ?>">📄 Читать в Telegraph</a>
         <?php endif; ?>
         <?php if (!$hasPages && empty($manga['telegraph_url'])): ?>
         <div style="color:var(--muted);padding:10px 0;font-size:14px">⚠️ Страницы ещё не загружены</div>
@@ -448,17 +470,14 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
 </div>
 </div>
 <script>
-// ИСПРАВЛЕНО: получаем tg_user_id из WebApp или cookie
 function getTgUser() {
     try {
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
             const id = window.Telegram.WebApp.initDataUnsafe.user.id;
-            // Сохраняем в cookie
             document.cookie = 'tg_user_id=' + id + ';max-age=' + (86400*30) + ';path=/';
             return id;
         }
     } catch(e) {}
-    // Читаем из cookie если WebApp не работает
     const match = document.cookie.match(/tg_user_id=(\d+)/);
     return match ? match[1] : '';
 }
@@ -479,28 +498,6 @@ async function vote(type) {
     } catch(e) {}
 }
 
-// ИСПРАВЛЕНО: setStatus теперь передаёт tg_user_id для синхронизации с ботом
-async function setStatus(status) {
-    try {
-        const tgId = getTgUser();
-        const res = await fetch('/api/status', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({manga_id: <?= $id ?>, status: status, tg_user_id: tgId})
-        });
-        const data = await res.json();
-        if (data.success) {
-            document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('status-' + status).classList.add('active');
-            const labels = {
-                'now':  '📖 Добавлено в "Читаю сейчас"! Отобразится в боте',
-                'read': '✅ Добавлено в "Прочитано"! Отобразится в боте'
-            };
-            showToast(labels[status] || '✅ Сохранено!');
-        }
-    } catch(e) {}
-}
-
 function showToast(msg) {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
@@ -509,23 +506,6 @@ function showToast(msg) {
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2800);
 }
-
-// Загружаем сохранённый статус
-(async () => {
-    try {
-        const tgId = getTgUser();
-        const res  = await fetch('/api/library?tg_user_id=' + tgId);
-        const data = await res.json();
-        if (data.items) {
-            data.items.forEach(i => {
-                if (i.id == <?= $id ?>) {
-                    const btn = document.getElementById('status-' + i.status);
-                    if (btn) btn.classList.add('active');
-                }
-            });
-        }
-    } catch(e) {}
-})();
 </script>
 </body>
 </html>
