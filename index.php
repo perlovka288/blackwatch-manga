@@ -29,6 +29,7 @@ try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
     $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
+    // ИСПРАВЛЕНО: статус теперь поддерживает 'will' (буду читать)
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
 } catch (Exception $e) {}
 
@@ -39,29 +40,23 @@ if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999
 
 # =========================
 # ПОЛУЧИТЬ ID ПОЛЬЗОВАТЕЛЯ
-# Поддержка: Telegram WebApp, cookie (если открывали из бота ранее), сессия
 # =========================
 function getEffectiveUserId($pdo) {
-    // 1. Telegram WebApp — лучший вариант
     $tgUser = $_GET['tg_user_id'] ?? $_POST['tg_user_id'] ?? '';
     if ($tgUser && is_numeric($tgUser)) {
-        // Сохраняем в cookie чтобы запомнить между страницами
         if (!headers_sent()) {
             setcookie('tg_user_id', $tgUser, time() + 86400 * 30, '/', '', false, false);
         }
         $_SESSION['tg_user_id'] = $tgUser;
         return (int)$tgUser;
     }
-    // 2. Из сессии (если уже идентифицировался)
     if (!empty($_SESSION['tg_user_id']) && is_numeric($_SESSION['tg_user_id'])) {
         return (int)$_SESSION['tg_user_id'];
     }
-    // 3. Из cookie (если заходил раньше из WebApp)
     if (!empty($_COOKIE['tg_user_id']) && is_numeric($_COOKIE['tg_user_id'])) {
         $_SESSION['tg_user_id'] = $_COOKIE['tg_user_id'];
         return (int)$_COOKIE['tg_user_id'];
     }
-    // 4. Гостевой ID сессии
     return (int)$_SESSION['guest_id'];
 }
 
@@ -102,21 +97,18 @@ if ($path === '/api/manga') {
 }
 
 
-
 # =========================
 # API COVER — прокси для Telegram file_id обложек
 # =========================
 if (preg_match('#^/api/cover/(.+)$#', $path, $m)) {
     $fileId = $m[1];
     $token  = getenv('BOT_TOKEN');
-    // Получаем путь к файлу
     $ctx = stream_context_create(['http' => ['timeout' => 10]]);
     $res = @file_get_contents("https://api.telegram.org/bot{$token}/getFile?file_id=" . urlencode($fileId), false, $ctx);
     if ($res) {
         $data = json_decode($res, true);
         if (!empty($data['result']['file_path'])) {
             $imgUrl = "https://api.telegram.org/file/bot{$token}/" . $data['result']['file_path'];
-            // Redirect на реальный URL
             header("Location: " . $imgUrl, true, 302);
             exit;
         }
@@ -142,7 +134,6 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
         $tUrl  = $manga['telegraph_url'] ?? null;
 
         if ($tUrl) {
-            // Сначала пробуем Telegraph API (JSON) - самый надёжный способ
             $tPath = ltrim(parse_url($tUrl, PHP_URL_PATH), '/');
             $ctx = stream_context_create(['http' => ['timeout' => 10, 'user_agent' => 'Mozilla/5.0']]);
             $apiResp = @file_get_contents("https://api.telegra.ph/getPage/" . $tPath . "?return_content=true", false, $ctx);
@@ -152,7 +143,6 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
                     $pages = extractImgFromContent($apiData['result']['content']);
                 }
             }
-            // Fallback: парсим HTML Telegraph страницы
             if (empty($pages)) {
                 $html = @file_get_contents($tUrl, false, $ctx);
                 if ($html) {
@@ -166,7 +156,6 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
                     }
                 }
             }
-            // Убираем промо-обложку (первый img если это ibb.co)
             if (!empty($pages) && strpos($pages[0], 'ibb.co') !== false) {
                 array_shift($pages);
             }
@@ -210,7 +199,6 @@ if ($path === '/api/vote' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $input   = json_decode(file_get_contents('php://input'), true);
     $userId  = getEffectiveUserId($pdo);
-    // Если передан tg_user_id в теле запроса — используем его
     if (!empty($input['tg_user_id']) && is_numeric($input['tg_user_id'])) {
         $userId = (int)$input['tg_user_id'];
     }
@@ -252,8 +240,7 @@ if ($path === '/api/vote' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 # =========================
-# API STATUS — сохранить статус читателя
-# ИСПРАВЛЕНО: синхронизация бот ↔ сайт через tg_user_id
+# API STATUS — сохранить статус читателя (now / read / will)
 # =========================
 if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -261,14 +248,14 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $userId = getEffectiveUserId($pdo);
     if (!empty($input['tg_user_id']) && is_numeric($input['tg_user_id'])) {
         $userId = (int)$input['tg_user_id'];
-        // Запоминаем в сессии и cookie для последующих запросов
         $_SESSION['tg_user_id'] = $userId;
         if (!headers_sent()) setcookie('tg_user_id', $userId, time() + 86400 * 30, '/', '', false, false);
     }
     $mangaId = (int)($input['manga_id'] ?? 0);
     $status  = $input['status'] ?? '';
 
-    if ($mangaId && in_array($status, ['now', 'read'])) {
+    // ИСПРАВЛЕНО: добавлен 'will' (буду читать)
+    if ($mangaId && in_array($status, ['now', 'read', 'will'])) {
         $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$userId, $mangaId, $status]);
         echo json_encode(['success' => true, 'user_id' => $userId]);
         exit;
@@ -280,7 +267,6 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 # =========================
 # API LIBRARY — библиотека пользователя
-# ИСПРАВЛЕНО: использует getEffectiveUserId для синхронизации с ботом
 # =========================
 if ($path === '/api/library') {
     header('Content-Type: application/json');
@@ -380,7 +366,6 @@ function render() {
         counterEl.innerText = (current + 1) + ' / ' + pages.length;
     };
     img.onerror = () => {
-        // Пробуем следующую если не загрузилась
         if (current < pages.length - 1) { current++; render(); }
         else { fallbackEl.style.display = 'block'; }
     };
@@ -417,7 +402,7 @@ init();
 
 
 # =========================
-# MANGA PAGE (карточка)
+# MANGA PAGE (карточка) — /read/ID
 # =========================
 if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $id   = (int)$m[1];
@@ -430,6 +415,12 @@ if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $pagesCount = $pdo->prepare("SELECT COUNT(*) FROM manga_pages WHERE manga_id = ? AND page_url IS NOT NULL AND page_url != ''");
     $pagesCount->execute([$id]);
     $hasPages = (int)$pagesCount->fetchColumn() > 0;
+
+    // Текущий статус пользователя для этой манги
+    $userId = getEffectiveUserId($pdo);
+    $stmtStatus = $pdo->prepare("SELECT status FROM user_manga_status WHERE user_id = ? AND manga_id = ?");
+    $stmtStatus->execute([$userId, $id]);
+    $currentStatus = $stmtStatus->fetchColumn() ?: '';
     ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -455,15 +446,22 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
 .stat-pill{padding:8px 16px;border-radius:40px;font-size:14px;font-weight:600}
 .likes-count{background:rgba(255,107,107,0.12);color:#ff6b6b}
 .dislikes-count{background:rgba(150,150,150,0.12);color:#aaa}
-.status-buttons,.vote-buttons,.read-buttons{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
-.status-btn{padding:10px 20px;border-radius:30px;border:1px solid var(--border);font-weight:600;cursor:pointer;background:var(--card);color:var(--text);font-size:14px;transition:all 0.2s}
-.status-btn:hover{border-color:var(--accent)}
-.status-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.vote-btn{padding:10px 20px;border-radius:30px;border:none;font-weight:600;cursor:pointer;font-size:14px;transition:all 0.2s}
+/* ИСПРАВЛЕНО: добавлены стили кнопок статуса */
+.status-section{margin-top:20px}
+.status-label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px}
+.status-buttons,.vote-buttons,.read-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.status-btn{padding:10px 18px;border-radius:30px;border:2px solid var(--border);font-weight:600;cursor:pointer;background:transparent;color:var(--muted);font-size:13px;transition:all 0.2s;font-family:inherit}
+.status-btn:hover{border-color:var(--accent);color:var(--text)}
+.status-btn.active-now{background:rgba(255,165,0,0.15);border-color:#ffa500;color:#ffa500}
+.status-btn.active-read{background:rgba(76,175,80,0.15);border-color:#4caf50;color:#4caf50}
+.status-btn.active-will{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
+.vote-buttons{margin-top:16px}
+.vote-btn{padding:10px 20px;border-radius:30px;border:none;font-weight:600;cursor:pointer;font-size:14px;transition:all 0.2s;font-family:inherit}
 .vote-like{background:rgba(255,107,107,0.15);color:#ff6b6b}
 .vote-like:hover{background:rgba(255,107,107,0.3)}
 .vote-dislike{background:rgba(150,150,150,0.15);color:#aaa}
 .vote-dislike:hover{background:rgba(150,150,150,0.25)}
+.read-buttons{margin-top:18px;gap:12px}
 .btn{padding:14px 26px;border-radius:14px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:8px;font-size:15px;transition:all 0.2s}
 .primary{background:var(--accent);color:#fff}
 .primary:hover{background:#6a4ee0;transform:translateY(-1px)}
@@ -502,10 +500,24 @@ $coverSrc = !empty($manga['cover_imgbb_url']) ? $manga['cover_imgbb_url'] : (!em
         <div class="stat-pill likes-count">❤️ <span id="likes"><?= (int)$manga['likes'] ?></span> лайков</div>
         <div class="stat-pill dislikes-count">💔 <span id="dislikes"><?= (int)$manga['dislikes'] ?></span></div>
     </div>
+
+    <!-- ГОЛОСОВАНИЕ -->
     <div class="vote-buttons">
         <button class="vote-btn vote-like"    onclick="vote('like')">👍 Лайк</button>
         <button class="vote-btn vote-dislike" onclick="vote('dislike')">👎 Дизлайк</button>
     </div>
+
+    <!-- СТАТУС ЧТЕНИЯ (НОВЫЙ БЛОК) -->
+    <div class="status-section">
+        <div class="status-label">Мой статус</div>
+        <div class="status-buttons">
+            <button class="status-btn <?= $currentStatus === 'now'  ? 'active-now'  : '' ?>" id="btn-now"  onclick="setStatus('now')">📖 Читаю</button>
+            <button class="status-btn <?= $currentStatus === 'will' ? 'active-will' : '' ?>" id="btn-will" onclick="setStatus('will')">🔖 Буду читать</button>
+            <button class="status-btn <?= $currentStatus === 'read' ? 'active-read' : '' ?>" id="btn-read" onclick="setStatus('read')">✅ Прочитано</button>
+        </div>
+    </div>
+
+    <!-- КНОПКИ ЧИТАТЬ -->
     <div class="read-buttons">
         <?php if ($hasPages): ?>
         <a class="btn primary" href="/view/<?= $id ?>">📖 Читать на сайте</a>
@@ -549,6 +561,30 @@ async function vote(type) {
     } catch(e) {}
 }
 
+// НОВАЯ ФУНКЦИЯ: установка статуса
+async function setStatus(status) {
+    try {
+        const res = await fetch('/api/status', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({manga_id: <?= $id ?>, status: status, tg_user_id: getTgUser()})
+        });
+        const data = await res.json();
+        if (data.success) {
+            // Сбрасываем все кнопки
+            ['now','will','read'].forEach(s => {
+                const btn = document.getElementById('btn-' + s);
+                btn.className = 'status-btn';
+            });
+            // Активируем нажатую
+            const activeClass = {now: 'active-now', will: 'active-will', read: 'active-read'};
+            document.getElementById('btn-' + status).classList.add(activeClass[status]);
+            const labels = {now: '📖 Отмечено: Читаю!', will: '🔖 Добавлено в список!', read: '✅ Отмечено как прочитанное!'};
+            showToast(labels[status]);
+        }
+    } catch(e) {}
+}
+
 function showToast(msg) {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
@@ -564,7 +600,8 @@ function showToast(msg) {
 
 
 # =========================
-# LIBRARY PAGE
+# LIBRARY PAGE — Моя библиотека
+# ИСПРАВЛЕНО: 3 секции: Читаю / Буду читать / Прочитано
 # =========================
 if ($path === '/library') {
 ?>
@@ -582,19 +619,25 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
 .header{padding:20px 24px;background:rgba(7,7,11,0.9);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px}
 .logo{font-size:24px;font-weight:800;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .wrap{max-width:1200px;margin:auto;padding:30px 20px}
-.back-link{display:inline-block;margin-bottom:20px;color:var(--accent);text-decoration:none;font-weight:600}
+.back-link{display:inline-block;margin-bottom:24px;color:var(--accent);text-decoration:none;font-weight:600}
 .back-link:hover{opacity:0.8}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.3s}
+/* Секции библиотеки */
+.section{margin-bottom:40px}
+.section-title{font-size:18px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.section-title span{font-size:22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.3s}
 .card:hover{transform:translateY(-4px);border-color:var(--accent)}
 .cover{width:100%;aspect-ratio:2/3;object-fit:cover}
 .cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.info{padding:14px}
-.title{font-size:13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;margin-top:8px;font-weight:600}
-.badge-now{background:rgba(255,107,107,0.2);color:#ff6b6b}
+.info{padding:12px}
+.title{font-size:12px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:10px;margin-top:8px;font-weight:600}
+.badge-now{background:rgba(255,165,0,0.2);color:#ffa500}
+.badge-will{background:rgba(124,92,255,0.2);color:var(--accent)}
 .badge-read{background:rgba(76,175,80,0.2);color:#4caf50}
-.empty{text-align:center;padding:80px 20px;color:var(--muted)}
+.empty-section{color:var(--muted);font-size:14px;padding:16px 0}
+.empty-page{text-align:center;padding:80px 20px;color:var(--muted)}
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -602,7 +645,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
 <div class="header"><div class="logo">📚 Моя библиотека</div></div>
 <div class="wrap">
     <a href="/" class="back-link">← На главную</a>
-    <div class="grid" id="grid"><div class="empty">📖 Загрузка...</div></div>
+    <div id="content"><div class="empty-page">📖 Загрузка...</div></div>
 </div>
 <script>
 function getTgUser() {
@@ -623,31 +666,62 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
+function cardHtml(m) {
+    const coverId = 'cv-' + m.id;
+    const phId    = 'ph-' + m.id;
+    let coverSrc  = m.cover_imgbb_url || '';
+    if (!coverSrc && m.file_id) coverSrc = '/api/cover/' + m.file_id;
+    const imgHtml = coverSrc
+        ? `<img class="cover" id="${coverId}" src="${escapeHtml(coverSrc)}" loading="lazy" alt=""
+               onerror="document.getElementById('${coverId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`
+        : '';
+    const phStyle = coverSrc ? 'display:none' : 'display:flex';
+    const badgeMap = {now: 'badge-now', will: 'badge-will', read: 'badge-read'};
+    const labelMap = {now: '📖 Читаю', will: '🔖 Буду читать', read: '✅ Прочитано'};
+    return `<a class="card" href="/read/${m.id}">
+        ${imgHtml}
+        <div class="cover-ph" id="${phId}" style="${phStyle}"><span style="font-size:40px">📖</span></div>
+        <div class="info">
+            <div class="title">${escapeHtml(m.title)}</div>
+            <span class="badge ${badgeMap[m.status] || ''}">${labelMap[m.status] || ''}</span>
+        </div>
+    </a>`;
+}
+
+function sectionHtml(icon, title, items, statusClass) {
+    const gridContent = items.length > 0
+        ? items.map(cardHtml).join('')
+        : `<div class="empty-section">Список пуст</div>`;
+    return `<div class="section">
+        <div class="section-title"><span>${icon}</span>${title} <span style="color:var(--muted);font-size:14px;font-weight:400">(${items.length})</span></div>
+        <div class="grid">${gridContent}</div>
+    </div>`;
+}
+
 async function load() {
     try {
         const tgId = getTgUser();
         const res  = await fetch('/api/library?tg_user_id=' + tgId);
         const data = await res.json();
-        const grid = document.getElementById('grid');
+        const content = document.getElementById('content');
         if (!data.items || data.items.length === 0) {
-            grid.innerHTML = '<div class="empty">📭 У вас пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';
+            content.innerHTML = '<div class="empty-page">📭 У вас пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';
             return;
         }
-        grid.innerHTML = data.items.map(m => `
-            <a class="card" href="/read/${m.id}">
-                ${m.cover_imgbb_url || m.file_id
-                    ? `<img class="cover" src="${escapeHtml(m.cover_imgbb_url || (m.file_id ? '/api/cover/' + m.file_id : ''))}" loading="lazy" alt="" onerror="this.parentElement.querySelector('.cover-ph').style.display='flex';this.style.display='none'">`
-                    : ''}
-                <div class="cover-ph" style="${m.cover_imgbb_url || m.file_id ? 'display:none' : 'display:flex'}"><span style="font-size:48px">📖</span></div>
-                <div class="info">
-                    <div class="title">${escapeHtml(m.title)}</div>
-                    <span class="badge badge-${m.status == 'now' ? 'now' : 'read'}">
-                        ${m.status == 'now' ? '⏳ Читаю сейчас' : '✅ Прочитано'}
-                    </span>
-                </div>
-            </a>`).join('');
+        // Разбиваем по статусам
+        const now  = data.items.filter(i => i.status === 'now');
+        const will = data.items.filter(i => i.status === 'will');
+        const read = data.items.filter(i => i.status === 'read');
+
+        let html = '';
+        if (now.length  > 0) html += sectionHtml('📖', 'Читаю сейчас', now, 'now');
+        if (will.length > 0) html += sectionHtml('🔖', 'Буду читать',  will, 'will');
+        if (read.length > 0) html += sectionHtml('✅', 'Прочитано',    read, 'read');
+        if (!html) html = '<div class="empty-page">📭 У вас пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';
+
+        content.innerHTML = html;
     } catch(e) {
-        document.getElementById('grid').innerHTML = '<div class="empty">❌ Ошибка загрузки</div>';
+        document.getElementById('content').innerHTML = '<div class="empty-page">❌ Ошибка загрузки</div>';
     }
 }
 load();
@@ -715,7 +789,6 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 </div>
 <a href="/library" class="library-btn">📚 Моя библиотека</a>
 <script>
-// Сохраняем tg_user_id из WebApp при открытии каталога
 (function() {
     try {
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
@@ -760,7 +833,6 @@ async function load(reset = false) {
             return;
         }
         data.items.forEach(m => {
-            // ИСПРАВЛЕНО: обложка с onerror fallback
             const coverId = 'cover-' + m.id;
             const phId    = 'ph-' + m.id;
             let coverSrc = m.cover_display || '';

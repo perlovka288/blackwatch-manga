@@ -36,6 +36,7 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value TEXT NOT NULL)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
+    // ИСПРАВЛЕНО: статус 'will' добавлен — теперь 3 варианта: now / read / will
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS temp_data (user_id BIGINT PRIMARY KEY, step VARCHAR(50) NOT NULL, title TEXT, description TEXT, pages TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
@@ -45,7 +46,6 @@ try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS file_id TEXT");
-    // Снимаем NOT NULL с file_id если он есть (исправление старой структуры)
     $pdo->exec("ALTER TABLE manga ALTER COLUMN file_id DROP NOT NULL");
 } catch (Exception $e) {}
 
@@ -98,18 +98,39 @@ function downloadFile($url) {
     return false;
 }
 
-function uploadToImgbb($tempFile, $apiKey) {
+// ИСПРАВЛЕНО: retry-логика для ImgBB (3 попытки с паузой)
+function uploadToImgbb($tempFile, $apiKey, $retries = 3) {
+    if (!file_exists($tempFile) || filesize($tempFile) === 0) return false;
     $imageData = base64_encode(file_get_contents($tempFile));
-    $ch = curl_init('https://api.imgbb.com/1/upload');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, ['key' => $apiKey, 'image' => $imageData]);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    $res = json_decode($response, true);
-    return $res['data']['url'] ?? false;
+    for ($attempt = 1; $attempt <= $retries; $attempt++) {
+        $ch = curl_init('https://api.imgbb.com/1/upload');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, ['key' => $apiKey, 'image' => $imageData]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $response = curl_exec($ch);
+        $curlErr  = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($curlErr) {
+            error_log("ImgBB cURL error (attempt $attempt): $curlErr");
+            if ($attempt < $retries) sleep(2);
+            continue;
+        }
+
+        $res = json_decode($response, true);
+        if (!empty($res['data']['url'])) {
+            return $res['data']['url'];
+        }
+
+        // Логируем ответ ImgBB для диагностики
+        error_log("ImgBB API error (attempt $attempt, HTTP $httpCode): $response");
+        if ($attempt < $retries) sleep(3);
+    }
+    return false;
 }
 
 function getTelegramImageUrl($token, $fileId) {
@@ -236,7 +257,6 @@ function extractAndSortZip($zipPath, $extractDir) {
     return empty($extractedPaths) ? false : $extractedPaths;
 }
 
-// ИСПРАВЛЕНО: createTelegraphPage — увеличен timeout, правильный content-type
 function createTelegraphPage($title, $imageUrls, $token, $pdo, $imgbbKey) {
     $nodes = [];
     $imageUrls = array_values(array_unique($imageUrls));
@@ -251,8 +271,6 @@ function createTelegraphPage($title, $imageUrls, $token, $pdo, $imgbbKey) {
 
     $accessToken = '192627565eb929153713373081fb7dd3eb3701cf4a36a2f9243d3866f831';
 
-    // ИСПРАВЛЕНИЕ: используем JSON вместо form-encoded для надёжности
-    // Telegraph API требует form-encoded, а content — JSON-строка внутри
     $postData = http_build_query([
         'access_token'   => $accessToken,
         'title'          => mb_substr($title, 0, 256),
@@ -266,7 +284,6 @@ function createTelegraphPage($title, $imageUrls, $token, $pdo, $imgbbKey) {
     curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    // ИСПРАВЛЕНИЕ: увеличен timeout до 120с для Render
     curl_setopt($ch, CURLOPT_TIMEOUT, 120);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -389,8 +406,7 @@ if (isset($update['callback_query'])) {
         exit;
     }
 
-    // ИСПРАВЛЕНО: пагинация каталога — НЕ используем urlencode в callback_data
-    // callback_data формат: search_page:ЗАПРОС:СТРАНИЦА (двоеточие как разделитель)
+    // ПАГИНАЦИЯ КАТАЛОГА
     if (strpos($data, 'search_page:') === 0) {
         $raw2 = substr($data, strlen('search_page:'));
         $lastColon = strrpos($raw2, ':');
@@ -408,18 +424,22 @@ if (isset($update['callback_query'])) {
         exit;
     }
 
-    // СТАТУС ЧИТАЮ/ПРОЧИТАНО
+    // СТАТУС: читаю / прочитано / буду читать
     if (strpos($data, 'stat_') === 0) {
         $parts  = explode('_', $data);
-        $status = $parts[1];
+        $status = $parts[1];   // now | read | will
         $mId    = $parts[2];
-        $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$chatId, $mId, $status]);
-        $labels = ['now' => '📖 Читаете сейчас!', 'read' => '✅ Отмечено как прочитанное!'];
-        tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id'], 'text' => $labels[$status] ?? 'Сохранено']);
+        if (in_array($status, ['now', 'read', 'will'])) {
+            $pdo->prepare("INSERT INTO user_manga_status (user_id, manga_id, status) VALUES (?, ?, ?) ON CONFLICT (user_id, manga_id) DO UPDATE SET status = EXCLUDED.status")->execute([$chatId, $mId, $status]);
+            $labels = ['now' => '📖 Читаете сейчас!', 'read' => '✅ Отмечено как прочитанное!', 'will' => '🔖 Добавлено в «Буду читать»!'];
+            tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id'], 'text' => $labels[$status] ?? 'Сохранено']);
+        } else {
+            tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id']]);
+        }
         exit;
     }
 
-    // ИСПРАВЛЕНО: пагинация редактирования — тот же подход с двоеточием
+    // ПАГИНАЦИЯ РЕДАКТИРОВАНИЯ
     if (strpos($data, 'edit_page:') === 0) {
         $raw2     = substr($data, strlen('edit_page:'));
         $lastColon = strrpos($raw2, ':');
@@ -451,7 +471,6 @@ if (isset($update['callback_query'])) {
     // РЕДАКТИРОВАНИЕ ПОЛЯ
     if (strpos($data, 'editfield_') === 0) {
         $raw2   = str_replace('editfield_', '', $data);
-        // формат: editfield_FIELD_MANGAID
         $uParts = explode('_', $raw2);
         $mId    = array_pop($uParts);
         $field  = implode('_', $uParts);
@@ -573,7 +592,6 @@ if (isset($update['callback_query'])) {
         exit;
     }
 
-    // Ответ на неизвестный callback
     tgPost($apiUrl . "/answerCallbackQuery", ['callback_query_id' => $callback['id']]);
     exit;
 }
@@ -725,48 +743,32 @@ if (isset($update['message'])) {
                     exit;
                 }
                 $count = count($extractedFiles);
-                sendSimpleMsg($chatId, "📸 _Распаковано $count фото. Загружаю на ImgBB..._", $apiUrl);
+                sendSimpleMsg($chatId, "📸 _Распаковано $count фото. Загружаю на ImgBB (может занять несколько минут)..._", $apiUrl);
                 $imgUrls = [];
+                $failCount = 0;
                 foreach ($extractedFiles as $imgPath) {
                     $url = uploadToImgbb($imgPath, $imgbbKey);
                     @unlink($imgPath);
-                    if ($url) $imgUrls[] = $url;
+                    if ($url) {
+                        $imgUrls[] = $url;
+                    } else {
+                        $failCount++;
+                        error_log("ImgBB upload failed for: $imgPath");
+                    }
                 }
                 @rmdir($extractDir);
                 if (empty($imgUrls)) {
-                    sendSimpleMsg($chatId, "❌ *Не удалось загрузить фото на сервер.*", $apiUrl);
+                    sendSimpleMsg($chatId, "❌ *Не удалось загрузить фото на сервер.*\n\n_Возможные причины:_\n• ImgBB временно недоступен\n• Превышен лимит загрузки\n• Файлы повреждены\n\n_Попробуйте позже или уменьшите количество фото._", $apiUrl);
+                    $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
                     exit;
                 }
+                $successMsg = "✅ _Загружено " . count($imgUrls) . " из $count фото!";
+                if ($failCount > 0) $successMsg .= " ($failCount не загрузилось)";
+                $successMsg .= "\n\n*Шаг 2 из 4:* Введите *название* манги:_";
                 $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_title_zip', ?) ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId, json_encode(['imgbb_urls' => $imgUrls])]);
-                sendSimpleMsg($chatId, "✅ _Загружено " . count($imgUrls) . " фото!\n\n*Шаг 2 из 4:* Введите *название* манги:_", $apiUrl);
+                sendSimpleMsg($chatId, $successMsg, $apiUrl);
                 exit;
             }
-        }
-
-        // --- Быстрое добавление через команду +Название|ссылка|описание ---
-        if (!isset($message['photo']) && strpos(trim($text), '+') === 0 && strpos($text, '|') !== false) {
-            $raw2  = trim(mb_substr(trim($text), 1));
-            $parts = array_map('trim', explode('|', $raw2));
-            if (count($parts) >= 3) {
-                $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, added_by) VALUES (?, ?, ?, ?)")->execute(['❤️ ' . $parts[0], $parts[1], $parts[2], $chatId]);
-                logArchive($pdo, 'add_manga', "Опубликована манга (быстрое): {$parts[0]}", $chatId);
-                sendSimpleMsg($chatId, "✅ Манга добавлена в каталог!\n\n_Чтобы добавить обложку — отправьте фото с подписью:_\n`+{$parts[0]}`", $apiUrl);
-            }
-            exit;
-        }
-
-        // --- Начало загрузки через альбом ---
-        if ($text == "➕ Добавить через альбом") {
-            $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_pages', '[]') ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId]);
-            sendSimpleMsg($chatId, "🖼 *Шаг 1 из 4:* Отправьте страницы главы *альбомом* или по одному фото.\n\n_Когда загрузите всё — напишите:_ *стоп*", $apiUrl);
-            exit;
-        }
-
-        // --- Начало загрузки через ZIP ---
-        if ($text == "📦 Добавить через ZIP") {
-            $pdo->prepare("INSERT INTO temp_data (user_id, step, pages) VALUES (?, 'wait_zip', '[]') ON CONFLICT (user_id) DO UPDATE SET step = EXCLUDED.step, pages = EXCLUDED.pages")->execute([$chatId]);
-            sendSimpleMsg($chatId, "📦 *Шаг 1 из 4:* Отправьте ZIP-архив с фото главы.\n\n⚠️ *Ограничение Telegram API:* файлы до 20 МБ.", $apiUrl);
-            exit;
         }
 
         // --- Редактирование ---
@@ -794,6 +796,7 @@ if (isset($update['message'])) {
                     }
                     sendSimpleMsg($chatId, "⏳ _Обрабатываю " . count($pages) . " страниц. Загружаю на ImgBB (может занять пару минут)..._", $apiUrl);
                     $imgbbUrls = [];
+                    $failCount = 0;
                     foreach ($pages as $fileId) {
                         $tgUrl = getTelegramImageUrl($token, $fileId);
                         if ($tgUrl) {
@@ -801,17 +804,24 @@ if (isset($update['message'])) {
                             if ($temp) {
                                 $upl = uploadToImgbb($temp, $imgbbKey);
                                 @unlink($temp);
-                                if ($upl) $imgbbUrls[] = $upl;
+                                if ($upl) {
+                                    $imgbbUrls[] = $upl;
+                                } else {
+                                    $failCount++;
+                                }
                             }
                         }
                     }
                     if (empty($imgbbUrls)) {
-                        sendSimpleMsg($chatId, "❌ *Не удалось загрузить фото на сервер.*", $apiUrl);
+                        sendSimpleMsg($chatId, "❌ *Не удалось загрузить фото на сервер.*\n\n_Проверьте доступность ImgBB или попробуйте позже._", $apiUrl);
                         $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
                         exit;
                     }
+                    $msg = "✅ Загружено " . count($imgbbUrls) . " фото";
+                    if ($failCount > 0) $msg .= " ($failCount не загрузилось)";
+                    $msg .= "!\n\n*Шаг 2 из 4:* Введите *название* манги:";
                     $pdo->prepare("UPDATE temp_data SET pages = ?, step = 'wait_title' WHERE user_id = ?")->execute([json_encode($imgbbUrls), $chatId]);
-                    sendSimpleMsg($chatId, "✅ Загружено " . count($imgbbUrls) . " фото!\n\n*Шаг 2 из 4:* Введите *название* манги:", $apiUrl);
+                    sendSimpleMsg($chatId, $msg, $apiUrl);
                     exit;
                 }
                 sendSimpleMsg($chatId, "📷 Отправляйте фото страниц. Когда всё загрузите — напишите *стоп*.", $apiUrl);
@@ -981,10 +991,8 @@ if (isset($update['message'])) {
                 }
             }
             break;
-        // ИСПРАВЛЕНО: Архив бота — убрана логика которая перебивала состояние
         case "🗂 Архив бота":
             if (in_array($chatId, $admins)) {
-                // Чистим temp_data чтобы не было конфликта состояний
                 $pdo->prepare("DELETE FROM temp_data WHERE user_id = ?")->execute([$chatId]);
                 $archiveData = getArchiveData($pdo, $admins, 0);
                 sendSimpleMsg($chatId, $archiveData['text'], $apiUrl, $archiveData['reply_markup']);
@@ -1009,7 +1017,6 @@ if (isset($update['message'])) {
             else $msg .= "_Пусто._";
             sendSimpleMsg($chatId, $msg, $apiUrl);
             break;
-        // ИСПРАВЛЕНО: Случайная манга — правильный запрос для PostgreSQL
         case "🎲 Случайная манга":
             $stmt = $pdo->prepare("
                 SELECT m.* FROM manga m
@@ -1070,7 +1077,6 @@ function getArchiveData($pdo, $admins, $page) {
     return ['text' => $text, 'reply_markup' => json_encode(['inline_keyboard' => $kb])];
 }
 
-// ИСПРАВЛЕНО: callback_data использует двоеточие вместо urlencode
 function getSearchData($pdo, $query, $page) {
     $limit  = 5;
     $offset = $page * $limit;
@@ -1091,14 +1097,12 @@ function getSearchData($pdo, $query, $page) {
     $btns = [];
     foreach ($list as $m) $btns[] = [['text' => "📘 " . $m['title'], 'callback_data' => 'show_' . $m['id']]];
     $nav = [];
-    // ИСПРАВЛЕНО: двоеточие как разделитель вместо urlencode
     if ($page > 0) $nav[] = ['text' => '⬅️ Назад', 'callback_data' => 'search_page:' . $q . ':' . ($page - 1)];
     if (($offset + $limit) < $total) $nav[] = ['text' => 'Вперёд ➡️', 'callback_data' => 'search_page:' . $q . ':' . ($page + 1)];
     if (!empty($nav)) $btns[] = $nav;
     return ['text' => "_Выберите произведение:_", 'reply_markup' => json_encode(['inline_keyboard' => $btns])];
 }
 
-// ИСПРАВЛЕНО: аналогично getSearchData
 function getEditSearchData($pdo, $query, $page) {
     $limit  = 5;
     $offset = $page * $limit;
@@ -1139,7 +1143,6 @@ function sendEditMangaMenu($chatId, $m, $apiUrl) {
         $result = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $coverPhoto, 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
         $decoded = json_decode($result, true);
         if (!isset($decoded['ok']) || !$decoded['ok']) {
-            // Пробуем file_id если imgbb не сработал
             if (!empty($m['file_id']) && $coverPhoto !== $m['file_id']) {
                 $r2 = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['file_id'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
                 $d2 = json_decode($r2, true);
@@ -1155,6 +1158,7 @@ function sendEditMangaMenu($chatId, $m, $apiUrl) {
     }
 }
 
+// ИСПРАВЛЕНО: sendMangaCard — добавлены кнопки статуса: Читаю / Прочитано / Буду читать
 function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     if (!$m) return;
     $text = "📖 *" . $m['title'] . "*\n\n" . ($m['description'] ?? '') . "\n\n━━━━━━━━━━━━━━━━━\n👍 _{$m['likes']} лайков_  |  👎 _{$m['dislikes']} дизлайков_";
@@ -1163,15 +1167,21 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
     if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
     $kb = ['inline_keyboard' => [
         $readButtons,
-        [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
+        [
+            ['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']],
+            ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]
+        ],
+        [
+            ['text' => '📖 Читаю', 'callback_data' => 'stat_now_' . $m['id']],
+            ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']],
+            ['text' => '🔖 Буду читать', 'callback_data' => 'stat_will_' . $m['id']]
+        ]
     ]];
-    // Пробуем imgbb, потом file_id, потом текст
     $coverPhoto = !empty($m['cover_imgbb_url']) ? $m['cover_imgbb_url'] : (!empty($m['file_id']) ? $m['file_id'] : null);
     if ($coverPhoto) {
         $result  = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $coverPhoto, 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
         $decoded = json_decode($result, true);
         if (!isset($decoded['ok']) || !$decoded['ok']) {
-            // imgbb упал — пробуем file_id если ещё не пробовали
             if (!empty($m['file_id']) && $coverPhoto !== $m['file_id']) {
                 $result2  = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['file_id'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
                 $decoded2 = json_decode($result2, true);
@@ -1194,24 +1204,38 @@ function updateMangaMessage($chatId, $msgId, $m, $apiUrl, $siteUrl = '') {
     if ($siteUrl) $readButtons[] = ['text' => '🌐 Читать на сайте', 'url' => $siteUrl . '/read/' . $m['id']];
     $kb = ['inline_keyboard' => [
         $readButtons,
-        [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
+        [
+            ['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']],
+            ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]
+        ],
+        [
+            ['text' => '📖 Читаю', 'callback_data' => 'stat_now_' . $m['id']],
+            ['text' => '✅ Прочитано', 'callback_data' => 'stat_read_' . $m['id']],
+            ['text' => '🔖 Буду читать', 'callback_data' => 'stat_will_' . $m['id']]
+        ]
     ]];
     $method = !empty($m['cover_imgbb_url']) ? "editMessageCaption" : "editMessageText";
     $param  = !empty($m['cover_imgbb_url']) ? "caption" : "text";
     tgPost($apiUrl . "/$method", ['chat_id' => $chatId, 'message_id' => $msgId, $param => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
 }
 
+// ИСПРАВЛЕНО: sendLibrary — теперь показывает 3 категории: читаю / прочитано / буду читать
 function sendLibrary($chatId, $pdo, $apiUrl) {
     $stmt = $pdo->prepare("SELECT m.title, s.status FROM user_manga_status s JOIN manga m ON s.manga_id = m.id WHERE s.user_id = ?");
     $stmt->execute([$chatId]);
     $res  = $stmt->fetchAll();
     $now  = [];
     $read = [];
+    $will = [];
     foreach ($res as $i) {
-        if ($i['status'] == 'now') $now[] = "🔹 " . $i['title'];
-        else $read[] = "✅ " . $i['title'];
+        if ($i['status'] == 'now')  $now[]  = "🔹 " . $i['title'];
+        elseif ($i['status'] == 'read') $read[] = "✅ " . $i['title'];
+        elseif ($i['status'] == 'will') $will[] = "🔖 " . $i['title'];
     }
-    $msg = "📚 *ТВОЯ ЛИЧНАЯ БИБЛИОТЕКА*\n━━━━━━━━━━━━━━━━━━━━━\n\n⏳ *Сейчас читаю:*\n" . ($now ? implode("\n", $now) : "_Пока ничего_") . "\n\n🏆 *Прочитано:*\n" . ($read ? implode("\n", $read) : "_Список пуст_");
+    $msg  = "📚 *ТВОЯ ЛИЧНАЯ БИБЛИОТЕКА*\n━━━━━━━━━━━━━━━━━━━━━\n\n";
+    $msg .= "📖 *Читаю сейчас:*\n" . ($now  ? implode("\n", $now)  : "_Пока ничего_") . "\n\n";
+    $msg .= "🔖 *Буду читать:*\n"   . ($will ? implode("\n", $will) : "_Список пуст_")  . "\n\n";
+    $msg .= "🏆 *Прочитано:*\n"     . ($read ? implode("\n", $read) : "_Список пуст_");
     sendSimpleMsg($chatId, $msg, $apiUrl);
 }
 
