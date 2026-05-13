@@ -1,6 +1,8 @@
 <?php
+ob_start(); // Буферизуем весь вывод — предотвращает HTML/warnings в JSON-ответах
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Не выводим ошибки в тело ответа (ломает JSON)
+ini_set('log_errors', 1);     // Пишем ошибки в лог
 
 # =========================
 # DATABASE (Neon PostgreSQL)
@@ -198,9 +200,22 @@ function saveMangaPages($pdo, $mangaId, $pageUrls) {
 # API ADD MANGA — добавление манги через сайт (только для админов)
 # =========================
 if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Сразу JSON-заголовок + перехват любых ошибок
     header('Content-Type: application/json');
-    ini_set('max_execution_time', 300);
+    ini_set('max_execution_time', 600);
     ini_set('memory_limit', '512M');
+    ini_set('max_file_uploads', 200);
+
+    // Перехватчик фатальных ошибок PHP — всегда вернём валидный JSON
+    register_shutdown_function(function() {
+        $err = error_get_last();
+        if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+            if (!headers_sent()) header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => 'PHP Fatal: ' . $err['message'] . ' (line ' . $err['line'] . ')']);
+        }
+    });
+
+    try {
 
     $userId = getEffectiveUserId($pdo);
     if (!isAdmin($userId, $hardcodedAdmins)) {
@@ -218,13 +233,13 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- ОБЛОЖКА ---
     $coverImgbbUrl = null;
-    if (!empty($_FILES['cover']['tmp_name']) && $_FILES['cover']['error'] === 0) {
+    if (!empty($_FILES['cover']['tmp_name']) && $_FILES['cover']['error'] === UPLOAD_ERR_OK) {
         $coverImgbbUrl = uploadToImgbb($_FILES['cover']['tmp_name'], $imgbbKeys);
     }
 
     // --- СТРАНИЦЫ: вариант 1 — ZIP ---
     $pageUrls = [];
-    if (!empty($_FILES['zip']['tmp_name']) && $_FILES['zip']['error'] === 0) {
+    if (!empty($_FILES['zip']['tmp_name']) && $_FILES['zip']['error'] === UPLOAD_ERR_OK) {
         $zipTmp = $_FILES['zip']['tmp_name'];
         $zip = new ZipArchive();
         if ($zip->open($zipTmp) === true) {
@@ -233,7 +248,6 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $zip->extractTo($tmpDir);
             $zip->close();
 
-            // Собираем все изображения
             $allFiles = [];
             $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tmpDir));
             foreach ($it as $file) {
@@ -244,7 +258,6 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            // Сортировка по имени
             usort($allFiles, function($a, $b) {
                 return strnatcasecmp(basename($a), basename($b));
             });
@@ -254,21 +267,36 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($url) $pageUrls[] = $url;
             }
 
-            // Удаляем tmp
             array_map('unlink', glob("$tmpDir/*.*"));
             @rmdir($tmpDir);
         }
     }
 
-    // --- СТРАНИЦЫ: вариант 2 — фото ---
-    if (empty($pageUrls) && !empty($_FILES['photos'])) {
-        $photos = $_FILES['photos'];
-        $count  = count($photos['name']);
-        for ($i = 0; $i < $count; $i++) {
-            if ($photos['error'][$i] === 0 && !empty($photos['tmp_name'][$i])) {
-                $url = uploadToImgbb($photos['tmp_name'][$i], $imgbbKeys);
-                if ($url) $pageUrls[] = $url;
+    // --- СТРАНИЦЫ: вариант 2 — фото (photos[]) ---
+    if (empty($pageUrls)) {
+        $tmpPaths = [];
+
+        // Стандартный массив: photos[] через FormData.append('photos[]', file)
+        if (!empty($_FILES['photos']['name']) && is_array($_FILES['photos']['name'])) {
+            $count = count($_FILES['photos']['name']);
+            for ($i = 0; $i < $count; $i++) {
+                $errCode = $_FILES['photos']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+                $tmp     = $_FILES['photos']['tmp_name'][$i] ?? '';
+                if ($errCode === UPLOAD_ERR_OK && $tmp && file_exists($tmp) && filesize($tmp) > 0) {
+                    $tmpPaths[] = $tmp;
+                }
             }
+        }
+        // На случай если пришёл одиночный файл без массива
+        elseif (!empty($_FILES['photos']['tmp_name']) && !is_array($_FILES['photos']['tmp_name'])) {
+            if ($_FILES['photos']['error'] === UPLOAD_ERR_OK && file_exists($_FILES['photos']['tmp_name'])) {
+                $tmpPaths[] = $_FILES['photos']['tmp_name'];
+            }
+        }
+
+        foreach ($tmpPaths as $tmpPath) {
+            $url = uploadToImgbb($tmpPath, $imgbbKeys);
+            if ($url) $pageUrls[] = $url;
         }
     }
 
@@ -279,13 +307,27 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $telegraphLink = createTelegraphPage($titleWithHeart, $pageUrls);
     }
 
-    // --- СОХРАНЯЕМ В БД ---
+    // --- СОХРАНЯЕМ В БД (PostgreSQL — используем RETURNING id) ---
     $titleWithHeart = '♥ ' . $title;
-    $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by) VALUES (?, ?, ?, ?, ?)")
-        ->execute([$titleWithHeart, $telegraphLink, $description, $coverImgbbUrl, $userId]);
-    $newMangaId = (int)$pdo->lastInsertId();
+    $insertStmt = $pdo->prepare(
+        "INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by)
+         VALUES (?, ?, ?, ?, ?)
+         RETURNING id"
+    );
+    $insertStmt->execute([$titleWithHeart, $telegraphLink, $description, $coverImgbbUrl, $userId]);
+    $insertRow  = $insertStmt->fetch(PDO::FETCH_ASSOC);
+    $newMangaId = (int)($insertRow['id'] ?? 0);
 
-    // Сохраняем страницы в manga_pages
+    if (!$newMangaId) {
+        // Fallback — попробуем lastInsertId (работает не всегда с pgsql)
+        $newMangaId = (int)$pdo->lastInsertId();
+    }
+
+    if (!$newMangaId) {
+        echo json_encode(['success' => false, 'error' => 'Не удалось получить ID новой манги из БД']);
+        exit;
+    }
+
     if (!empty($pageUrls)) {
         saveMangaPages($pdo, $newMangaId, $pageUrls);
     }
@@ -293,12 +335,16 @@ if ($path === '/api/add-manga' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
 
     echo json_encode([
-        'success'    => true,
-        'manga_id'   => $newMangaId,
-        'telegraph'  => $telegraphLink,
-        'pages'      => count($pageUrls),
-        'site_url'   => "{$siteUrl}/read/{$newMangaId}",
+        'success'   => true,
+        'manga_id'  => $newMangaId,
+        'telegraph' => $telegraphLink,
+        'pages'     => count($pageUrls),
+        'site_url'  => "{$siteUrl}/read/{$newMangaId}",
     ]);
+
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => 'Исключение: ' . $e->getMessage()]);
+    }
     exit;
 }
 
@@ -1853,7 +1899,19 @@ async function submitManga() {
         }
 
         const res  = await fetch('/api/add-manga', { method: 'POST', body: formData });
-        const data = await res.json();
+        const rawText = await res.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch(parseErr) {
+            // Сервер вернул не JSON — показываем первые 300 символов ответа для диагностики
+            const preview = rawText.replace(/<[^>]+>/g, '').trim().substring(0, 300);
+            showResult('error', '❌ Сервер вернул не JSON:<br><code style="font-size:11px;word-break:break-all">' + escapeHtml(preview) + '</code>');
+            clearInterval(progressInterval);
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            return;
+        }
 
         clearInterval(progressInterval);
         progressFill.style.width = '100%';
