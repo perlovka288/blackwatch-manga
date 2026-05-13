@@ -837,10 +837,10 @@ if (isset($update['message'])) {
             if ($userState['step'] == 'wait_cover') {
                 if (isset($message['photo'])) {
                     $photo     = end($message['photo']);
-                    $fileId    = $photo['file_id'];
+                    $coverFileId = $photo['file_id'];
                     $pageUrls  = json_decode($userState['pages'], true);
                     sendSimpleMsg($chatId, "⏳ _Генерирую Telegraph-страницу..._", $apiUrl);
-                    $coverUrl     = getTelegramImageUrl($token, $fileId);
+                    $coverUrl     = getTelegramImageUrl($token, $coverFileId);
                     $coverImgbbUrl = null;
                     if ($coverUrl) {
                         $tempFile = downloadFile($coverUrl);
@@ -852,7 +852,7 @@ if (isset($update['message'])) {
                     $telegraphLink = createTelegraphPage($userState['title'], $pageUrls, $token, $pdo, $imgbbKey);
                     if ($telegraphLink) {
                         $titleWithHeart = '❤️ ' . $userState['title'];
-                        $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by) VALUES (?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $chatId]);
+                        $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, file_id, added_by) VALUES (?, ?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $coverFileId, $chatId]);
                         $newMangaId = $pdo->lastInsertId();
                         saveMangaPages($pdo, $newMangaId, $pageUrls);
                         logArchive($pdo, 'add_manga', "Опубликована манга: {$userState['title']}", $chatId);
@@ -887,11 +887,11 @@ if (isset($update['message'])) {
             if ($userState['step'] == 'wait_cover_zip') {
                 if (isset($message['photo'])) {
                     $photo     = end($message['photo']);
-                    $fileId    = $photo['file_id'];
+                    $coverFileId = $photo['file_id'];
                     $stateData = json_decode($userState['pages'], true);
                     $imgUrls   = $stateData['imgbb_urls'] ?? [];
                     sendSimpleMsg($chatId, "⏳ _Генерирую Telegraph-страницу..._", $apiUrl);
-                    $coverUrl     = getTelegramImageUrl($token, $fileId);
+                    $coverUrl     = getTelegramImageUrl($token, $coverFileId);
                     $coverImgbbUrl = null;
                     if ($coverUrl) {
                         $tempFile = downloadFile($coverUrl);
@@ -903,7 +903,7 @@ if (isset($update['message'])) {
                     $telegraphLink = createTelegraphPage($userState['title'], $imgUrls, $token, $pdo, $imgbbKey);
                     if ($telegraphLink) {
                         $titleWithHeart = '❤️ ' . $userState['title'];
-                        $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, added_by) VALUES (?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $chatId]);
+                        $pdo->prepare("INSERT INTO manga (title, telegraph_url, description, cover_imgbb_url, file_id, added_by) VALUES (?, ?, ?, ?, ?, ?)")->execute([$titleWithHeart, $telegraphLink, $userState['description'], $coverImgbbUrl, $coverFileId, $chatId]);
                         $newMangaId = $pdo->lastInsertId();
                         saveMangaPages($pdo, $newMangaId, $imgUrls);
                         logArchive($pdo, 'add_manga', "Опубликована манга (ZIP): {$userState['title']}", $chatId);
@@ -1125,7 +1125,6 @@ function getEditSearchData($pdo, $query, $page) {
     return ['text' => "_Выберите мангу для редактирования:_", 'reply_markup' => json_encode(['inline_keyboard' => $btns])];
 }
 
-// ИСПРАВЛЕНО: sendEditMangaMenu — всегда показывает обложку если есть
 function sendEditMangaMenu($chatId, $m, $apiUrl) {
     $mId  = $m['id'];
     $desc = mb_substr(strip_tags($m['description'] ?? ''), 0, 80);
@@ -1135,19 +1134,21 @@ function sendEditMangaMenu($chatId, $m, $apiUrl) {
         [['text' => '📝 Изменить описание', 'callback_data' => 'editfield_desc_' . $mId], ['text' => '🔗 Изменить ссылку', 'callback_data' => 'editfield_link_' . $mId]],
         [['text' => '🗑 Удалить мангу', 'callback_data' => 'delete_confirm_' . $mId]]
     ]];
-    // ИСПРАВЛЕНО: если нет обложки — отправляем текстом с кнопками (не падаем)
-    if (!empty($m['cover_imgbb_url'])) {
-        $result = tgPost($apiUrl . "/sendPhoto", [
-            'chat_id'      => $chatId,
-            'photo'        => $m['cover_imgbb_url'],
-            'caption'      => $text,
-            'parse_mode'   => 'Markdown',
-            'reply_markup' => $kb
-        ]);
+    $coverPhoto = !empty($m['cover_imgbb_url']) ? $m['cover_imgbb_url'] : (!empty($m['file_id']) ? $m['file_id'] : null);
+    if ($coverPhoto) {
+        $result = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $coverPhoto, 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
         $decoded = json_decode($result, true);
-        // Если sendPhoto не сработал — fallback на текст
         if (!isset($decoded['ok']) || !$decoded['ok']) {
-            tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text . "\n\n⚠️ _Обложка не загружена_", 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+            // Пробуем file_id если imgbb не сработал
+            if (!empty($m['file_id']) && $coverPhoto !== $m['file_id']) {
+                $r2 = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['file_id'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+                $d2 = json_decode($r2, true);
+                if (!isset($d2['ok']) || !$d2['ok']) {
+                    tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text . "\n\n⚠️ _Обложка не загрузилась_", 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+                }
+            } else {
+                tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text . "\n\n⚠️ _Обложка не загрузилась_", 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+            }
         }
     } else {
         tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text . "\n\n🖼 _Обложка не установлена_", 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
@@ -1164,11 +1165,22 @@ function sendMangaCard($chatId, $m, $apiUrl, $siteUrl = '') {
         $readButtons,
         [['text' => '👍 Лайк', 'callback_data' => 'vote_like_' . $m['id']], ['text' => '👎 Дизлайк', 'callback_data' => 'vote_dislike_' . $m['id']]]
     ]];
-    if (!empty($m['cover_imgbb_url'])) {
-        $result  = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['cover_imgbb_url'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+    // Пробуем imgbb, потом file_id, потом текст
+    $coverPhoto = !empty($m['cover_imgbb_url']) ? $m['cover_imgbb_url'] : (!empty($m['file_id']) ? $m['file_id'] : null);
+    if ($coverPhoto) {
+        $result  = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $coverPhoto, 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
         $decoded = json_decode($result, true);
         if (!isset($decoded['ok']) || !$decoded['ok']) {
-            tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+            // imgbb упал — пробуем file_id если ещё не пробовали
+            if (!empty($m['file_id']) && $coverPhoto !== $m['file_id']) {
+                $result2  = tgPost($apiUrl . "/sendPhoto", ['chat_id' => $chatId, 'photo' => $m['file_id'], 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+                $decoded2 = json_decode($result2, true);
+                if (!isset($decoded2['ok']) || !$decoded2['ok']) {
+                    tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+                }
+            } else {
+                tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);
+            }
         }
     } else {
         tgPost($apiUrl . "/sendMessage", ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => $kb]);

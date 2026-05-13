@@ -77,12 +77,12 @@ if ($path === '/api/manga') {
     $offset = $page * $limit;
 
     if ($q) {
-        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY id DESC LIMIT ? OFFSET ?");
+        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url, file_id FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY id DESC LIMIT ? OFFSET ?");
         $stmt->execute(["%{$q}%", $limit, $offset]);
         $count = $pdo->prepare("SELECT COUNT(*) FROM manga WHERE LOWER(title) LIKE LOWER(?)");
         $count->execute(["%{$q}%"]);
     } else {
-        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url FROM manga ORDER BY id DESC LIMIT ? OFFSET ?");
+        $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url, file_id FROM manga ORDER BY id DESC LIMIT ? OFFSET ?");
         $stmt->execute([$limit, $offset]);
         $count = $pdo->query("SELECT COUNT(*) FROM manga");
     }
@@ -94,14 +94,36 @@ if ($path === '/api/manga') {
             'title'         => $m['title'],
             'likes'         => (int)$m['likes'],
             'dislikes'      => (int)$m['dislikes'],
-            // ИСПРАВЛЕНО: возвращаем cover_imgbb_url, null если нет
-            'cover_display' => !empty($m['cover_imgbb_url']) ? $m['cover_imgbb_url'] : null
+            'cover_display' => !empty($m['cover_imgbb_url']) ? $m['cover_imgbb_url'] : (!empty($m['file_id']) ? 'tg://' . $m['file_id'] : null)
         ];
     }
     echo json_encode(['items' => $items, 'total' => (int)$count->fetchColumn(), 'limit' => $limit]);
     exit;
 }
 
+
+
+# =========================
+# API COVER — прокси для Telegram file_id обложек
+# =========================
+if (preg_match('#^/api/cover/(.+)$#', $path, $m)) {
+    $fileId = $m[1];
+    $token  = getenv('BOT_TOKEN');
+    // Получаем путь к файлу
+    $ctx = stream_context_create(['http' => ['timeout' => 10]]);
+    $res = @file_get_contents("https://api.telegram.org/bot{$token}/getFile?file_id=" . urlencode($fileId), false, $ctx);
+    if ($res) {
+        $data = json_decode($res, true);
+        if (!empty($data['result']['file_path'])) {
+            $imgUrl = "https://api.telegram.org/file/bot{$token}/" . $data['result']['file_path'];
+            // Redirect на реальный URL
+            header("Location: " . $imgUrl, true, 302);
+            exit;
+        }
+    }
+    http_response_code(404);
+    exit;
+}
 
 # =========================
 # API PAGES — страницы манги
@@ -114,33 +136,39 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
     $pages = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     if (empty($pages)) {
-        // Пробуем достать страницы из Telegraph
         $mangaStmt = $pdo->prepare("SELECT telegraph_url FROM manga WHERE id = ?");
         $mangaStmt->execute([$id]);
         $manga = $mangaStmt->fetch();
         $tUrl  = $manga['telegraph_url'] ?? null;
 
         if ($tUrl) {
-            // Парсим Telegraph страницу чтобы достать img src
-            $html = @file_get_contents($tUrl);
-            if ($html) {
-                preg_match_all('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $matches);
-                if (!empty($matches[1])) {
-                    $pages = array_values(array_filter($matches[1], function($u) {
-                        return strpos($u, '/') === 0
-                            ? false // относительные ссылки telegraph пропускаем
-                            : true;
-                    }));
-                    // telegraph хранит img как /file/..., добавляем хост
-                    $pages = array_map(function($u) {
-                        if (strpos($u, 'http') === 0) return $u;
-                        return 'https://telegra.ph' . $u;
-                    }, $pages);
-                    // Убираем первое изображение если это промо (ibb.co)
-                    if (!empty($pages) && strpos($pages[0], 'ibb.co') !== false) {
-                        array_shift($pages);
+            // Сначала пробуем Telegraph API (JSON) - самый надёжный способ
+            $tPath = ltrim(parse_url($tUrl, PHP_URL_PATH), '/');
+            $ctx = stream_context_create(['http' => ['timeout' => 10, 'user_agent' => 'Mozilla/5.0']]);
+            $apiResp = @file_get_contents("https://api.telegra.ph/getPage/" . $tPath . "?return_content=true", false, $ctx);
+            if ($apiResp) {
+                $apiData = json_decode($apiResp, true);
+                if (!empty($apiData['ok']) && !empty($apiData['result']['content'])) {
+                    $pages = extractImgFromContent($apiData['result']['content']);
+                }
+            }
+            // Fallback: парсим HTML Telegraph страницы
+            if (empty($pages)) {
+                $html = @file_get_contents($tUrl, false, $ctx);
+                if ($html) {
+                    preg_match_all('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $matches);
+                    foreach ($matches[1] ?? [] as $src) {
+                        if (strpos($src, 'http') === 0) {
+                            $pages[] = $src;
+                        } elseif (strpos($src, '/') === 0) {
+                            $pages[] = 'https://telegra.ph' . $src;
+                        }
                     }
                 }
+            }
+            // Убираем промо-обложку (первый img если это ibb.co)
+            if (!empty($pages) && strpos($pages[0], 'ibb.co') !== false) {
+                array_shift($pages);
             }
         }
 
@@ -152,6 +180,26 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
 
     echo json_encode(['pages' => array_values($pages)]);
     exit;
+}
+
+function extractImgFromContent($nodes) {
+    $urls = [];
+    if (!is_array($nodes)) return $urls;
+    foreach ($nodes as $node) {
+        if (!is_array($node)) continue;
+        if (isset($node['tag']) && $node['tag'] === 'img' && !empty($node['attrs']['src'])) {
+            $src = $node['attrs']['src'];
+            if (strpos($src, 'http') === 0) {
+                $urls[] = $src;
+            } elseif (strpos($src, '/') === 0) {
+                $urls[] = 'https://telegra.ph' . $src;
+            }
+        }
+        if (!empty($node['children'])) {
+            $urls = array_merge($urls, extractImgFromContent($node['children']));
+        }
+    }
+    return $urls;
 }
 
 
@@ -237,7 +285,7 @@ if ($path === '/api/status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($path === '/api/library') {
     header('Content-Type: application/json');
     $userId = getEffectiveUserId($pdo);
-    $stmt   = $pdo->prepare("SELECT m.id, m.title, m.cover_imgbb_url, s.status FROM user_manga_status s JOIN manga m ON s.manga_id = m.id WHERE s.user_id = ?");
+    $stmt   = $pdo->prepare("SELECT m.id, m.title, m.cover_imgbb_url, m.file_id, s.status FROM user_manga_status s JOIN manga m ON s.manga_id = m.id WHERE s.user_id = ?");
     $stmt->execute([$userId]);
     echo json_encode(['items' => $stmt->fetchAll(), 'user_id' => $userId]);
     exit;
@@ -373,7 +421,7 @@ init();
 # =========================
 if (preg_match('#^/read/(\d+)$#', $path, $m)) {
     $id   = (int)$m[1];
-    $stmt = $pdo->prepare("SELECT id, title, description, cover_imgbb_url, telegraph_url, likes, dislikes FROM manga WHERE id=?");
+    $stmt = $pdo->prepare("SELECT id, title, description, cover_imgbb_url, file_id, telegraph_url, likes, dislikes FROM manga WHERE id=?");
     $stmt->execute([$id]);
     $manga = $stmt->fetch();
     if (!$manga) { http_response_code(404); die('404 - Манга не найдена'); }
@@ -437,8 +485,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
 <div class="wrap">
 <a href="/" class="back-link">← Вернуться в каталог</a>
 <div class="box">
-<?php if (!empty($manga['cover_imgbb_url'])): ?>
-    <img class="cover" src="<?= htmlspecialchars($manga['cover_imgbb_url']) ?>" alt="Обложка"
+<?php
+$coverSrc = !empty($manga['cover_imgbb_url']) ? $manga['cover_imgbb_url'] : (!empty($manga['file_id']) ? '/api/cover/' . $manga['file_id'] : null);
+?>
+<?php if ($coverSrc): ?>
+    <img class="cover" src="<?= htmlspecialchars($coverSrc) ?>" alt="Обложка"
          onerror="this.style.display='none';document.getElementById('cover-ph').style.display='flex'">
     <div class="cover-placeholder" id="cover-ph" style="display:none"><span style="font-size:72px">📖</span></div>
 <?php else: ?>
@@ -584,10 +635,10 @@ async function load() {
         }
         grid.innerHTML = data.items.map(m => `
             <a class="card" href="/read/${m.id}">
-                ${m.cover_imgbb_url
-                    ? `<img class="cover" src="${escapeHtml(m.cover_imgbb_url)}" loading="lazy" alt="" onerror="this.parentElement.querySelector('.cover-ph').style.display='flex';this.style.display='none'">`
+                ${m.cover_imgbb_url || m.file_id
+                    ? `<img class="cover" src="${escapeHtml(m.cover_imgbb_url || (m.file_id ? '/api/cover/' + m.file_id : ''))}" loading="lazy" alt="" onerror="this.parentElement.querySelector('.cover-ph').style.display='flex';this.style.display='none'">`
                     : ''}
-                <div class="cover-ph" style="${m.cover_imgbb_url ? 'display:none' : 'display:flex'}"><span style="font-size:48px">📖</span></div>
+                <div class="cover-ph" style="${m.cover_imgbb_url || m.file_id ? 'display:none' : 'display:flex'}"><span style="font-size:48px">📖</span></div>
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
                     <span class="badge badge-${m.status == 'now' ? 'now' : 'read'}">
@@ -712,8 +763,12 @@ async function load(reset = false) {
             // ИСПРАВЛЕНО: обложка с onerror fallback
             const coverId = 'cover-' + m.id;
             const phId    = 'ph-' + m.id;
-            const coverHtml = m.cover_display
-                ? `<img class="cover" id="${coverId}" src="${escapeHtml(m.cover_display)}" loading="lazy" alt=""
+            let coverSrc = m.cover_display || '';
+            if (coverSrc.startsWith('tg://')) {
+                coverSrc = '/api/cover/' + coverSrc.slice(5);
+            }
+            const coverHtml = coverSrc
+                ? `<img class="cover" id="${coverId}" src="${escapeHtml(coverSrc)}" loading="lazy" alt=""
                        onerror="document.getElementById('${coverId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`
                 : '';
             const phStyle = m.cover_display ? 'display:none' : 'display:flex';
