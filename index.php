@@ -485,7 +485,7 @@ if (preg_match('#^/api/pages/(\d+)$#', $path, $m)) {
             if (empty($pages)) {
                 $html = @file_get_contents($tUrl, false, $ctx);
                 if ($html) {
-                    preg_match_all('/<img[^>]+src=["\'']([^"\']+)["\''][^>]*>/i', $html, $matches);
+                    preg_match_all('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $matches);
                     foreach ($matches[1] ?? [] as $src) {
                         if (strpos($src, 'http') === 0) {
                             $pages[] = $src;
