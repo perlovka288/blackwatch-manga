@@ -857,8 +857,27 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .empty-page{text-align:center;padding:80px 20px;color:var(--muted);font-size:15px}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
-<div id="lib-loader" style="position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s,visibility 0.4s"><div style="position:relative;width:56px;height:56px"><?php for($i=0;$i<8;$i++):?><div style="position:absolute;width:10px;height:10px;border-radius:50%;background:var(--border2);animation:loaderSpin 1.2s linear infinite;animation-delay:<?=$i*0.15?>s;top:<?=[0,14,50,86,100,86,50,14][$i]>?%;left:<?=[50,86,100,86,50,14,0,14][$i]>?%;transform:translate(-50%,-50%)"></div><?php endfor;?></div></div>
-<style>@keyframes loaderSpin{0%,100%{opacity:0.15;transform:translate(-50%,-50%) scale(0.7)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.1);background:var(--text2)}}</style>
+<div id="lib-loader" style="position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s,visibility 0.4s">
+  <div class="loader-ring">
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+  </div>
+</div>
+<style>
+.loader-ring{position:relative;width:56px;height:56px}
+.loader-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--border2);animation:loaderSpin 1.2s linear infinite}
+.loader-dot:nth-child(1){top:0;left:50%;transform:translate(-50%,0);animation-delay:0s}
+.loader-dot:nth-child(2){top:15%;right:7%;animation-delay:.15s}
+.loader-dot:nth-child(3){top:50%;right:0;transform:translate(0,-50%);animation-delay:.3s}
+.loader-dot:nth-child(4){bottom:15%;right:7%;animation-delay:.45s}
+.loader-dot:nth-child(5){bottom:0;left:50%;transform:translate(-50%,0);animation-delay:.6s}
+.loader-dot:nth-child(6){bottom:15%;left:7%;animation-delay:.75s}
+.loader-dot:nth-child(7){top:50%;left:0;transform:translate(0,-50%);animation-delay:.9s}
+.loader-dot:nth-child(8){top:15%;left:7%;animation-delay:1.05s}
+@keyframes loaderSpin{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.1);background:var(--text2)}}
+</style>
 <header><div class="header-inner">
     <a href="/" class="logo">⬛ <span>BLACKWATCH</span></a>
     <a href="/" class="back-btn" style="margin-left:auto">← Каталог</a>
