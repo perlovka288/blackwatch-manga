@@ -216,7 +216,8 @@ if ($path==='/api/manga'){
     $now=date('Y-m-d H:i:s',time()-86400);$items=[];
     foreach($stmt as $m){
         $chapCount=0;if($m['is_series']){$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga_chapters WHERE manga_id=?");$cStmt->execute([$m['id']]);$chapCount=(int)$cStmt->fetchColumn();}
-        $items[]=['id'=>(int)$m['id'],'title'=>$m['title'],'likes'=>(int)$m['likes'],'dislikes'=>(int)$m['dislikes'],'cover_display'=>!empty($m['cover_imgbb_url'])?$m['cover_imgbb_url']:(!empty($m['file_id'])?'tg://'.$m['file_id']:null),'is_new'=>($m['created_at']>=$now),'is_series'=>(bool)$m['is_series'],'chapter_count'=>$chapCount];
+        $rStmt=$pdo->prepare("SELECT AVG(rating) as avg FROM manga_ratings WHERE manga_id=?");$rStmt->execute([$m['id']]);$rRow=$rStmt->fetch();$avgRating=$rRow['avg']?round((float)$rRow['avg'],1):0;
+        $items[]=['id'=>(int)$m['id'],'title'=>$m['title'],'likes'=>(int)$m['likes'],'dislikes'=>(int)$m['dislikes'],'cover_display'=>!empty($m['cover_imgbb_url'])?$m['cover_imgbb_url']:(!empty($m['file_id'])?'tg://'.$m['file_id']:null),'is_new'=>($m['created_at']>=$now),'is_series'=>(bool)$m['is_series'],'chapter_count'=>$chapCount,'avg_rating'=>$avgRating];
     }
     echo json_encode(['items'=>$items,'total'=>(int)$count->fetchColumn(),'limit'=>$limit]);exit;
 }
@@ -277,7 +278,7 @@ if ($path==='/api/status'&&$_SERVER['REQUEST_METHOD']==='POST'){
     echo json_encode(['success'=>false]);exit;
 }
 
-if ($path==='/api/library'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=?");$stmt->execute([$userId]);echo json_encode(['items'=>$stmt->fetchAll(),'user_id'=>$userId]);exit;}
+if ($path==='/api/library'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,s.status, COALESCE((SELECT AVG(r.rating) FROM manga_ratings r WHERE r.manga_id=m.id),0) as avg_rating FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=?");$stmt->execute([$userId]);$items=$stmt->fetchAll();foreach($items as &$row){$row['avg_rating']=round((float)$row['avg_rating'],1);}unset($row);echo json_encode(['items'=>$items,'user_id'=>$userId]);exit;}
 
 if ($path==='/api/suggest'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);$text=trim($input['text']??'');if(!$text){echo json_encode(['success'=>false,'error'=>'Пустое сообщение']);exit;}$pdo->prepare("INSERT INTO suggestions (user_id,text) VALUES (?,?)")->execute([$userId,$text]);foreach($hardcodedAdmins as $adminId)sendTgNotify($adminId,"💡 Новое предложение от #$userId:\n".mb_substr($text,0,400));echo json_encode(['success'=>true]);exit;}
 
@@ -731,10 +732,34 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 <div class="cstatus-modal" id="cstatus-modal">
 <div class="cstatus-box">
     <h3>+ Новый статус</h3>
+    <?php if(!empty($customStatuses)):?>
+    <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Мои статусы</div>
+        <?php foreach($customStatuses as $cs):?>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;padding:7px 10px;margin-bottom:5px">
+            <span style="font-size:12px;font-weight:600;color:<?=htmlspecialchars($cs['color'])?>"><?=htmlspecialchars($cs['name'])?></span>
+            <button onclick="confirmDeleteStatus(<?=(int)$cs['id']?>, '<?=htmlspecialchars(addslashes($cs['name']))?>')" style="width:22px;height:22px;border-radius:6px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:all 0.18s" title="Удалить статус">✕</button>
+        </div>
+        <?php endforeach;?>
+    </div>
+    <?php endif;?>
     <input type="text" id="cs-name" placeholder="Название статуса..." maxlength="50">
     <div class="color-row" id="cs-colors"></div>
-    <button style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px" onclick="saveCustomStatus()">Добавить</button>
-    <button style="width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);cursor:pointer;font-family:inherit" onclick="closeCStatusModal()">Отмена</button>
+    <button style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;transition:all 0.2s" onclick="saveCustomStatus()">Добавить</button>
+    <button style="width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);cursor:pointer;font-family:inherit;transition:all 0.2s" onclick="closeCStatusModal()">Отмена</button>
+</div>
+</div>
+
+<!-- Delete status confirm modal -->
+<div id="delete-status-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:600;display:none;align-items:center;justify-content:center;padding:16px">
+<div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;max-width:300px;width:100%;text-align:center">
+    <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px">Удалить статус?</div>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:20px">Вы действительно хотите удалить статус <strong id="del-status-name" style="color:var(--text)"></strong>?</div>
+    <div style="display:flex;gap:8px">
+        <button onclick="cancelDeleteStatus()" style="flex:1;padding:10px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);cursor:pointer;font-family:inherit;font-size:13px;transition:all 0.2s">Отмена</button>
+        <button onclick="executeDeleteStatus()" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:10px;color:var(--red);font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;transition:all 0.2s">Удалить</button>
+    </div>
 </div>
 </div>
 
@@ -759,6 +784,10 @@ function openCStatusModal(){const cr=document.getElementById('cs-colors');cr.inn
 function closeCStatusModal(){document.getElementById('cstatus-modal').classList.remove('open');}
 function pickColor(el,c){selectedColor=c;document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');}
 async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('✅ Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
+let _delStatusId=null;
+function confirmDeleteStatus(id,name){_delStatusId=id;document.getElementById('del-status-name').textContent=name;const m=document.getElementById('delete-status-modal');m.style.display='flex';}
+function cancelDeleteStatus(){_delStatusId=null;document.getElementById('delete-status-modal').style.display='none';}
+async function executeDeleteStatus(){if(!_delStatusId)return;try{await fetch(`/api/custom-statuses/${_delStatusId}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});showToast('🗑 Статус удалён');cancelDeleteStatus();setTimeout(()=>location.reload(),600);}catch(e){showToast('❌ Ошибка');}}
 <?php if($manga['is_series']):?>
 async function loadChapters(){try{const res=await fetch('/api/chapters/<?=$id?>');const data=await res.json();const list=document.getElementById('chapters-list');if(!data.chapters?.length){list.innerHTML='<div style="color:var(--muted);padding:8px 0">Глав пока нет</div>';return;}list.innerHTML=data.chapters.map(ch=>`<a class="chapter-item" href="/view-chapter/${ch.id}"><div><span class="ch-num">Глава ${ch.chapter_num}</span>${ch.title?`<span class="ch-title">${escapeHtml(ch.title)}</span>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ch.page_count>0?`<span class="ch-pages">${ch.page_count} стр.</span>`:''}<span class="ch-date">${new Date(ch.created_at).toLocaleDateString('ru-RU')}</span></div></a>`).join('');}catch(e){document.getElementById('chapters-list').innerHTML='<div style="color:var(--muted)">Ошибка загрузки</div>';}}
 loadChapters();
@@ -800,6 +829,10 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 @media(max-width:480px){.grid-view{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s}
 .card:hover{transform:translateY(-4px);border-color:var(--accent)}
+.card{transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1)}
+.card:active{transform:scale(0.97)!important}
+.back-btn{transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1)}
+.back-btn:hover{transform:translateX(-2px)}
 .cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
 .card-info{padding:10px}
@@ -824,8 +857,11 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 .empty-page{text-align:center;padding:80px 20px;color:var(--muted);font-size:15px}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
+<div id="lib-loader" style="position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s,visibility 0.4s"><div style="position:relative;width:56px;height:56px"><?php for($i=0;$i<8;$i++):?><div style="position:absolute;width:10px;height:10px;border-radius:50%;background:var(--border2);animation:loaderSpin 1.2s linear infinite;animation-delay:<?=$i*0.15?>s;top:<?=[0,14,50,86,100,86,50,14][$i]>?%;left:<?=[50,86,100,86,50,14,0,14][$i]>?%;transform:translate(-50%,-50%)"></div><?php endfor;?></div></div>
+<style>@keyframes loaderSpin{0%,100%{opacity:0.15;transform:translate(-50%,-50%) scale(0.7)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.1);background:var(--text2)}}</style>
 <header><div class="header-inner">
     <a href="/" class="logo">⬛ <span>BLACKWATCH</span></a>
+    <a href="/" class="back-btn" style="margin-left:auto">← Каталог</a>
 </div></header>
 <div class="wrap">
     <div class="lib-controls">
@@ -848,6 +884,8 @@ header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:r
 <script>
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+// Hide loader after page ready
+window.addEventListener('load',()=>{const l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
 const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
@@ -863,7 +901,7 @@ function renderLib(items){
         const groups={now:[],will:[],read:[],custom:{}};
         items.forEach(m=>{if(m.status==='now')groups.now.push(m);else if(m.status==='will')groups.will.push(m);else if(m.status==='read')groups.read.push(m);else{if(!groups.custom[m.status])groups.custom[m.status]=[];groups.custom[m.status].push(m);}});
         let html='';
-        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map(m=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;return `<a class="card" href="/read/${m.id}">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div></div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title} <span style="color:var(--muted);font-size:13px;font-weight:400">(${arr.length})</span></div><div class="grid-view">${cards}</div></div>`;};
+        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map(m=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;const rHtml=m.avg_rating>0?`<div style="font-size:9px;color:#f59e0b;margin-top:2px">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}<span style="color:var(--muted);margin-left:3px">${m.avg_rating}</span></div>`:'';return `<a class="card" href="/read/${m.id}">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div>${rHtml}</div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title} <span style="color:var(--muted);font-size:13px;font-weight:400">(${arr.length})</span></div><div class="grid-view">${cards}</div></div>`;};
         if(groups.now.length)html+=renderSection('📖','Читаю сейчас',groups.now);
         if(groups.will.length)html+=renderSection('🔖','Буду читать',groups.will);
         if(groups.read.length)html+=renderSection('✅','Прочитано',groups.read);
@@ -939,11 +977,12 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 /* ===== HEADER ===== */
 header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);background:rgba(12,12,12,0.92);border-bottom:1px solid var(--border)}
 .light header{background:rgba(247,247,247,0.92);border-bottom:1px solid var(--border)}
-.header-inner{max-width:1280px;margin:auto;height:58px;display:flex;align-items:center;gap:12px;padding:0 22px}
+.header-inner{max-width:1280px;margin:auto;height:58px;display:flex;align-items:center;gap:12px;padding:0 22px;position:relative}
 .logo{font-size:17px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);text-decoration:none;flex-shrink:0;letter-spacing:2px;text-transform:uppercase;opacity:0.9}
 .logo span{color:var(--text);opacity:1}
 /* Search */
-.search-wrap{flex:1;max-width:480px;position:relative}
+.search-wrap{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:440px;z-index:10}
+@media(max-width:768px){.search-wrap{position:relative;left:auto;transform:none;max-width:none;flex:1}}
 .search{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:9px 15px 9px 38px;transition:all 0.2s;outline:none;letter-spacing:0.1px}
 .light .search{background:rgba(0,0,0,0.03);border-color:var(--border)}
 .search:focus{border-color:var(--border2);background:rgba(255,255,255,0.06);box-shadow:0 0 0 3px rgba(255,255,255,0.04)}
@@ -1045,6 +1084,29 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .likes{margin-top:5px;color:var(--muted);font-size:10px;font-weight:400}
 .card-new-badge{position:absolute;top:7px;left:7px;background:rgba(248,113,113,0.9);color:#fff;font-size:8px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:0.5px;backdrop-filter:blur(4px)}
 .card-series-badge{display:inline-block;background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid var(--border);padding:2px 7px;border-radius:5px;font-size:8px;font-weight:600;margin-top:4px;letter-spacing:0.3px}
+/* Rating on card */
+.card-rating{display:flex;align-items:center;gap:3px;margin-top:4px}
+.card-stars{color:#f59e0b;font-size:9px;letter-spacing:0.5px}
+.card-rating-val{font-size:9px;color:var(--muted);font-weight:600}
+/* Button micro-animations */
+.hbtn{transition:all 0.18s cubic-bezier(0.34,1.56,0.64,1)!important}
+.hbtn:hover{transform:translateY(-2px)!important;box-shadow:0 4px 12px rgba(0,0,0,0.3)!important}
+.hbtn:active{transform:scale(0.96)!important}
+.filter-btn{transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1)!important}
+.filter-btn:hover{transform:translateY(-1px)}
+.filter-btn.active{transform:translateY(-1px)}
+.sarrow{transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1)!important}
+.sarrow:hover{transform:scale(1.12)!important}
+.sidebar-icon-btn{transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1)!important}
+.sidebar-icon-btn:hover{transform:translateX(-3px) scale(1.08)!important}
+.load-more{transition:all 0.22s cubic-bezier(0.34,1.56,0.64,1)!important}
+.load-more:hover{transform:translateY(-2px)!important}
+/* Manga card hover overlay */
+.card::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0.03);opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:12px}
+.card:hover::after{opacity:1}
+.card:hover .cover{transform:scale(1.03);transition:transform 0.35s ease}
+.cover{transition:transform 0.35s ease}
+.card:active{transform:scale(0.97)!important}
 
 /* ===== LOAD MORE ===== */
 .load-more{margin:32px auto;display:block;padding:11px 30px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;transition:all 0.18s;letter-spacing:0.3px}
@@ -1054,6 +1116,21 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 /* ===== TOAST ===== */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,0.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;box-shadow:var(--shadow);animation:toastIn 0.25s ease;white-space:nowrap;pointer-events:none;border:1px solid var(--border2);backdrop-filter:blur(12px)}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ===== PAGE LOADER ===== */
+#page-loader{position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s ease,visibility 0.4s ease}
+#page-loader.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.loader-ring{position:relative;width:56px;height:56px}
+.loader-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--border2);animation:loaderSpin 1.2s linear infinite}
+.loader-dot:nth-child(1){top:0;left:50%;transform:translateX(-50%);animation-delay:0s}
+.loader-dot:nth-child(2){top:14%;right:14%;animation-delay:0.15s}
+.loader-dot:nth-child(3){top:50%;right:0;transform:translateY(-50%);animation-delay:0.3s}
+.loader-dot:nth-child(4){bottom:14%;right:14%;animation-delay:0.45s}
+.loader-dot:nth-child(5){bottom:0;left:50%;transform:translateX(-50%);animation-delay:0.6s}
+.loader-dot:nth-child(6){bottom:14%;left:14%;animation-delay:0.75s}
+.loader-dot:nth-child(7){top:50%;left:0;transform:translateY(-50%);animation-delay:0.9s}
+.loader-dot:nth-child(8){top:14%;left:14%;animation-delay:1.05s}
+@keyframes loaderSpin{0%,100%{opacity:0.15;transform:scale(0.7)}50%{opacity:1;transform:scale(1.1);background:var(--text2)}}
 
 /* ===== MODAL BASE ===== */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:1000;display:none;align-items:center;justify-content:center;padding:12px;overflow-y:auto}
@@ -1240,6 +1317,16 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+
+<!-- PAGE LOADER -->
+<div id="page-loader">
+  <div class="loader-ring">
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+    <div class="loader-dot"></div><div class="loader-dot"></div>
+  </div>
+</div>
 
 <header>
 <div class="header-inner">
@@ -1582,7 +1669,7 @@ async function load(reset=false){
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
                     ${m.is_series?'<div class="card-series-badge">📚 Серия</div>':''}
-                    ${m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:''}
+                    ${m.avg_rating>0?`<div class="card-rating"><span class="card-stars">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}</span><span class="card-rating-val">${m.avg_rating}</span></div>`:(m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:'')}
                 </div>`;
             grid.appendChild(el);
         });
@@ -1809,6 +1896,8 @@ async function submitChapter(){
 }
 
 // ===== INIT =====
+// Hide page loader
+window.addEventListener('load',()=>{const l=document.getElementById('page-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 load();loadNew();loadContinue();checkAdmin();
 </script>
 </body>
