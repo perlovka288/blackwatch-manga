@@ -245,7 +245,7 @@ if (preg_match('#^/api/pages/(\d+)$#',$path,$m)){
 
 if ($path==='/api/progress'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id']))$userId=(int)$input['tg_user_id'];$mangaId=(int)($input['manga_id']??0);$pageNum=(int)($input['page_num']??1);$totalPages=(int)($input['total_pages']??0);$chapterId=isset($input['chapter_id'])?(int)$input['chapter_id']:null;if($mangaId&&$userId){$pdo->prepare("INSERT INTO reading_progress (user_id,manga_id,page_num,total_pages,chapter_id,updated_at) VALUES (?,?,?,?,?,NOW()) ON CONFLICT (user_id,manga_id) DO UPDATE SET page_num=EXCLUDED.page_num,total_pages=EXCLUDED.total_pages,chapter_id=EXCLUDED.chapter_id,updated_at=NOW()")->execute([$userId,$mangaId,$pageNum,$totalPages,$chapterId]);echo json_encode(['success'=>true]);}else{echo json_encode(['success'=>false]);}exit;}
 
-if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");$stmt->execute([$userId]);echo json_encode(['items'=>$stmt->fetchAll()]);exit;}
+if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status,mc.chapter_num FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id LEFT JOIN manga_chapters mc ON mc.id=rp.chapter_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");$stmt->execute([$userId]);echo json_encode(['items'=>$stmt->fetchAll()]);exit;}
 
 if (preg_match('#^/api/cover/(.+)$#',$path,$m)){$fileId=$m[1];$token=getenv('BOT_TOKEN');$ctx=stream_context_create(['http'=>['timeout'=>10]]);$res=@file_get_contents("https://api.telegram.org/bot{$token}/getFile?file_id=".urlencode($fileId),false,$ctx);if($res){$data=json_decode($res,true);if(!empty($data['result']['file_path'])){header("Location: https://api.telegram.org/file/bot{$token}/".$data['result']['file_path'],true,302);exit;}}http_response_code(404);exit;}
 
@@ -595,7 +595,8 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
 .cont-cover{width:100%;height:100%;object-fit:cover;display:block;min-height:84px}
 .cont-cover-ph{width:100%;min-height:84px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
 .cont-body{flex:1;padding:9px 10px;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
-.cont-title{font-size:11px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:6px}
+.cont-title{font-size:11px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:4px}
+.cont-chapter{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:600}
 .cont-bar-bg{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-bottom:6px}
 .cont-bar-fill{height:100%;background:linear-gradient(90deg,var(--orange),#ff6b35);border-radius:2px;transition:width 0.4s}
 .cont-btn{display:inline-block;padding:4px 10px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.35);border-radius:20px;color:var(--orange);font-size:10px;font-weight:700}
@@ -1121,9 +1122,11 @@ async function loadContinue(){
             const pct=m.total_pages>0?Math.round(m.page_num/m.total_pages*100):0;
             let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;
             const covId='cc'+m.id,phId='cp'+m.id;
-            return `<a class="cont-card" href="/read/${m.id}">
+            const href=m.chapter_id?`/view-chapter/${m.chapter_id}`:`/read/${m.id}`;
+            const btnLabel=m.chapter_id?(m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →'):(m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →');
+            return `<a class="cont-card" href="${href}">
                 <div class="cont-cover-wrap">${src?`<img class="cont-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="cont-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:18px">📖</span></div></div>
-                <div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${m.total_pages>0?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →'}</div></div>
+                <div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${m.chapter_id?`<div class="cont-chapter">Гл. ${escapeHtml(String(m.chapter_num||''))}</div>`:''}${m.total_pages>0?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${btnLabel}</div></div>
             </a>`;
         }).join('');
     }catch(e){}
