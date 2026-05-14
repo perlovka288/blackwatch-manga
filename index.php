@@ -245,7 +245,18 @@ if (preg_match('#^/api/pages/(\d+)$#',$path,$m)){
 
 if ($path==='/api/progress'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id']))$userId=(int)$input['tg_user_id'];$mangaId=(int)($input['manga_id']??0);$pageNum=(int)($input['page_num']??1);$totalPages=(int)($input['total_pages']??0);$chapterId=isset($input['chapter_id'])?(int)$input['chapter_id']:null;if($mangaId&&$userId){$pdo->prepare("INSERT INTO reading_progress (user_id,manga_id,page_num,total_pages,chapter_id,updated_at) VALUES (?,?,?,?,?,NOW()) ON CONFLICT (user_id,manga_id) DO UPDATE SET page_num=EXCLUDED.page_num,total_pages=EXCLUDED.total_pages,chapter_id=EXCLUDED.chapter_id,updated_at=NOW()")->execute([$userId,$mangaId,$pageNum,$totalPages,$chapterId]);echo json_encode(['success'=>true]);}else{echo json_encode(['success'=>false]);}exit;}
 
-if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status,mc.chapter_num FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id LEFT JOIN manga_chapters mc ON mc.id=rp.chapter_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");$stmt->execute([$userId]);echo json_encode(['items'=>$stmt->fetchAll()]);exit;}
+if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);
+$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,m.is_series,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status,mc.chapter_num FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id LEFT JOIN manga_chapters mc ON mc.id=rp.chapter_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");
+$stmt->execute([$userId]);$rows=$stmt->fetchAll();
+// Для серий без прогресса — подставляем первую главу
+foreach($rows as &$row){
+    if($row['is_series'] && empty($row['chapter_id'])){
+        $fStmt=$pdo->prepare("SELECT id,chapter_num,title,telegraph_url FROM manga_chapters WHERE manga_id=? ORDER BY chapter_num ASC LIMIT 1");
+        $fStmt->execute([$row['id']]);$first=$fStmt->fetch();
+        if($first){$row['chapter_id']=$first['id'];$row['chapter_num']=$first['chapter_num'];$row['chapter_title']=$first['title'];$row['chapter_telegraph']=$first['telegraph_url'];$row['is_first_chapter']=true;}
+    }
+}unset($row);
+echo json_encode(['items'=>$rows]);exit;}
 
 if (preg_match('#^/api/cover/(.+)$#',$path,$m)){$fileId=$m[1];$token=getenv('BOT_TOKEN');$ctx=stream_context_create(['http'=>['timeout'=>10]]);$res=@file_get_contents("https://api.telegram.org/bot{$token}/getFile?file_id=".urlencode($fileId),false,$ctx);if($res){$data=json_decode($res,true);if(!empty($data['result']['file_path'])){header("Location: https://api.telegram.org/file/bot{$token}/".$data['result']['file_path'],true,302);exit;}}http_response_code(404);exit;}
 
@@ -1123,10 +1134,18 @@ async function loadContinue(){
             let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;
             const covId='cc'+m.id,phId='cp'+m.id;
             const href=m.chapter_id?`/view-chapter/${m.chapter_id}`:`/read/${m.id}`;
-            const btnLabel=m.chapter_id?(m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →'):(m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →');
+            let btnLabel;
+            if(m.is_series){
+                if(m.is_first_chapter) btnLabel='Читать →';
+                else if(m.total_pages>0) btnLabel=`Гл.${m.chapter_num} · Стр. ${m.page_num}/${m.total_pages}`;
+                else btnLabel=`Гл. ${m.chapter_num||1}`;
+            } else {
+                btnLabel=m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →';
+            }
+            const chapterLabel=m.chapter_id&&!m.is_first_chapter?`<div class="cont-chapter">Гл. ${escapeHtml(String(m.chapter_num||''))}</div>`:(m.is_series&&m.is_first_chapter?'<div class="cont-chapter">Серия</div>':'');
             return `<a class="cont-card" href="${href}">
                 <div class="cont-cover-wrap">${src?`<img class="cont-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="cont-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:18px">📖</span></div></div>
-                <div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${m.chapter_id?`<div class="cont-chapter">Гл. ${escapeHtml(String(m.chapter_num||''))}</div>`:''}${m.total_pages>0?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${btnLabel}</div></div>
+                <div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${chapterLabel}${m.total_pages>0&&!m.is_first_chapter?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${btnLabel}</div></div>
             </a>`;
         }).join('');
     }catch(e){}
