@@ -159,7 +159,11 @@ try {
 # =========================
 $input  = file_get_contents('php://input');
 $update = json_decode($input, true);
-if (!$update) { http_response_code(200); echo 'OK'; exit; }
+if (!$update) {
+    $debugInfo = 'input_len=' . strlen($input) . ' method=' . ($_SERVER['REQUEST_METHOD'] ?? '?') . ' ct=' . ($_SERVER['CONTENT_TYPE'] ?? '?');
+    error_log('BOT_DEBUG: ' . $debugInfo . ' raw=' . substr($input, 0, 200));
+    http_response_code(200); echo 'OK'; exit;
+}
 
 # =========================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
