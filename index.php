@@ -15,13 +15,16 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapters (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, chapter_num FLOAT NOT NULL DEFAULT 1, title TEXT, telegraph_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapter_pages (id SERIAL PRIMARY KEY, chapter_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(50) NOT NULL, PRIMARY KEY (user_id, manga_id))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, chapter_id INT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_custom_statuses (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name VARCHAR(100) NOT NULL, color VARCHAR(20) NOT NULL DEFAULT '#7c5cff', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_ratings (user_id BIGINT NOT NULL, manga_id INT NOT NULL, rating INT NOT NULL CHECK(rating BETWEEN 1 AND 10), PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS admin_messages (id SERIAL PRIMARY KEY, text TEXT NOT NULL, sent_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_deleted BOOLEAN DEFAULT FALSE)");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
@@ -248,7 +251,6 @@ if ($path==='/api/progress'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Conten
 if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);
 $stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,m.is_series,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status,mc.chapter_num FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id LEFT JOIN manga_chapters mc ON mc.id=rp.chapter_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");
 $stmt->execute([$userId]);$rows=$stmt->fetchAll();
-// Для серий без прогресса — подставляем первую главу
 foreach($rows as &$row){
     if($row['is_series'] && empty($row['chapter_id'])){
         $fStmt=$pdo->prepare("SELECT id,chapter_num,title,telegraph_url FROM manga_chapters WHERE manga_id=? ORDER BY chapter_num ASC LIMIT 1");
@@ -262,13 +264,95 @@ if (preg_match('#^/api/cover/(.+)$#',$path,$m)){$fileId=$m[1];$token=getenv('BOT
 
 if ($path==='/api/vote'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id']))$userId=(int)$input['tg_user_id'];$mangaId=(int)($input['manga_id']??0);$voteType=$input['vote_type']??'';if($mangaId&&in_array($voteType,['like','dislike'])){$check=$pdo->prepare("SELECT vote_type FROM votes WHERE user_id=? AND manga_id=?");$check->execute([$userId,$mangaId]);$existing=$check->fetch();if($existing){if($existing['vote_type']!==$voteType){$pdo->prepare("UPDATE votes SET vote_type=? WHERE user_id=? AND manga_id=?")->execute([$voteType,$userId,$mangaId]);if($voteType=='like')$pdo->prepare("UPDATE manga SET likes=likes+1,dislikes=GREATEST(0,dislikes-1) WHERE id=?")->execute([$mangaId]);else $pdo->prepare("UPDATE manga SET dislikes=dislikes+1,likes=GREATEST(0,likes-1) WHERE id=?")->execute([$mangaId]);}}else{$pdo->prepare("INSERT INTO votes (user_id,manga_id,vote_type) VALUES (?,?,?)")->execute([$userId,$mangaId,$voteType]);if($voteType=='like')$pdo->prepare("UPDATE manga SET likes=likes+1 WHERE id=?")->execute([$mangaId]);else $pdo->prepare("UPDATE manga SET dislikes=dislikes+1 WHERE id=?")->execute([$mangaId]);}$stmt=$pdo->prepare("SELECT likes,dislikes FROM manga WHERE id=?");$stmt->execute([$mangaId]);$stats=$stmt->fetch();echo json_encode(['success'=>true,'likes'=>(int)$stats['likes'],'dislikes'=>(int)$stats['dislikes']]);exit;}echo json_encode(['success'=>false]);exit;}
 
-if ($path==='/api/status'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id'])){$userId=(int)$input['tg_user_id'];$_SESSION['tg_user_id']=$userId;if(!headers_sent())setcookie('tg_user_id',$userId,time()+86400*30,'/',''  ,false,false);}$mangaId=(int)($input['manga_id']??0);$status=$input['status']??'';if($mangaId&&in_array($status,['now','read','will'])){$pdo->prepare("INSERT INTO user_manga_status (user_id,manga_id,status) VALUES (?,?,?) ON CONFLICT (user_id,manga_id) DO UPDATE SET status=EXCLUDED.status")->execute([$userId,$mangaId,$status]);echo json_encode(['success'=>true,'user_id'=>$userId]);exit;}echo json_encode(['success'=>false]);exit;}
+if ($path==='/api/status'&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $input=json_decode(file_get_contents('php://input'),true);
+    $userId=getEffectiveUserId($pdo);
+    if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id'])){$userId=(int)$input['tg_user_id'];$_SESSION['tg_user_id']=$userId;if(!headers_sent())setcookie('tg_user_id',$userId,time()+86400*30,'/',''  ,false,false);}
+    $mangaId=(int)($input['manga_id']??0);$status=$input['status']??'';
+    if($mangaId&&$status){
+        $pdo->prepare("INSERT INTO user_manga_status (user_id,manga_id,status) VALUES (?,?,?) ON CONFLICT (user_id,manga_id) DO UPDATE SET status=EXCLUDED.status")->execute([$userId,$mangaId,$status]);
+        echo json_encode(['success'=>true,'user_id'=>$userId]);exit;
+    }
+    echo json_encode(['success'=>false]);exit;
+}
 
 if ($path==='/api/library'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);$stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=?");$stmt->execute([$userId]);echo json_encode(['items'=>$stmt->fetchAll(),'user_id'=>$userId]);exit;}
 
 if ($path==='/api/suggest'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);$text=trim($input['text']??'');if(!$text){echo json_encode(['success'=>false,'error'=>'Пустое сообщение']);exit;}$pdo->prepare("INSERT INTO suggestions (user_id,text) VALUES (?,?)")->execute([$userId,$text]);foreach($hardcodedAdmins as $adminId)sendTgNotify($adminId,"💡 Новое предложение от #$userId:\n".mb_substr($text,0,400));echo json_encode(['success'=>true]);exit;}
 
-if ($path==='/api/admin/stats'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mangaCount=(int)$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();$usersCount=(int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();$votesCount=(int)$pdo->query("SELECT COUNT(*) FROM votes")->fetchColumn();$pagesCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_pages")->fetchColumn();$chaptersCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_chapters")->fetchColumn();$newToday=(int)$pdo->query("SELECT COUNT(*) FROM manga WHERE created_at>=NOW()-INTERVAL '24 hours'")->fetchColumn();$topManga=$pdo->query("SELECT title,likes FROM manga ORDER BY likes DESC LIMIT 5")->fetchAll();$suggestCount=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='new'")->fetchColumn();echo json_encode(['manga_count'=>$mangaCount,'users_count'=>$usersCount,'votes_count'=>$votesCount,'pages_count'=>$pagesCount,'chapters_count'=>$chaptersCount,'new_today'=>$newToday,'top_manga'=>$topManga,'suggest_count'=>$suggestCount]);exit;}
+// API: Custom statuses
+if ($path==='/api/custom-statuses'){
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    $stmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");
+    $stmt->execute([$userId]);
+    echo json_encode(['items'=>$stmt->fetchAll()]);exit;
+}
+
+if ($path==='/api/custom-statuses/add'&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $input=json_decode(file_get_contents('php://input'),true);
+    $userId=getEffectiveUserId($pdo);
+    $name=trim($input['name']??'');$color=trim($input['color']??'#7c5cff');
+    if(!$name){echo json_encode(['success'=>false,'error'=>'Нет названия']);exit;}
+    $pdo->prepare("INSERT INTO user_custom_statuses (user_id,name,color) VALUES (?,?,?)")->execute([$userId,$name,$color]);
+    echo json_encode(['success'=>true]);exit;
+}
+
+if (preg_match('#^/api/custom-statuses/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    $pdo->prepare("DELETE FROM user_custom_statuses WHERE id=? AND user_id=?")->execute([(int)$m[1],$userId]);
+    echo json_encode(['success'=>true]);exit;
+}
+
+// API: Ratings
+if ($path==='/api/rate'&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $input=json_decode(file_get_contents('php://input'),true);
+    $userId=getEffectiveUserId($pdo);
+    if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id']))$userId=(int)$input['tg_user_id'];
+    $mangaId=(int)($input['manga_id']??0);$rating=(int)($input['rating']??0);
+    if($mangaId&&$rating>=1&&$rating<=10){
+        $pdo->prepare("INSERT INTO manga_ratings (user_id,manga_id,rating) VALUES (?,?,?) ON CONFLICT (user_id,manga_id) DO UPDATE SET rating=EXCLUDED.rating")->execute([$userId,$mangaId,$rating]);
+        $avg=$pdo->prepare("SELECT AVG(rating) as avg, COUNT(*) as cnt FROM manga_ratings WHERE manga_id=?");$avg->execute([$mangaId]);$r=$avg->fetch();
+        echo json_encode(['success'=>true,'avg'=>round((float)$r['avg'],1),'count'=>(int)$r['cnt']]);exit;
+    }
+    echo json_encode(['success'=>false]);exit;
+}
+
+if (preg_match('#^/api/rating/(\d+)$#',$path,$m)){
+    header('Content-Type: application/json');$mangaId=(int)$m[1];$userId=getEffectiveUserId($pdo);
+    $avg=$pdo->prepare("SELECT AVG(rating) as avg, COUNT(*) as cnt FROM manga_ratings WHERE manga_id=?");$avg->execute([$mangaId]);$r=$avg->fetch();
+    $myR=$pdo->prepare("SELECT rating FROM manga_ratings WHERE manga_id=? AND user_id=?");$myR->execute([$mangaId,$userId]);$my=$myR->fetchColumn();
+    echo json_encode(['avg'=>round((float)$r['avg'],1),'count'=>(int)$r['cnt'],'my_rating'=>$my?:(int)$my]);exit;
+}
+
+// API: Admin messages
+if ($path==='/api/admin/messages'&&$_SERVER['REQUEST_METHOD']==='GET'){
+    header('Content-Type: application/json');
+    $stmt=$pdo->query("SELECT id,text,sent_by,created_at FROM admin_messages WHERE is_deleted=FALSE ORDER BY created_at DESC");
+    echo json_encode(['items'=>$stmt->fetchAll()]);exit;
+}
+
+if ($path==='/api/admin/messages/send'&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+    $input=json_decode(file_get_contents('php://input'),true);$text=trim($input['text']??'');
+    if(!$text){echo json_encode(['success'=>false,'error'=>'Пустое сообщение']);exit;}
+    $pdo->prepare("INSERT INTO admin_messages (text,sent_by) VALUES (?,?)")->execute([$text,$userId]);
+    echo json_encode(['success'=>true]);exit;
+}
+
+if (preg_match('#^/api/admin/messages/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+    $pdo->prepare("UPDATE admin_messages SET is_deleted=TRUE WHERE id=?")->execute([(int)$m[1]]);
+    echo json_encode(['success'=>true]);exit;
+}
+
+if ($path==='/api/admin/stats'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mangaCount=(int)$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();$usersCount=(int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();$votesCount=(int)$pdo->query("SELECT COUNT(*) FROM votes")->fetchColumn();$pagesCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_pages")->fetchColumn();$chaptersCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_chapters")->fetchColumn();$newToday=(int)$pdo->query("SELECT COUNT(*) FROM manga WHERE created_at>=NOW()-INTERVAL '24 hours'")->fetchColumn();$topManga=$pdo->query("SELECT title,likes FROM manga ORDER BY likes DESC LIMIT 5")->fetchAll();$suggestCount=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='new'")->fetchColumn();$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();echo json_encode(['manga_count'=>$mangaCount,'users_count'=>$usersCount,'votes_count'=>$votesCount,'pages_count'=>$pagesCount,'chapters_count'=>$chaptersCount,'new_today'=>$newToday,'top_manga'=>$topManga,'suggest_count'=>$suggestCount,'msg_count'=>$msgCount]);exit;}
 
 if ($path==='/api/admin/archive'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$limit=20;$offset=$page*$limit;$total=(int)$pdo->query("SELECT COUNT(*) FROM bot_archive")->fetchColumn();$stmt=$pdo->prepare("SELECT * FROM bot_archive ORDER BY created_at DESC LIMIT $limit OFFSET $offset");$stmt->execute();echo json_encode(['items'=>$stmt->fetchAll(),'total'=>$total,'page'=>$page]);exit;}
 
@@ -402,49 +486,95 @@ if (preg_match('#^/read/(\d+)$#',$path,$m)){
     $userId=getEffectiveUserId($pdo);$stmtStatus=$pdo->prepare("SELECT status FROM user_manga_status WHERE user_id=? AND manga_id=?");$stmtStatus->execute([$userId,$id]);$currentStatus=$stmtStatus->fetchColumn()?:'';
     $pagesCount=0;if(!$manga['is_series']){$pagesStmt=$pdo->prepare("SELECT COUNT(*) FROM manga_pages WHERE manga_id=? AND page_url IS NOT NULL AND page_url!=''");$pagesStmt->execute([$id]);$pagesCount=(int)$pagesStmt->fetchColumn();}
     $coverSrc=!empty($manga['cover_imgbb_url'])?htmlspecialchars($manga['cover_imgbb_url']):(!empty($manga['file_id'])?'/api/cover/'.htmlspecialchars($manga['file_id']):'');
+    // Get all custom statuses for user
+    $customStatusesStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$customStatusesStmt->execute([$userId]);$customStatuses=$customStatusesStmt->fetchAll();
+    // Get rating
+    $ratingStmt=$pdo->prepare("SELECT AVG(rating) as avg, COUNT(*) as cnt FROM manga_ratings WHERE manga_id=?");$ratingStmt->execute([$id]);$ratingData=$ratingStmt->fetch();
+    $myRatingStmt=$pdo->prepare("SELECT rating FROM manga_ratings WHERE manga_id=? AND user_id=?");$myRatingStmt->execute([$id,$userId]);$myRating=$myRatingStmt->fetchColumn();
+    // Similar manga
+    $similarStmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,likes FROM manga WHERE id!=? ORDER BY likes DESC, RANDOM() LIMIT 10");$similarStmt->execute([$id]);$similarManga=$similarStmt->fetchAll();
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($manga['title'])?> | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07070b;--card:#101018;--border:#26263a;--text:#f3f3f7;--accent:#7c5cff;--muted:#8e8ea0}
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#f0f0f5;--accent:#7c5cff;--muted:#6b6b80;--green:#22c55e;--orange:#f59e0b}
+.dark{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#f0f0f5;--muted:#6b6b80}
+.light{--bg:#f5f5f7;--card:#ffffff;--border:#e0e0e8;--text:#1a1a2e;--muted:#8888a0;--accent:#6644ee}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
 .back{display:inline-flex;align-items:center;gap:8px;margin:20px 20px 0;color:var(--muted);text-decoration:none;font-size:14px;transition:color 0.2s}
 .back:hover{color:var(--accent)}
-.manga-page{max-width:800px;margin:0 auto;padding:16px 16px 60px}
+.manga-page{max-width:820px;margin:0 auto;padding:16px 16px 80px}
 .hero{display:flex;gap:24px;margin-bottom:28px}
 .cover-wrap{flex-shrink:0;width:160px}
-@media(max-width:500px){.cover-wrap{width:120px}.hero{gap:16px}}
-.cover-img{width:100%;border-radius:16px;aspect-ratio:2/3;object-fit:cover;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
-.cover-ph{width:100%;aspect-ratio:2/3;border-radius:16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);font-size:50px}
-.meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
-.manga-title{font-size:22px;font-weight:800;line-height:1.3}
-@media(max-width:500px){.manga-title{font-size:18px}}
-.badge-series{background:rgba(124,92,255,0.2);color:var(--accent);border:1px solid rgba(124,92,255,0.4);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;display:inline-block}
-.manga-desc{color:var(--muted);font-size:14px;line-height:1.7}
-.vote-row{display:flex;gap:10px;flex-wrap:wrap}
-.vote-btn{padding:8px 18px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer;font-family:inherit;transition:all 0.2s}
+@media(max-width:500px){.cover-wrap{width:110px}.hero{gap:14px}}
+.cover-img{width:100%;border-radius:14px;aspect-ratio:2/3;object-fit:cover;box-shadow:0 12px 40px rgba(0,0,0,0.5)}
+.cover-ph{width:100%;aspect-ratio:2/3;border-radius:14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);font-size:50px}
+.meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.manga-title{font-size:22px;font-weight:800;font-family:'Syne',sans-serif;line-height:1.2}
+@media(max-width:500px){.manga-title{font-size:17px}}
+.badge-series{background:rgba(124,92,255,0.15);color:var(--accent);border:1px solid rgba(124,92,255,0.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block}
+.manga-desc{color:var(--muted);font-size:13px;line-height:1.7}
+.vote-row{display:flex;gap:8px;flex-wrap:wrap}
+.vote-btn{padding:7px 16px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s}
 .vote-btn.like:hover,.vote-btn.like.active{background:rgba(76,175,80,0.15);border-color:#4caf50;color:#4caf50}
 .vote-btn.dislike:hover,.vote-btn.dislike.active{background:rgba(244,67,54,0.15);border-color:#f44336;color:#f44336}
-.status-row{display:flex;gap:8px;flex-wrap:wrap}
-.status-btn{padding:8px 14px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s}
+/* Star rating */
+.rating-block{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rate-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s}
+.rate-btn:hover{border-color:var(--accent);color:var(--accent)}
+.rate-avg{font-size:12px;color:var(--muted)}
+.star-icon{font-size:13px}
+/* Status */
+.status-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.status-btn{padding:6px 13px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s}
 .status-btn:hover{border-color:var(--accent);color:var(--text)}
-.active-now{background:rgba(255,165,0,0.15);border-color:#ffa500;color:#ffa500}
-.active-will{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
-.active-read{background:rgba(76,175,80,0.15);border-color:#4caf50;color:#4caf50}
-.read-section{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:16px}
-.read-section h3{font-size:15px;font-weight:700;margin-bottom:14px}
-.read-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:700;font-size:14px;transition:all 0.2s;margin-right:8px;margin-bottom:8px}
+.status-btn.active-now{background:rgba(255,165,0,0.15);border-color:#ffa500;color:#ffa500}
+.status-btn.active-will{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
+.status-btn.active-read{background:rgba(76,175,80,0.15);border-color:#4caf50;color:#4caf50}
+.status-btn.active-custom{border-width:2px}
+.status-add-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-family:inherit}
+.status-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.read-section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px}
+.read-section h3{font-size:14px;font-weight:700;margin-bottom:12px;font-family:'Syne',sans-serif}
+.read-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:50px;text-decoration:none;font-weight:700;font-size:13px;transition:all 0.2s;margin-right:8px;margin-bottom:8px}
 .read-primary{background:var(--accent);color:#fff}
-.read-primary:hover{background:#6a4ee0;transform:translateY(-2px)}
+.read-primary:hover{opacity:0.88;transform:translateY(-1px)}
 .read-secondary{background:rgba(255,255,255,0.06);color:var(--text);border:1px solid var(--border)}
 .read-secondary:hover{border-color:var(--accent)}
-.chapters-list{display:flex;flex-direction:column;gap:6px;max-height:400px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.chapter-item{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);transition:all 0.2s}
-.chapter-item:hover{border-color:var(--accent);background:rgba(124,92,255,0.07);transform:translateX(4px)}
-.ch-num{font-weight:700;font-size:13px}
-.ch-title{font-size:12px;color:var(--muted);margin-left:6px}
-.ch-date{font-size:11px;color:var(--muted)}
-.ch-pages{font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:2px 8px;border-radius:10px}
+.chapters-list{display:flex;flex-direction:column;gap:5px;max-height:400px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.chapter-item{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);transition:all 0.2s}
+.chapter-item:hover{border-color:var(--accent);background:rgba(124,92,255,0.06);transform:translateX(3px)}
+.ch-num{font-weight:700;font-size:13px}.ch-title{font-size:11px;color:var(--muted);margin-left:6px}.ch-date{font-size:10px;color:var(--muted)}.ch-pages{font-size:10px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:2px 7px;border-radius:8px}
+/* Similar manga */
+.similar-section{margin-top:24px}
+.similar-title{font-size:14px;font-weight:700;font-family:'Syne',sans-serif;margin-bottom:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-size:11px}
+.similar-list{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
+.similar-list::-webkit-scrollbar{display:none}
+.sim-card{flex:0 0 90px;text-decoration:none;color:var(--text);transition:all 0.2s}
+.sim-card:hover{transform:translateY(-3px)}
+.sim-cover{width:90px;height:120px;object-fit:cover;border-radius:10px;background:var(--card);border:1px solid var(--border);display:block}
+.sim-title{font-size:10px;font-weight:600;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
+/* Modal for rating */
+.rating-modal{position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:500;display:none;align-items:center;justify-content:center;padding:16px}
+.rating-modal.open{display:flex}
+.rating-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center;max-width:320px;width:100%}
+.rating-box h3{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:6px}
+.rating-box p{color:var(--muted);font-size:13px;margin-bottom:20px}
+.stars-row{display:flex;gap:6px;justify-content:center;margin-bottom:20px}
+.star-r{font-size:28px;cursor:pointer;transition:transform 0.15s;filter:grayscale(1);opacity:0.4}
+.star-r:hover,.star-r.active{filter:none;opacity:1;transform:scale(1.15)}
+.rate-submit{width:100%;padding:12px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.rate-cancel{width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;margin-top:8px}
+/* Custom status modal */
+.cstatus-modal{position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:500;display:none;align-items:center;justify-content:center;padding:16px}
+.cstatus-modal.open{display:flex}
+.cstatus-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;max-width:320px;width:100%}
+.cstatus-box h3{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:16px}
+.cstatus-box input{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;padding:10px 12px;margin-bottom:10px;font-family:inherit}
+.cstatus-box input:focus{outline:none;border-color:var(--accent)}
+.color-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.color-opt{width:26px;height:26px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:all 0.15s}
+.color-opt.sel{border-color:#fff;transform:scale(1.15)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(124,92,255,0.95);color:#fff;padding:10px 22px;border-radius:50px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(124,92,255,0.4);animation:toastIn 0.3s ease;white-space:nowrap}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
@@ -463,10 +593,21 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
                 <button class="vote-btn like" onclick="vote('like')">👍 <span id="likes"><?=(int)$manga['likes']?></span></button>
                 <button class="vote-btn dislike" onclick="vote('dislike')">👎 <span id="dislikes"><?=(int)$manga['dislikes']?></span></button>
             </div>
-            <div class="status-row">
+            <!-- Rating block -->
+            <div class="rating-block">
+                <button class="rate-btn" onclick="openRatingModal()">
+                    <span class="star-icon">★</span> Оценить
+                </button>
+                <span class="rate-avg" id="rate-avg-text"><?=($ratingData['cnt']>0)?round((float)$ratingData['avg'],1).' / 10 ('.(int)$ratingData['cnt'].' оценок)':'Нет оценок'?></span>
+            </div>
+            <div class="status-row" id="status-row">
                 <button class="status-btn <?=$currentStatus==='now'?'active-now':''?>" onclick="setStatus('now')">📖 Читаю</button>
                 <button class="status-btn <?=$currentStatus==='will'?'active-will':''?>" onclick="setStatus('will')">🔖 Буду читать</button>
                 <button class="status-btn <?=$currentStatus==='read'?'active-read':''?>" onclick="setStatus('read')">✅ Прочитано</button>
+                <?php foreach($customStatuses as $cs):?>
+                <button class="status-btn <?=$currentStatus===$cs['name']?'active-custom':''?>" style="<?=$currentStatus===$cs['name']?'background:'.htmlspecialchars($cs['color']).'22;border-color:'.htmlspecialchars($cs['color']).';color:'.htmlspecialchars($cs['color']):''?>" onclick="setStatus('<?=htmlspecialchars(addslashes($cs['name']))?>')"><?=htmlspecialchars($cs['name'])?></button>
+                <?php endforeach;?>
+                <button class="status-add-btn" onclick="openCStatusModal()" title="Добавить свой статус">+</button>
             </div>
         </div>
     </div>
@@ -481,14 +622,68 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
         <?php if(!$pagesCount&&!$manga['telegraph_url']):?><p style="color:var(--muted);font-size:14px">😔 Страницы ещё не добавлены</p><?php endif;?>
         <?php endif;?>
     </div>
+    <!-- Similar manga -->
+    <?php if(!empty($similarManga)):?>
+    <div class="similar-section">
+        <div class="similar-title">Похожая манга</div>
+        <div class="similar-list">
+            <?php foreach($similarManga as $sm):$smCover=!empty($sm['cover_imgbb_url'])?htmlspecialchars($sm['cover_imgbb_url']):'';?>
+            <a class="sim-card" href="/read/<?=(int)$sm['id']?>">
+                <?php if($smCover):?><img class="sim-cover" src="<?=$smCover?>" alt="" onerror="this.style.background='#1a1a2e'">
+                <?php else:?><div class="sim-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px">📖</div><?php endif;?>
+                <div class="sim-title"><?=htmlspecialchars($sm['title'])?></div>
+            </a>
+            <?php endforeach;?>
+        </div>
+    </div>
+    <?php endif;?>
 </div>
+
+<!-- Rating modal -->
+<div class="rating-modal" id="rating-modal">
+<div class="rating-box">
+    <h3>★ Оценить мангу</h3>
+    <p>Выбери оценку от 1 до 10</p>
+    <div class="stars-row" id="stars-row">
+        <?php for($i=1;$i<=10;$i++):?><span class="star-r <?=($myRating>=$i)?'active':''?>" data-val="<?=$i?>">★</span><?php endfor;?>
+    </div>
+    <button class="rate-submit" onclick="submitRating()">Сохранить оценку</button>
+    <button class="rate-cancel" onclick="closeRatingModal()">Отмена</button>
+</div>
+</div>
+
+<!-- Custom status modal -->
+<div class="cstatus-modal" id="cstatus-modal">
+<div class="cstatus-box">
+    <h3>+ Новый статус</h3>
+    <input type="text" id="cs-name" placeholder="Название статуса..." maxlength="50">
+    <div class="color-row" id="cs-colors"></div>
+    <button style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px" onclick="saveCustomStatus()">Добавить</button>
+    <button style="width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);cursor:pointer;font-family:inherit" onclick="closeCStatusModal()">Отмена</button>
+</div>
+</div>
+
 <script>
 const mangaId=<?=$id?>;
+let selectedRating=<?=(int)($myRating??0)?>;
+let selectedColor='#7c5cff';
+const colors=['#7c5cff','#22c55e','#f59e0b','#ef4444','#3b82f6','#ec4899','#06b6d4','#a3e635'];
+
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u){document.cookie='tg_user_id='+u+';max-age='+(86400*30)+';path=/';return u;}const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.innerText=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
 async function vote(type){try{const res=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,vote_type:type,tg_user_id:getTgUser()})});const data=await res.json();if(data.success){document.getElementById('likes').textContent=data.likes;document.getElementById('dislikes').textContent=data.dislikes;showToast(type==='like'?'👍 Лайк!':'👎 Дизлайк');}}catch(e){}}
-async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>b.className='status-btn');const map={now:'active-now',will:'active-will',read:'active-read'};const labels={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};event.target.classList.add(map[s]);showToast(labels[s]+' — добавлено!');}catch(e){}}
+async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';b.removeAttribute('style');});const map={'now':'active-now','will':'active-will','read':'active-read'};if(map[s])event.target.classList.add(map[s]);else{event.target.classList.add('active-custom');const clr=event.target.style.borderColor||'var(--accent)';event.target.style.cssText=`background:${clr}22;border-color:${clr};color:${clr};border-width:2px`;}showToast('✅ Статус обновлён');}catch(e){}}
+// Rating
+function openRatingModal(){document.getElementById('rating-modal').classList.add('open');initStars();}
+function closeRatingModal(){document.getElementById('rating-modal').classList.remove('open');}
+function initStars(){const stars=document.querySelectorAll('.star-r');stars.forEach(s=>{s.addEventListener('mouseenter',()=>{const v=parseInt(s.dataset.val);stars.forEach((st,i)=>{st.classList.toggle('active',i<v);});});s.addEventListener('click',()=>{selectedRating=parseInt(s.dataset.val);stars.forEach((st,i)=>{st.classList.toggle('active',i<selectedRating);});});});document.getElementById('stars-row').addEventListener('mouseleave',()=>{stars.forEach((st,i)=>{st.classList.toggle('active',i<selectedRating);});});}
+async function submitRating(){if(!selectedRating){showToast('Выбери оценку');return;}try{const res=await fetch('/api/rate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,rating:selectedRating,tg_user_id:getTgUser()})});const d=await res.json();if(d.success){document.getElementById('rate-avg-text').textContent=d.avg+' / 10 ('+d.count+' оценок)';showToast('★ Оценка '+selectedRating+' сохранена!');closeRatingModal();}}catch(e){}}
+// Custom statuses
+function openCStatusModal(){const cr=document.getElementById('cs-colors');cr.innerHTML=colors.map(c=>`<div class="color-opt${c===selectedColor?' sel':''}" style="background:${c}" data-c="${c}" onclick="pickColor(this,'${c}')"></div>`).join('');document.getElementById('cstatus-modal').classList.add('open');}
+function closeCStatusModal(){document.getElementById('cstatus-modal').classList.remove('open');}
+function pickColor(el,c){selectedColor=c;document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');}
+async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('✅ Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
 <?php if($manga['is_series']):?>
 async function loadChapters(){try{const res=await fetch('/api/chapters/<?=$id?>');const data=await res.json();const list=document.getElementById('chapters-list');if(!data.chapters?.length){list.innerHTML='<div style="color:var(--muted);padding:8px 0">Глав пока нет</div>';return;}list.innerHTML=data.chapters.map(ch=>`<a class="chapter-item" href="/view-chapter/${ch.id}"><div><span class="ch-num">Глава ${ch.chapter_num}</span>${ch.title?`<span class="ch-title">${escapeHtml(ch.title)}</span>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ch.page_count>0?`<span class="ch-pages">${ch.page_count} стр.</span>`:''}<span class="ch-date">${new Date(ch.created_at).toLocaleDateString('ru-RU')}</span></div></a>`).join('');}catch(e){document.getElementById('chapters-list').innerHTML='<div style="color:var(--muted)">Ошибка загрузки</div>';}}
 loadChapters();
@@ -497,47 +692,125 @@ loadChapters();
 
 if ($path==='/library'){
     $userId=getEffectiveUserId($pdo);
+    // Get custom statuses
+    $csStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$csStmt->execute([$userId]);$customStatuses=$csStmt->fetchAll();
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07070b;--card:#101018;--border:#26263a;--text:#f3f3f7;--accent:#7c5cff;--muted:#8e8ea0}
-*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
-header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:rgba(7,7,11,0.92);border-bottom:1px solid var(--border);padding:14px 20px}
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#f0f0f5;--accent:#7c5cff;--muted:#6b6b80;--green:#22c55e;--orange:#f59e0b}
+.light{--bg:#f5f5f7;--card:#ffffff;--border:#e0e0e8;--text:#1a1a2e;--muted:#8888a0;--accent:#6644ee}
+*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
+header{position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);background:rgba(10,10,15,0.92);border-bottom:1px solid var(--border);padding:12px 20px}
+.light header{background:rgba(245,245,247,0.92)}
 .header-inner{max-width:1200px;margin:auto;display:flex;align-items:center;gap:12px}
-.logo{font-size:22px;font-weight:800;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
-.back-btn{color:var(--muted);text-decoration:none;font-size:14px;margin-left:auto;display:flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid var(--border);border-radius:50px;transition:all 0.2s}
+.logo{font-size:20px;font-weight:800;font-family:'Syne',sans-serif;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
+.light .logo{background:linear-gradient(135deg,#1a1a2e 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.back-btn{color:var(--muted);text-decoration:none;font-size:13px;margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:50px;transition:all 0.2s}
 .back-btn:hover{border-color:var(--accent);color:var(--accent)}
 .wrap{max-width:1200px;margin:auto;padding:24px 20px 60px}
-.section{margin-bottom:32px}
-.section-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;margin-bottom:16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
-@media(max-width:480px){.grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.3s}
+/* Controls */
+.lib-controls{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.lib-search{flex:1;min-width:180px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:50px;color:var(--text);font-size:13px;padding:9px 16px;font-family:inherit}
+.lib-search:focus{outline:none;border-color:var(--accent)}
+.light .lib-search{background:rgba(0,0,0,0.04)}
+.sort-select{padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:50px;color:var(--text);font-size:13px;font-family:inherit;cursor:pointer}
+.light .sort-select{background:rgba(0,0,0,0.04)}
+.sort-select:focus{outline:none}
+.view-btns{display:flex;gap:4px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:50px;padding:3px}
+.light .view-btns{background:rgba(0,0,0,0.04)}
+.view-btn{padding:6px 12px;border-radius:40px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;transition:all 0.2s}
+.view-btn.active{background:var(--accent);color:#fff}
+/* GRID view */
+.grid-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px}
+@media(max-width:480px){.grid-view{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s}
 .card:hover{transform:translateY(-4px);border-color:var(--accent)}
 .cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.info{padding:12px}
-.title{font-size:12px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
-.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700;margin-top:6px}
+.card-info{padding:10px}
+.card-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:5px}
+/* LIST view */
+.list-view{display:flex;flex-direction:column;gap:6px}
+.list-item{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-decoration:none;color:var(--text);transition:all 0.2s}
+.list-item:hover{border-color:var(--accent);transform:translateX(3px)}
+.list-cover{width:44px;height:60px;object-fit:cover;border-radius:7px;flex-shrink:0;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);display:block}
+.list-cover-ph{width:44px;height:60px;border-radius:7px;flex-shrink:0;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);display:flex;align-items:center;justify-content:center;font-size:18px}
+.list-body{flex:1;min-width:0}
+.list-title{font-size:13px;font-weight:600;font-family:'Syne',sans-serif;margin-bottom:4px}
+.list-date{font-size:11px;color:var(--muted)}
+.list-status{margin-left:auto;flex-shrink:0}
+/* Badges */
+.badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:10px;font-weight:700}
 .badge-now{background:rgba(255,165,0,0.15);color:#ffa500;border:1px solid rgba(255,165,0,0.3)}
 .badge-will{background:rgba(124,92,255,0.15);color:var(--accent);border:1px solid rgba(124,92,255,0.3)}
 .badge-read{background:rgba(76,175,80,0.15);color:#4caf50;border:1px solid rgba(76,175,80,0.3)}
-.empty-page{text-align:center;padding:80px 20px;color:var(--muted);font-size:16px}
+.section-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.section{margin-bottom:28px}
+.empty-page{text-align:center;padding:80px 20px;color:var(--muted);font-size:15px}
 </style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
-<body><header><div class="header-inner"><a href="/" class="logo">⚫ BLACKWATCH</a><a href="/" class="back-btn">← Каталог</a></div></header>
-<div class="wrap"><div id="content"><div class="empty-page">📖 Загрузка...</div></div></div>
+<body>
+<header><div class="header-inner">
+    <a href="/" class="logo">⚫ BLACKWATCH</a>
+    <a href="/" class="back-btn">← Каталог</a>
+</div></header>
+<div class="wrap">
+    <div class="lib-controls">
+        <input class="lib-search" type="text" placeholder="🔍 Поиск в библиотеке..." id="lib-search" oninput="filterLib()">
+        <select class="sort-select" id="sort-select" onchange="filterLib()">
+            <option value="all">Все статусы</option>
+            <option value="popular">По популярности</option>
+            <option value="now">📖 Читаю</option>
+            <option value="read">✅ Прочитано</option>
+            <option value="will">🔖 Буду читать</option>
+            <?php foreach($customStatuses as $cs):?><option value="custom_<?=htmlspecialchars($cs['name'])?>"><?=htmlspecialchars($cs['name'])?></option><?php endforeach;?>
+        </select>
+        <div class="view-btns">
+            <button class="view-btn active" id="vb-grid" onclick="setView('grid')">⊞ Плитка</button>
+            <button class="view-btn" id="vb-list" onclick="setView('list')">☰ Список</button>
+        </div>
+    </div>
+    <div id="content"><div class="empty-page">📖 Загрузка...</div></div>
+</div>
 <script>
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
-function cardHtml(m){let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex">`:'';const phStyle=src?'display:none':'display:flex';const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};return `<a class="card" href="/read/${m.id}">${imgHtml}<div class="cover-ph" id="${phId}" style="${phStyle}"><span style="font-size:40px">📖</span></div><div class="info"><div class="title">${escapeHtml(m.title)}</div><span class="badge ${badgeMap[m.status]||''}">${labelMap[m.status]||''}</span></div></a>`;}
-function sectionHtml(icon,title,items){return `<div class="section"><div class="section-title"><span>${icon}</span>${title} <span style="color:var(--muted);font-size:14px;font-weight:400">(${items.length})</span></div><div class="grid">${items.length>0?items.map(cardHtml).join(''):'<div style="color:var(--muted);padding:16px 0">Список пуст</div>'}</div></div>`;}
-async function load(){try{const res=await fetch('/api/library?tg_user_id='+getTgUser());const data=await res.json();const content=document.getElementById('content');if(!data.items?.length){content.innerHTML='<div class="empty-page">📭 У вас пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';return;}const now=data.items.filter(i=>i.status==='now'),will=data.items.filter(i=>i.status==='will'),read=data.items.filter(i=>i.status==='read');let html='';if(now.length)html+=sectionHtml('📖','Читаю сейчас',now);if(will.length)html+=sectionHtml('🔖','Буду читать',will);if(read.length)html+=sectionHtml('✅','Прочитано',read);if(!html)html='<div class="empty-page">📭 Список пуст<br><br><a href="/" style="color:var(--accent)">Перейти в каталог →</a></div>';content.innerHTML=html;}catch(e){document.getElementById('content').innerHTML='<div class="empty-page">❌ Ошибка загрузки</div>';}}
+let allItems=[],currentView='grid';
+const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
+const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
+function getBadgeClass(status){return badgeMap[status]||'badge-will';}
+function getBadgeLabel(status){return labelMap[status]||status;}
+function setView(v){currentView=v;document.getElementById('vb-grid').classList.toggle('active',v==='grid');document.getElementById('vb-list').classList.toggle('active',v==='list');renderLib(allItems);}
+function filterLib(){const q=document.getElementById('lib-search').value.toLowerCase();const sort=document.getElementById('sort-select').value;let items=allItems.filter(m=>m.title.toLowerCase().includes(q));if(sort==='now')items=items.filter(m=>m.status==='now');else if(sort==='will')items=items.filter(m=>m.status==='will');else if(sort==='read')items=items.filter(m=>m.status==='read');else if(sort==='popular')items=items.sort((a,b)=>(b.likes||0)-(a.likes||0));else if(sort.startsWith('custom_')){const sn=sort.slice(7);items=items.filter(m=>m.status===sn);}renderLib(items);}
+function renderLib(items){
+    const c=document.getElementById('content');
+    if(!items.length){c.innerHTML='<div class="empty-page">📭 Ничего не найдено<br><br><a href="/" style="color:var(--accent)">Каталог →</a></div>';return;}
+    if(currentView==='grid'){
+        // Group by status
+        const groups={now:[],will:[],read:[],custom:{}};
+        items.forEach(m=>{if(m.status==='now')groups.now.push(m);else if(m.status==='will')groups.will.push(m);else if(m.status==='read')groups.read.push(m);else{if(!groups.custom[m.status])groups.custom[m.status]=[];groups.custom[m.status].push(m);}});
+        let html='';
+        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map(m=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;return `<a class="card" href="/read/${m.id}">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div></div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title} <span style="color:var(--muted);font-size:13px;font-weight:400">(${arr.length})</span></div><div class="grid-view">${cards}</div></div>`;};
+        if(groups.now.length)html+=renderSection('📖','Читаю сейчас',groups.now);
+        if(groups.will.length)html+=renderSection('🔖','Буду читать',groups.will);
+        if(groups.read.length)html+=renderSection('✅','Прочитано',groups.read);
+        Object.entries(groups.custom).forEach(([name,arr])=>{if(arr.length)html+=renderSection('🏷',''+name,arr);});
+        c.innerHTML=html||'<div class="empty-page">📭 Список пуст</div>';
+    } else {
+        // List view
+        let html='<div class="list-view">';
+        items.forEach(m=>{let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='lc'+m.id,phId='lp'+m.id;html+=`<a class="list-item" href="/read/${m.id}">${src?`<img class="list-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="list-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}">📖</div><div class="list-body"><div class="list-title">${escapeHtml(m.title)}</div><div class="list-date">${getBadgeLabel(m.status)}</div></div><div class="list-status"><span class="badge ${getBadgeClass(m.status)}">${getBadgeLabel(m.status)}</span></div></a>`;});
+        html+='</div>';c.innerHTML=html;
+    }
+}
+async function load(){try{const res=await fetch('/api/library?tg_user_id='+getTgUser());const data=await res.json();const content=document.getElementById('content');if(!data.items?.length){content.innerHTML='<div class="empty-page">📭 Пока нет добавленной манги<br><br><a href="/" style="color:var(--accent)">В каталог →</a></div>';return;}allItems=data.items;renderLib(allItems);}catch(e){document.getElementById('content').innerHTML='<div class="empty-page">❌ Ошибка загрузки</div>';}}
 load();
 </script></body></html><?php exit;}
 
 # ========================= HOME =========================
 $total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
+// Count unread admin messages
+$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -545,279 +818,330 @@ $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BLACKWATCH | Manga Reader</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07070b;--card:#101018;--card2:#0d0d15;--border:#1e1e2e;--text:#f3f3f7;--muted:#6b6b80;--accent:#7c5cff;--accent2:#a78bfa;--green:#22c55e;--orange:#f59e0b;--red:#ef4444;--blue:#3b82f6}
+/* ===== THEME VARS ===== */
+:root{
+    --bg:#0a0a0f;
+    --bg2:#0f0f18;
+    --card:#12121a;
+    --card2:#0e0e16;
+    --border:#1e1e2e;
+    --text:#f0f0f5;
+    --muted:#5e5e78;
+    --accent:#7c5cff;
+    --accent2:#a78bfa;
+    --green:#22c55e;
+    --orange:#f59e0b;
+    --red:#ef4444;
+    --blue:#3b82f6;
+    --shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+.light{
+    --bg:#f4f4f8;
+    --bg2:#eeeef5;
+    --card:#ffffff;
+    --card2:#f8f8fc;
+    --border:#dddde8;
+    --text:#1a1a2e;
+    --muted:#8888a0;
+    --accent:#6644ee;
+    --accent2:#8866ff;
+    --shadow:0 4px 20px rgba(0,0,0,0.08);
+}
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 60%);pointer-events:none;z-index:0}
+.light body::before{background:radial-gradient(ellipse at 50% 0%,rgba(102,68,238,0.03) 0%,transparent 60%)}
 
-/* HEADER */
-header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(7,7,11,0.94);border-bottom:1px solid var(--border);padding:0 20px}
-.header-inner{max-width:1400px;margin:auto;height:60px;display:flex;align-items:center;gap:12px}
-.logo{font-size:20px;font-weight:900;background:linear-gradient(135deg,#fff 0%,var(--accent) 70%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;text-decoration:none;letter-spacing:-0.5px;flex-shrink:0}
-.search{flex:1;min-width:0;max-width:400px;padding:9px 18px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:50px;color:var(--text);font-size:14px;font-family:inherit;transition:all 0.2s}
-.search:focus{outline:none;border-color:var(--accent);background:rgba(124,92,255,0.06)}
-.search::placeholder{color:var(--muted)}
-.header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
-.hbtn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:50px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap;font-family:inherit;text-decoration:none;border:none}
-.hbtn-ghost{background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted)}
-.hbtn-ghost:hover{border-color:var(--accent);color:var(--text)}
-.hbtn-lib{background:var(--accent);color:#fff}
-.hbtn-lib:hover{background:#6a4ee0;transform:translateY(-1px)}
-.hbtn-tg{background:rgba(37,183,255,0.1);border:1px solid rgba(37,183,255,0.25);color:#25b7ff}
-.hbtn-tg:hover{background:rgba(37,183,255,0.2)}
-.hbtn-admin{background:linear-gradient(135deg,rgba(124,92,255,0.9),rgba(168,139,250,0.9));color:#fff;display:none}
-.hbtn-admin:hover{opacity:0.88;transform:translateY(-1px)}
-.hbtn-admin.visible{display:flex}
+/* ===== HEADER ===== */
+header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(10,10,15,0.88);border-bottom:1px solid rgba(255,255,255,0.04)}
+.light header{background:rgba(244,244,248,0.88);border-bottom:1px solid var(--border)}
+.header-inner{max-width:1280px;margin:auto;height:60px;display:flex;align-items:center;gap:10px;padding:0 20px}
+.logo{font-size:20px;font-weight:800;font-family:'Syne',sans-serif;background:linear-gradient(135deg,#fff 0%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;flex-shrink:0;letter-spacing:-0.5px}
+.light .logo{background:linear-gradient(135deg,#1a1a2e 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+/* Search */
+.search-wrap{flex:1;max-width:500px;position:relative}
+.search{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);border-radius:50px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:9px 16px 9px 38px;transition:all 0.25s;outline:none}
+.light .search{background:rgba(0,0,0,0.04);border-color:var(--border)}
+.search:focus{border-color:var(--accent);background:rgba(124,92,255,0.05);box-shadow:0 0 0 3px rgba(124,92,255,0.1)}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+/* Search dropdown */
+.search-dropdown{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:300;overflow:hidden;max-height:360px;overflow-y:auto;display:none;opacity:0;transform:translateY(-6px);transition:opacity 0.2s ease,transform 0.2s ease}
+.search-dropdown.open{display:block;opacity:1;transform:translateY(0)}
+.sd-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background 0.15s;text-decoration:none;color:var(--text)}
+.sd-item:hover{background:rgba(124,92,255,0.08)}
+.sd-cover{width:36px;height:48px;object-fit:cover;border-radius:7px;flex-shrink:0;background:var(--border)}
+.sd-cover-ph{width:36px;height:48px;border-radius:7px;flex-shrink:0;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);display:flex;align-items:center;justify-content:center;font-size:16px}
+.sd-info{flex:1;min-width:0}
+.sd-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sd-meta{font-size:10px;color:var(--muted);margin-top:2px}
+/* Header actions */
+.header-actions{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.hbtn{padding:8px 14px;border-radius:50px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:all 0.2s;display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;white-space:nowrap}
+.light .hbtn{border-color:var(--border);background:rgba(0,0,0,0.04)}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hbtn-admin{display:none}
+.hbtn-admin.visible{display:inline-flex}
+/* Theme toggle */
+.theme-btn{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:var(--text);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;flex-shrink:0}
+.light .theme-btn{border-color:var(--border);background:rgba(0,0,0,0.04)}
+.theme-btn:hover{border-color:var(--accent)}
 
-/* MAIN WRAP */
-.wrap{max-width:1400px;margin:auto;padding:24px 20px 80px}
+/* ===== SIDEBAR ICONS (messages & support) ===== */
+.sidebar-icons{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:150;display:flex;flex-direction:column;gap:6px;padding-right:0}
+.sidebar-rail{background:rgba(30,30,46,0.9);backdrop-filter:blur(16px);border:1px solid var(--border);border-right:none;border-radius:14px 0 0 14px;padding:10px 8px;display:flex;flex-direction:column;gap:8px}
+.light .sidebar-rail{background:rgba(255,255,255,0.9)}
+.sidebar-icon-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;position:relative;text-decoration:none}
+.light .sidebar-icon-btn{background:rgba(0,0,0,0.03)}
+.sidebar-icon-btn:hover{border-color:var(--accent);color:var(--accent);transform:scale(1.05)}
+.sidebar-badge{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#ef4444;border:2px solid var(--bg);animation:pulse-red 2s infinite}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
+@media(max-width:600px){.sidebar-icons{display:none}}
 
-/* НОВИНКИ */
-.new-section{background:linear-gradient(135deg,rgba(124,92,255,0.07) 0%,rgba(13,13,21,0.95) 100%);border:1px solid rgba(124,92,255,0.2);border-radius:24px;padding:20px 20px 16px;margin-bottom:24px;position:relative;overflow:hidden}
+/* ===== MAIN WRAP ===== */
+.wrap{max-width:1280px;margin:auto;padding:20px 20px 80px;position:relative;z-index:1}
+
+/* ===== NEW MANGA SLIDER ===== */
+.new-section{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:18px 20px 16px;margin-bottom:20px;position:relative;overflow:hidden}
 .new-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2),transparent)}
 .sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.sec-title{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800}
-.sec-count{background:rgba(124,92,255,0.15);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(124,92,255,0.3)}
-.slider-wrap{position:relative}
-.slider-outer{overflow:hidden;border-radius:12px}
-.slider-track{display:flex;gap:12px;transition:transform 0.35s cubic-bezier(.4,0,.2,1);will-change:transform}
-.sarrow{position:absolute;top:50%;transform:translateY(-50%);z-index:10;width:34px;height:34px;border-radius:50%;background:rgba(7,7,11,0.95);border:1px solid var(--border);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;user-select:none}
-.sarrow:hover{background:var(--accent);border-color:var(--accent)}
-.sarrow.left{left:-14px}.sarrow.right{right:-14px}
+.sec-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;font-family:'Syne',sans-serif}
+.sec-count{background:rgba(124,92,255,0.15);color:var(--accent);border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700}
+.slider-wrap{position:relative;display:flex;align-items:center;gap:8px}
+.slider-outer{flex:1;overflow:hidden}
+.slider-track{display:flex;gap:10px;transition:transform 0.35s cubic-bezier(0.4,0,0.2,1)}
+.slide-card{flex:0 0 120px;text-decoration:none;color:var(--text);transition:all 0.2s}
+.slide-card:hover{transform:translateY(-3px)}
+.slide-cover{width:120px;height:160px;object-fit:cover;border-radius:11px;display:block;background:var(--border)}
+.slide-cover-ph{width:120px;height:160px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a);font-size:30px}
+.slide-title{font-size:10px;font-weight:600;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
+.sarrow{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;flex-shrink:0}
+.sarrow:hover{border-color:var(--accent);color:var(--accent)}
 .sarrow.hidden{opacity:0;pointer-events:none}
-.slide-card{flex:0 0 130px;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s;position:relative}
-.slide-card:hover{transform:translateY(-4px);border-color:var(--accent)}
-.slide-cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
-.slide-cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.slide-info{padding:8px}
-.slide-title{font-size:10px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
-.new-badge{position:absolute;top:6px;right:6px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:8px;font-weight:800;padding:2px 6px;border-radius:6px;text-transform:uppercase}
 
-/* ПРОДОЛЖИТЬ */
-.cont-section{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px 20px;margin-bottom:24px;position:relative;overflow:hidden}
+/* ===== CONTINUE READING ===== */
+.cont-section{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:18px 20px;margin-bottom:20px;position:relative;overflow:hidden}
 .cont-section::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--orange),#ff6b35,transparent)}
 .cont-list{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .cont-list::-webkit-scrollbar{display:none}
-.cont-card{flex:0 0 220px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);display:flex;transition:all 0.25s}
+.cont-card{flex:0 0 210px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;overflow:hidden;text-decoration:none;color:var(--text);display:flex;transition:all 0.22s}
 .cont-card:hover{border-color:var(--orange);transform:translateY(-2px)}
-.cont-cover-wrap{width:56px;flex-shrink:0}
-.cont-cover{width:100%;height:100%;object-fit:cover;display:block;min-height:84px}
-.cont-cover-ph{width:100%;min-height:84px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.cont-body{flex:1;padding:9px 10px;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
-.cont-title{font-size:11px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:4px}
-.cont-chapter{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:600}
-.cont-bar-bg{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-bottom:6px}
+.cont-cover-wrap{width:52px;flex-shrink:0}
+.cont-cover{width:100%;height:100%;object-fit:cover;display:block;min-height:78px}
+.cont-cover-ph{width:100%;min-height:78px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
+.cont-body{flex:1;padding:8px 10px;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
+.cont-title{font-size:11px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:3px}
+.cont-chapter{font-size:10px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.cont-bar-bg{height:2px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-bottom:5px}
 .cont-bar-fill{height:100%;background:linear-gradient(90deg,var(--orange),#ff6b35);border-radius:2px;transition:width 0.4s}
-.cont-btn{display:inline-block;padding:4px 10px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.35);border-radius:20px;color:var(--orange);font-size:10px;font-weight:700}
+.cont-btn{display:inline-block;padding:3px 9px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.3);border-radius:20px;color:var(--orange);font-size:9px;font-weight:700}
 
-/* FILTERS */
-.filters{display:flex;gap:8px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
-.filter-btn{padding:7px 16px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:inherit}
+/* ===== FILTERS ===== */
+.filters{display:flex;gap:7px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.filter-btn{padding:7px 15px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:'Inter',sans-serif}
 .filter-btn:hover{border-color:var(--accent);color:var(--text)}
 .filter-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.stats-label{color:var(--muted);font-size:13px;margin-left:auto}
+.stats-label{color:var(--muted);font-size:12px;margin-left:auto}
 
-/* GRID */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:18px}
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px}}
-@media(max-width:380px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.3s;position:relative}
-.card:hover{transform:translateY(-5px);border-color:var(--accent);box-shadow:0 8px 30px rgba(124,92,255,0.12)}
+/* ===== GRID ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:16px}
+@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:11px}}
+@media(max-width:380px){.grid{grid-template-columns:repeat(2,1fr);gap:9px}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s;position:relative;animation:cardIn 0.3s ease both}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.card:hover{transform:translateY(-5px);border-color:var(--accent);box-shadow:0 10px 30px rgba(124,92,255,0.12)}
 .cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#0a0a0a)}
-.info{padding:12px}
-.title{font-size:12px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
-.likes{margin-top:6px;color:#ffd166;font-size:11px}
-.card-badges{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
-.card-new-badge{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:8px;font-weight:800;padding:2px 7px;border-radius:7px;text-transform:uppercase}
-.card-series-badge{background:rgba(124,92,255,0.18);color:var(--accent);border:1px solid rgba(124,92,255,0.3);padding:2px 8px;border-radius:8px;font-size:9px;font-weight:700}
-.load-more{margin:36px auto;display:block;padding:13px 36px;background:rgba(124,92,255,0.12);border:1px solid rgba(124,92,255,0.35);color:var(--accent);border-radius:50px;cursor:pointer;font-size:14px;font-weight:700;font-family:inherit;transition:all 0.2s}
+.info{padding:10px}
+.title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;font-family:'Syne',sans-serif}
+.likes{margin-top:5px;color:#ffd166;font-size:10px}
+.card-new-badge{position:absolute;top:7px;left:7px;background:linear-gradient(135deg,#ff4d6d,#ff6b35);color:#fff;font-size:8px;font-weight:800;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:0.3px}
+.card-series-badge{display:inline-block;background:rgba(124,92,255,0.15);color:var(--accent);border:1px solid rgba(124,92,255,0.25);padding:2px 7px;border-radius:7px;font-size:8px;font-weight:700;margin-top:4px}
+
+/* ===== LOAD MORE ===== */
+.load-more{margin:36px auto;display:block;padding:12px 32px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);color:var(--accent);border-radius:50px;cursor:pointer;font-size:13px;font-weight:700;font-family:'Inter',sans-serif;transition:all 0.2s}
 .load-more:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 .empty{text-align:center;padding:80px 20px;color:var(--muted)}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(124,92,255,0.95);color:#fff;padding:10px 22px;border-radius:50px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(124,92,255,0.4);animation:toastIn 0.3s ease;white-space:nowrap;pointer-events:none}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(124,92,255,0.95);color:#fff;padding:10px 22px;border-radius:50px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(124,92,255,0.4);animation:toastIn 0.3s ease;white-space:nowrap;pointer-events:none}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
 /* ===== MODAL BASE ===== */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:1000;display:none;align-items:center;justify-content:center;padding:12px;overflow-y:auto}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:1000;display:none;align-items:center;justify-content:center;padding:12px;overflow-y:auto}
 .modal-overlay.open{display:flex}
-.modal{background:var(--card2);border:1px solid var(--border);border-radius:24px;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:28px;position:relative;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.modal{background:var(--card2);border:1px solid var(--border);border-radius:22px;width:100%;max-width:580px;max-height:92vh;overflow-y:auto;padding:26px;position:relative;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .modal::-webkit-scrollbar{width:4px}
 .modal::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px}
-.modal-x{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.modal-x{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
 .modal-x:hover{background:rgba(255,80,80,0.15);color:#ff5050;border-color:#ff5050}
-.modal-head{font-size:20px;font-weight:800;background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
-.modal-sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+.modal-head{font-size:19px;font-weight:800;font-family:'Syne',sans-serif;background:linear-gradient(135deg,var(--text) 0%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:5px}
+.modal-sub{color:var(--muted);font-size:12px;margin-bottom:20px}
 
 /* FORM */
-.fg{margin-bottom:16px}
-.fl{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px}
-.fi,.fta,.fsel{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:inherit;font-size:14px;padding:11px 14px;transition:border-color 0.2s;resize:none}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.fi,.fta,.fsel{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:10px 13px;transition:border-color 0.2s;resize:none}
+.light .fi,.light .fta,.light .fsel{background:rgba(0,0,0,0.03)}
 .fi:focus,.fta:focus,.fsel:focus{outline:none;border-color:var(--accent)}
-.fta{min-height:76px}
-.toggle-row{display:flex;gap:8px;margin-bottom:16px}
-.toggle-btn{flex:1;padding:9px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s}
-.toggle-btn.active{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
-.upload-zone{border:2px dashed var(--border);border-radius:14px;padding:20px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(124,92,255,0.04)}
+.fta{min-height:72px}
+.toggle-row{display:flex;gap:7px;margin-bottom:14px}
+.toggle-btn{flex:1;padding:8px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s}
+.toggle-btn.active{background:rgba(124,92,255,0.12);border-color:var(--accent);color:var(--accent)}
+.upload-zone{border:2px dashed var(--border);border-radius:13px;padding:18px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(124,92,255,0.03)}
 .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.upload-icon{font-size:28px;margin-bottom:6px}
-.upload-text{font-size:12px;color:var(--muted);line-height:1.5}
-.upload-preview{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;justify-content:center}
-.preview-img{width:54px;height:72px;object-fit:cover;border-radius:6px}
-.preview-count{font-size:12px;font-weight:600;color:var(--accent);padding:7px;background:rgba(124,92,255,0.08);border-radius:8px;text-align:center;width:100%}
-.file-tabs{display:flex;gap:6px;margin-bottom:12px}
-.file-tab{flex:1;padding:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;text-align:center}
-.file-tab.active{background:rgba(124,92,255,0.15);border-color:var(--accent);color:var(--accent)}
+.upload-icon{font-size:26px;margin-bottom:5px}
+.upload-text{font-size:11px;color:var(--muted);line-height:1.5}
+.upload-preview{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;justify-content:center}
+.preview-img{width:52px;height:70px;object-fit:cover;border-radius:6px}
+.preview-count{font-size:11px;font-weight:600;color:var(--accent);padding:6px;background:rgba(124,92,255,0.08);border-radius:7px;text-align:center;width:100%}
+.file-tabs{display:flex;gap:5px;margin-bottom:10px}
+.file-tab{flex:1;padding:7px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;text-align:center}
+.file-tab.active{background:rgba(124,92,255,0.12);border-color:var(--accent);color:var(--accent)}
 .file-panel{display:none}.file-panel.active{display:block}
-.upbar{height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:18px;display:none}
+.upbar{height:4px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-bottom:16px;display:none}
 .upbar.active{display:block}
 .upbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;width:0;transition:width 0.3s}
-.sbtn{width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.sbtn{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
 .sbtn:hover:not(:disabled){opacity:0.88;transform:translateY(-1px)}
 .sbtn:disabled{opacity:0.45;cursor:not-allowed}
 .sbtn.loading .btn-text{opacity:0.7}
-.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;display:none}
+.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;display:none}
 .sbtn.loading .spinner{display:block}
-.result-banner{border-radius:12px;padding:0;max-height:0;overflow:hidden;transition:all 0.3s;font-size:13px;line-height:1.6}
-.result-banner.open{padding:12px 16px;max-height:300px;margin-top:14px}
-.result-banner.success{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.35);color:#86efac}
-.result-banner.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.35);color:#fca5a5}
+.result-banner{border-radius:11px;padding:0;max-height:0;overflow:hidden;transition:all 0.3s;font-size:12px;line-height:1.6}
+.result-banner.open{padding:11px 14px;max-height:300px;margin-top:12px}
+.result-banner.success{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:#86efac}
+.result-banner.error{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:#fca5a5}
 .result-banner a{color:inherit;font-weight:700}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ===== ADMIN MODAL ===== */
-.admin-modal{max-width:980px}
-.admin-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:22px;overflow-x:auto;scrollbar-width:none;gap:0}
+.admin-modal{max-width:960px}
+.admin-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;scrollbar-width:none;gap:0}
 .admin-tabs::-webkit-scrollbar{display:none}
-.atab{padding:11px 16px;background:transparent;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
+.atab{padding:10px 14px;background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
 .atab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .atab:hover{color:var(--text)}
 .apanel{display:none}.apanel.active{display:block}
-
-/* STATS LAYOUT — 2 колонки как на референсе */
-.stats-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.stats-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
 @media(max-width:640px){.stats-layout{grid-template-columns:1fr}}
-.stats-left{}
-.stats-right{}
-
-/* Переключатель Статистика/Архив */
-.stats-tabs{display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.04);border-radius:12px;padding:3px;border:1px solid var(--border)}
-.stab{flex:1;padding:8px;background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border-radius:9px;transition:all 0.2s;text-align:center}
+.stats-tabs{display:flex;gap:0;margin-bottom:14px;background:rgba(255,255,255,0.03);border-radius:11px;padding:3px;border:1px solid var(--border)}
+.stab{flex:1;padding:7px;background:transparent;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;border-radius:8px;transition:all 0.2s;text-align:center}
 .stab.active{background:var(--accent);color:#fff}
-
-/* Карточки статистики */
-.scard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.scard{background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:14px;padding:14px 12px;text-align:center;transition:all 0.2s;cursor:default}
+.scard-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.scard{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:13px;padding:13px 11px;text-align:center;transition:all 0.2s}
 .scard:hover{border-color:var(--accent)}
-.scard-num{font-size:26px;font-weight:900;color:var(--accent);line-height:1}
-.scard-lbl{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500}
+.scard-num{font-size:24px;font-weight:900;color:var(--accent);line-height:1;font-family:'Syne',sans-serif}
+.scard-lbl{font-size:10px;color:var(--muted);margin-top:3px;font-weight:500}
 .scard.green .scard-num{color:var(--green)}
 .scard.orange .scard-num{color:var(--orange)}
-
-/* Кнопка редактировать мангу */
-.edit-manga-btn{width:100%;padding:11px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.35);border-radius:12px;color:#ef4444;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px}
-.edit-manga-btn:hover{background:rgba(239,68,68,0.2)}
-
-/* Топ список */
-.top-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
-.top-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px}
-.top-name{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
-.top-likes{font-size:12px;color:#ffd166;font-weight:700;flex-shrink:0}
-
-/* Архив */
-.archive-list{display:flex;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.aitem{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-.atype{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;margin-bottom:3px}
-.atext{font-size:12px;color:var(--text)}
-.adate{font-size:10px;color:var(--muted);margin-top:3px}
-
-/* Правая колонка — Функционал */
-.func-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px}
-.func-btn{width:100%;padding:13px 14px;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px}
+.edit-manga-btn{width:100%;padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:11px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:9px}
+.edit-manga-btn:hover{background:rgba(239,68,68,0.18)}
+.top-list{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.top-row{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:9px}
+.top-name{font-size:11px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
+.top-likes{font-size:11px;color:#ffd166;font-weight:700;flex-shrink:0}
+.archive-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.aitem{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:9px;padding:9px 11px}
+.atype{font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;margin-bottom:2px}
+.atext{font-size:11px;color:var(--text)}.adate{font-size:9px;color:var(--muted);margin-top:2px}
+.func-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:9px}
+.func-btn{width:100%;padding:12px 13px;border:none;border-radius:13px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:9px}
 .func-btn:hover{opacity:0.88;transform:translateY(-1px)}
 .func-btn:last-child{margin-bottom:0}
 .func-green{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}
-.func-orange-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.func-orange-row .func-btn{margin-bottom:0;font-size:12px;padding:11px 8px}
+.func-orange-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px}
+.func-orange-row .func-btn{margin-bottom:0;font-size:11px;padding:10px 7px}
 .func-amber{background:linear-gradient(135deg,#d97706,#b45309);color:#fff}
 .func-blue{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
-
-/* Список админов */
+.func-purple{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+/* Admin messages */
+.msg-list{display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;scrollbar-width:thin}
+.msg-item{background:rgba(124,92,255,0.06);border:1px solid rgba(124,92,255,0.2);border-radius:12px;padding:12px 14px}
+.msg-text{font-size:13px;color:var(--text);margin-bottom:6px;line-height:1.5}
+.msg-meta{font-size:10px;color:var(--muted)}
+.msg-del{padding:3px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:7px;color:#ef4444;font-size:10px;cursor:pointer;font-family:inherit;font-weight:600;float:right;margin-left:8px}
+.msg-compose{margin-bottom:14px}
+.msg-compose textarea{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:10px 13px;min-height:80px;resize:none}
+.msg-compose textarea:focus{outline:none;border-color:var(--accent)}
+.msg-send-btn{padding:9px 20px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;margin-top:7px}
 .admins-wrap{margin-top:4px}
-.admin-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
-.admin-row{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:6px}
+.admin-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px}
+.admin-row{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:5px}
 .admin-row:last-child{margin-bottom:0}
-.admin-tag{font-size:13px;font-weight:600;color:var(--accent2)}
-.admin-id{font-size:11px;color:var(--muted)}
-.copy-btn{padding:4px 10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.25);border-radius:8px;color:var(--accent);font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;flex-shrink:0}
-.copy-btn:hover{background:rgba(124,92,255,0.25)}
-
-/* Предложки в правой колонке */
-.suggest-preview{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;margin-top:8px}
-.sug-item{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;flex-direction:column;gap:4px}
-.sug-text{font-size:12px;color:var(--text);line-height:1.5}
-.sug-meta{font-size:10px;color:var(--muted)}
-.sug-actions{display:flex;gap:6px;margin-top:4px}
-.sug-read-btn{padding:3px 10px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:7px;color:var(--green);font-size:10px;cursor:pointer;font-family:inherit;font-weight:600}
-
-/* Редактирование — поиск */
-.esearch-row{display:flex;gap:8px;margin-bottom:14px}
-.esearch-inp{flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:inherit;font-size:13px;padding:9px 13px}
+.admin-tag{font-size:12px;font-weight:600;color:var(--accent2)}
+.admin-id{font-size:10px;color:var(--muted)}
+.copy-btn{padding:3px 9px;background:rgba(124,92,255,0.08);border:1px solid rgba(124,92,255,0.2);border-radius:7px;color:var(--accent);font-size:10px;cursor:pointer;font-family:inherit;font-weight:600;transition:all 0.2s;flex-shrink:0}
+.copy-btn:hover{background:rgba(124,92,255,0.2)}
+.suggest-preview{display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;scrollbar-width:thin;margin-top:7px}
+.sug-item{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 11px;display:flex;flex-direction:column;gap:3px}
+.sug-text{font-size:11px;color:var(--text);line-height:1.5}
+.sug-meta{font-size:9px;color:var(--muted)}
+.sug-read-btn{padding:2px 9px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;color:var(--green);font-size:9px;cursor:pointer;font-family:inherit;font-weight:600;margin-top:3px;align-self:flex-start}
+.esearch-row{display:flex;gap:7px;margin-bottom:12px}
+.esearch-inp{flex:1;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;padding:8px 12px}
+.light .esearch-inp{background:rgba(0,0,0,0.03)}
 .esearch-inp:focus{outline:none;border-color:var(--accent)}
-.esearch-btn{padding:9px 18px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px}
-.manga-edit-list{display:flex;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto;scrollbar-width:thin}
-.meitem{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:11px;padding:9px 12px;cursor:pointer;transition:all 0.2s}
+.esearch-btn{padding:8px 16px;background:var(--accent);border:none;border-radius:11px;color:#fff;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px}
+.manga-edit-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;scrollbar-width:thin}
+.meitem{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:8px 11px;cursor:pointer;transition:all 0.2s}
 .meitem:hover{border-color:var(--accent)}
-.me-cover{width:36px;height:50px;object-fit:cover;border-radius:6px;flex-shrink:0;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:18px}
-.me-title{font-size:12px;font-weight:600;flex:1;min-width:0}
-.me-meta{font-size:10px;color:var(--muted)}
-.edit-form-wrap{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:16px;padding:18px}
-.ef{margin-bottom:14px}
-.ef label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
-.ef input,.ef textarea{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:13px;padding:9px 12px;transition:border-color 0.2s;resize:none}
+.me-cover{width:34px;height:46px;object-fit:cover;border-radius:5px;flex-shrink:0;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;font-size:16px}
+.me-title{font-size:11px;font-weight:600;flex:1;min-width:0}
+.me-meta{font-size:9px;color:var(--muted)}
+.edit-form-wrap{background:rgba(255,255,255,0.01);border:1px solid var(--border);border-radius:14px;padding:16px}
+.ef{margin-bottom:12px}
+.ef label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.ef input,.ef textarea{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;padding:8px 11px;transition:border-color 0.2s;resize:none}
 .ef input:focus,.ef textarea:focus{outline:none;border-color:var(--accent)}
-.ef textarea{min-height:72px}
-.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.save-btn{padding:9px 22px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;transition:all 0.2s}
-.del-btn{padding:9px 18px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.35);border-radius:10px;color:#ef4444;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px}
-.back-edit-btn{padding:9px 16px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;margin-bottom:14px}
-.ch-admin-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
-.ch-admin-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:7px 11px}
-.del-ch-btn{padding:3px 9px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:7px;color:#ef4444;font-size:10px;cursor:pointer;font-family:inherit}
-.pagination{display:flex;gap:7px;margin-top:14px;justify-content:center;align-items:center}
-.page-btn{padding:7px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px}
+.ef textarea{min-height:66px}
+.edit-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.save-btn{padding:8px 20px;background:var(--accent);border:none;border-radius:9px;color:#fff;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px;transition:all 0.2s}
+.del-btn{padding:8px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:9px;color:#ef4444;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px}
+.back-edit-btn{padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--muted);font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px;margin-bottom:12px}
+.ch-admin-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.ch-admin-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:7px;padding:6px 10px}
+.del-ch-btn{padding:2px 8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;color:#ef4444;font-size:9px;cursor:pointer;font-family:inherit}
+.pagination{display:flex;gap:6px;margin-top:12px;justify-content:center;align-items:center}
+.page-btn{padding:6px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-family:'Inter',sans-serif;font-size:11px}
 .page-btn:hover{border-color:var(--accent);color:var(--accent)}
-
-/* Добавить главу */
-.add-ch-form{background:rgba(124,92,255,0.04);border:1px solid rgba(124,92,255,0.18);border-radius:12px;padding:14px;margin-top:12px}
-.add-ch-form h4{font-size:12px;font-weight:700;margin-bottom:10px;color:var(--accent)}
-.ch-inputs{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.ch-inputs input{flex:1;min-width:100px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:inherit;font-size:13px;padding:8px 11px}
+.add-ch-form{background:rgba(124,92,255,0.03);border:1px solid rgba(124,92,255,0.15);border-radius:11px;padding:13px;margin-top:10px}
+.add-ch-form h4{font-size:11px;font-weight:700;margin-bottom:9px;color:var(--accent)}
+.ch-inputs{display:flex;gap:7px;margin-bottom:9px;flex-wrap:wrap}
+.ch-inputs input{flex:1;min-width:90px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;padding:7px 10px}
 .ch-inputs input:focus{outline:none;border-color:var(--accent)}
 
-/* MOBILE */
+/* ===== MESSAGES MODAL ===== */
+.messages-modal{max-width:500px}
+
+/* ===== SUPPORT MODAL ===== */
+.support-modal{max-width:460px}
+
+/* ===== MOBILE ===== */
 @media(max-width:768px){
-    .header-inner{height:54px}
-    .search{max-width:none;flex:1}
+    .header-inner{height:52px;padding:0 14px}
+    .search-wrap{max-width:none;flex:1}
     .hbtn-tg{display:none}
-    .wrap{padding:16px 14px 70px}
-    .new-section,.cont-section{padding:16px 14px 12px;border-radius:18px}
-    .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
-    .card{border-radius:14px}
+    .wrap{padding:14px 12px 70px}
+    .new-section,.cont-section{padding:14px 12px 12px;border-radius:16px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
     .admin-modal{max-width:100%}
     .stats-layout{grid-template-columns:1fr}
     .func-orange-row{grid-template-columns:1fr 1fr}
-    .modal{padding:20px 16px;border-radius:20px}
+    .modal{padding:20px 16px;border-radius:18px}
 }
 @media(max-width:480px){
-    .logo{font-size:17px}
+    .logo{font-size:16px}
     .hbtn-lib span{display:none}
     .hbtn-admin span{display:none}
-    .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
-    .cont-card{flex:0 0 190px}
-    .slide-card{flex:0 0 110px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:9px}
+    .cont-card{flex:0 0 185px}
+    .slide-card{flex:0 0 105px}
+    .slide-cover{width:105px;height:140px}
+    .slide-cover-ph{width:105px;height:140px}
     .scard-grid{grid-template-columns:1fr 1fr}
 }
 </style>
@@ -828,8 +1152,13 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
 <header>
 <div class="header-inner">
     <a href="/" class="logo">⚫ BLACKWATCH</a>
-    <input class="search" type="text" placeholder="🔍 Поиск..." id="search" oninput="onSearch(this.value)">
+    <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search" type="text" placeholder="Поиск манги..." id="search" oninput="onSearch(this.value)" autocomplete="off">
+        <div class="search-dropdown" id="search-dropdown"></div>
+    </div>
     <div class="header-actions">
+        <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
         <a href="/library" class="hbtn hbtn-lib">📚 <span>Библиотека</span></a>
         <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="hbtn hbtn-tg">🤖 Бот</a>
@@ -837,6 +1166,19 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
     </div>
 </div>
 </header>
+
+<!-- SIDEBAR ICONS -->
+<div class="sidebar-icons">
+    <div class="sidebar-rail">
+        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения">
+            💬
+            <?php if($msgCount>0):?><span class="sidebar-badge" id="msg-badge"></span><?php endif;?>
+        </button>
+        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
+            🛟
+        </button>
+    </div>
+</div>
 
 <div class="wrap">
     <!-- НОВИНКИ -->
@@ -872,10 +1214,9 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
 <div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeAddModal()">
 <div class="modal">
     <button class="modal-x" onclick="closeAddModal()">✕</button>
-    <div class="modal-head">➕ Добавить мангу</div>
-    <p class="modal-sub">Заполни данные — обложка, страницы, описание</p>
+    <div class="modal-head">Добавить мангу</div>
+    <div class="modal-sub">Загрузи обложку и страницы</div>
     <div class="fg">
-        <label class="fl">Тип</label>
         <div class="toggle-row">
             <button class="toggle-btn active" id="type-single" onclick="setMangaType('single')">📄 Обычная</button>
             <button class="toggle-btn" id="type-series" onclick="setMangaType('series')">📚 Серия</button>
@@ -903,7 +1244,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
                 <div class="upload-zone" id="zip-zone">
                     <input type="file" id="zip-input" accept=".zip" onchange="onZipChange(this)">
                     <div class="upload-icon">📦</div>
-                    <div class="upload-text"><strong>ZIP-архив страниц</strong><br>Сортировка по дате внутри архива</div>
+                    <div class="upload-text"><strong>ZIP-архив страниц</strong><br>Сортировка по дате</div>
                     <div class="upload-preview" id="zip-preview"></div>
                 </div>
             </div>
@@ -923,6 +1264,28 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
 </div>
 </div>
 
+<!-- MODAL: MESSAGES -->
+<div class="modal-overlay" id="messages-modal" onclick="if(event.target===this)closeMessagesModal()">
+<div class="modal messages-modal">
+    <button class="modal-x" onclick="closeMessagesModal()">✕</button>
+    <div class="modal-head">💬 Сообщения</div>
+    <div class="modal-sub">Сообщения от администрации</div>
+    <div class="msg-list" id="msg-list"><div style="color:var(--muted);text-align:center;padding:20px;font-size:13px">Загрузка...</div></div>
+</div>
+</div>
+
+<!-- MODAL: SUPPORT -->
+<div class="modal-overlay" id="support-modal" onclick="if(event.target===this)closeSupportModal()">
+<div class="modal support-modal">
+    <button class="modal-x" onclick="closeSupportModal()">✕</button>
+    <div class="modal-head">🛟 Поддержка</div>
+    <div class="modal-sub">Напиши нам — мы ответим!</div>
+    <div class="fg"><label class="fl">Твоё сообщение</label><textarea class="fta" id="support-text" placeholder="Опиши проблему или задай вопрос..." style="min-height:110px"></textarea></div>
+    <button class="sbtn" onclick="sendSupport()"><span class="btn-text">📨 Отправить</span><div class="spinner"></div></button>
+    <div class="result-banner" id="support-result"></div>
+</div>
+</div>
+
 <!-- MODAL: ADMIN PANEL -->
 <div class="modal-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
 <div class="modal admin-modal">
@@ -930,61 +1293,64 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
     <div class="modal-head">⚙️ Админ-панель</div>
     <div class="admin-tabs">
         <button class="atab active" onclick="switchAdminTab('stats')">📊 Статистика</button>
+        <button class="atab" onclick="switchAdminTab('messages')">📨 Сообщения</button>
         <button class="atab" onclick="switchAdminTab('edit')">✏️ Редактирование</button>
         <button class="atab" onclick="switchAdminTab('add-chapter')">📚 Добавить главу</button>
     </div>
 
-    <!-- STATS + FUNCTIONAL -->
+    <!-- STATS -->
     <div class="apanel active" id="panel-stats">
         <div class="stats-layout">
-            <!-- ЛЕВАЯ КОЛОНКА: статистика + архив -->
             <div class="stats-left">
                 <div class="stats-tabs">
                     <button class="stab active" onclick="showStatsView('grid')">📊 Статистика</button>
                     <button class="stab" onclick="showStatsView('archive')">🗂 Архив</button>
                 </div>
-                <!-- Статы -->
                 <div id="stats-grid-view">
-                    <div class="scard-grid" id="stat-grid">
-                        <div style="color:var(--muted);grid-column:1/-1;padding:10px 0;font-size:13px">Загрузка...</div>
-                    </div>
-                    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Топ по лайкам</div>
+                    <div class="scard-grid" id="stat-grid"><div style="color:var(--muted);grid-column:1/-1;padding:10px 0;font-size:12px">Загрузка...</div></div>
+                    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Топ по лайкам</div>
                     <div class="top-list" id="top-list"></div>
                     <button class="edit-manga-btn" onclick="switchAdminTab('edit')">✏️ Редактировать мангу</button>
                 </div>
-                <!-- Архив -->
                 <div id="stats-archive-view" style="display:none">
-                    <div class="archive-list" id="archive-list"><div style="color:var(--muted);font-size:13px">Загрузка...</div></div>
+                    <div class="archive-list" id="archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
                     <div class="pagination" id="archive-pagination"></div>
                 </div>
             </div>
-
-            <!-- ПРАВАЯ КОЛОНКА: функционал + админы + предложки -->
             <div class="stats-right">
                 <div class="func-title">Функционал</div>
-                <button class="func-btn func-green" onclick="closeAdminPanel();openAddModal()">➕ Добавить мангу<br><small style="font-size:11px;opacity:0.8">ZIP, обложка, описание</small></button>
+                <button class="func-btn func-green" onclick="closeAdminPanel();openAddModal()">➕ Добавить мангу<br><small style="font-size:10px;opacity:0.8">ZIP, обложка, описание</small></button>
                 <div class="func-orange-row">
-                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter');document.querySelectorAll('.atab').forEach((t,i)=>{t.classList.toggle('active',i===2)})">📚 Добавить серию (окно)</button>
-                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📑 Добавить главу (окно)</button>
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📚 Добавить серию</button>
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📑 Добавить главу</button>
                 </div>
-                <button class="func-btn func-blue" id="suggest-btn" onclick="switchAdminTab('stats');showStatsView('suggestions')">💡 Предложки <span id="suggest-badge" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:11px"></span></button>
-
-                <div class="admins-wrap" style="margin-top:16px">
+                <button class="func-btn func-purple" onclick="switchAdminTab('messages')">📨 Написать всем <span id="suggest-badge" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <button class="func-btn func-blue" id="suggest-btn" onclick="showStatsView('suggestions')">💡 Предложки <span id="suggest-badge2" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <div class="admins-wrap" style="margin-top:14px">
                     <div class="admin-lbl">Список админов</div>
-                    <div id="admins-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+                    <div id="admins-list"><div style="color:var(--muted);font-size:11px">Загрузка...</div></div>
                 </div>
             </div>
         </div>
-
-        <!-- Предложки — скрытый вид -->
-        <div id="stats-suggestions-view" style="display:none;margin-top:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <div style="font-size:13px;font-weight:700">💡 Предложения пользователей</div>
-                <button onclick="showStatsView('grid')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px">← Назад</button>
+        <div id="stats-suggestions-view" style="display:none;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                <div style="font-size:12px;font-weight:700">💡 Предложения пользователей</div>
+                <button onclick="showStatsView('grid')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">← Назад</button>
             </div>
-            <div class="suggest-preview" id="suggest-list"><div style="color:var(--muted);font-size:13px">Загрузка...</div></div>
+            <div class="suggest-preview" id="suggest-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
             <div class="pagination" id="suggest-pagination"></div>
         </div>
+    </div>
+
+    <!-- MESSAGES panel -->
+    <div class="apanel" id="panel-messages">
+        <div class="msg-compose">
+            <label class="fl" style="margin-bottom:6px">Написать всем пользователям</label>
+            <textarea id="admin-msg-text" placeholder="Введи сообщение..."></textarea>
+            <button class="msg-send-btn" onclick="sendAdminMessage()">📨 Отправить всем</button>
+        </div>
+        <div class="func-title" style="margin-top:14px">Отправленные сообщения</div>
+        <div class="msg-list" id="admin-msg-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Загрузка...</div></div>
     </div>
 
     <!-- EDIT -->
@@ -993,7 +1359,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
             <input class="esearch-inp" id="edit-search-input" type="text" placeholder="🔍 Поиск манги...">
             <button class="esearch-btn" onclick="searchMangaEdit()">Найти</button>
         </div>
-        <div class="manga-edit-list" id="manga-edit-list"><div style="color:var(--muted);padding:12px 0;font-size:13px">Введи название или оставь пустым</div></div>
+        <div class="manga-edit-list" id="manga-edit-list"><div style="color:var(--muted);padding:10px 0;font-size:12px">Введи название или оставь пустым</div></div>
         <div class="pagination" id="edit-pagination"></div>
         <div id="edit-manga-form-wrap" style="display:none">
             <button class="back-edit-btn" onclick="backToMangaList()">← Назад к списку</button>
@@ -1009,7 +1375,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
                 <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
                 <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
             </div>
-            <div class="manga-edit-list" id="ch-manga-list" style="max-height:180px"><div style="color:var(--muted);padding:10px 0;font-size:13px">Найдите серию выше</div></div>
+            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
         </div>
         <div id="ch-add-form" style="display:none">
             <div class="add-ch-form">
@@ -1023,23 +1389,23 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
                     <div class="file-tab" id="ch-tab-photos" onclick="switchChTab('photos')">📸 Фото</div>
                 </div>
                 <div class="file-panel active" id="ch-panel-zip">
-                    <div class="upload-zone" id="ch-zip-zone" style="padding:14px">
+                    <div class="upload-zone" id="ch-zip-zone" style="padding:13px">
                         <input type="file" id="ch-zip-input" accept=".zip" onchange="onChZipChange(this)">
-                        <div class="upload-icon" style="font-size:22px">📦</div>
-                        <div class="upload-text" style="font-size:12px">ZIP со страницами</div>
+                        <div class="upload-icon" style="font-size:20px">📦</div>
+                        <div class="upload-text" style="font-size:11px">ZIP со страницами</div>
                         <div class="upload-preview" id="ch-zip-preview"></div>
                     </div>
                 </div>
                 <div class="file-panel" id="ch-panel-photos">
-                    <div class="upload-zone" id="ch-photos-zone" style="padding:14px">
+                    <div class="upload-zone" id="ch-photos-zone" style="padding:13px">
                         <input type="file" id="ch-photos-input" accept="image/*" multiple onchange="onChPhotosChange(this)">
-                        <div class="upload-icon" style="font-size:22px">📸</div>
-                        <div class="upload-text" style="font-size:12px">Страницы главы</div>
+                        <div class="upload-icon" style="font-size:20px">📸</div>
+                        <div class="upload-text" style="font-size:11px">Страницы главы</div>
                         <div class="upload-preview" id="ch-photos-preview"></div>
                     </div>
                 </div>
                 <div class="upbar" id="ch-upload-progress"><div class="upbar-fill" id="ch-upload-fill"></div></div>
-                <button class="sbtn" id="ch-submit-btn" onclick="submitChapter()" style="margin-top:8px"><span class="btn-text">📤 Загрузить главу</span><div class="spinner"></div></button>
+                <button class="sbtn" id="ch-submit-btn" onclick="submitChapter()" style="margin-top:7px"><span class="btn-text">📤 Загрузить главу</span><div class="spinner"></div></button>
                 <div class="result-banner" id="ch-result-banner"></div>
             </div>
         </div>
@@ -1048,6 +1414,18 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(24px);-webkit-back
 </div>
 
 <script>
+// ===== THEME =====
+(function(){
+    const saved=localStorage.getItem('bw_theme')||'dark';
+    if(saved==='light')document.body.classList.add('light');
+    document.getElementById('theme-btn').textContent=saved==='light'?'🌙':'☀️';
+})();
+function toggleTheme(){
+    const isLight=document.body.classList.toggle('light');
+    localStorage.setItem('bw_theme',isLight?'light':'dark');
+    document.getElementById('theme-btn').textContent=isLight?'🌙':'☀️';
+}
+
 // ===== TG =====
 (function(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';}}catch(e){}})();
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u){document.cookie='tg_user_id='+u+';max-age='+(86400*30)+';path=/';return u;}const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
@@ -1062,11 +1440,33 @@ async function checkAdmin(){
 // ===== CATALOG =====
 let page=0,q='',loading=false,hasMore=true,currentSort='new';
 const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
-
 function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
 
+// ===== SEARCH DROPDOWN =====
 let searchTimeout;
-function onSearch(val){clearTimeout(searchTimeout);searchTimeout=setTimeout(()=>{q=val.trim();load(true);},350);}
+const searchDrop=document.getElementById('search-dropdown');
+function onSearch(val){
+    clearTimeout(searchTimeout);
+    q=val.trim();
+    if(!q){searchDrop.classList.remove('open');load(true);return;}
+    searchTimeout=setTimeout(async()=>{
+        load(true);
+        try{
+            const res=await fetch(`/api/manga?page=0&q=${encodeURIComponent(q)}&sort=new`);
+            const data=await res.json();
+            if(!data.items.length){searchDrop.innerHTML='<div style="padding:14px;color:var(--muted);font-size:12px;text-align:center">Ничего не найдено</div>';searchDrop.classList.add('open');return;}
+            searchDrop.innerHTML=data.items.slice(0,6).map(m=>{
+                let src=m.cover_display||'';if(src&&src.startsWith('tg://'))src='';
+                return `<a class="sd-item" href="/read/${m.id}">
+                    ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div></div>
+                </a>`;
+            }).join('');
+            searchDrop.classList.add('open');
+        }catch(e){}
+    },280);
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))searchDrop.classList.remove('open');});
 
 async function load(reset=false){
     if(loading)return;loading=true;
@@ -1077,79 +1477,79 @@ async function load(reset=false){
         const data=await res.json();
         if(page===0){grid.innerHTML='';statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
         if(!data.items.length&&page===0){grid.innerHTML='<div class="empty">😔 Ничего не найдено</div>';loading=false;return;}
-        data.items.forEach(m=>{
-            const card=document.createElement('a');card.className='card';card.href='/read/'+m.id;
+        const delay=reset?0:0;
+        data.items.forEach((m,i)=>{
+            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';
             const covId='cv'+m.id,phId='ph'+m.id;
-            let src=m.cover_display||'';if(src.startsWith('tg://')){src='/api/cover/'+src.replace('tg://','');}
-            card.innerHTML=`
-                ${m.is_new?'<span class="card-new-badge">NEW</span>':''}
-                ${src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" loading="lazy" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:``}
+            const el=document.createElement('a');
+            el.className='card';el.href='/read/'+m.id;
+            el.style.animationDelay=(i*30)+'ms';
+            el.innerHTML=`${m.is_new?'<div class="card-new-badge">Новое</div>':''}
+                ${src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' }
                 <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div>
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
-                    <div class="likes">👍 ${m.likes}</div>
-                    <div class="card-badges">
-                        ${m.is_series?'<span class="card-series-badge">📚 Серия</span>':''}
-                        ${m.is_series&&m.chapter_count?`<span class="card-series-badge">${m.chapter_count} гл.</span>`:''}
-                    </div>
+                    ${m.is_series?'<div class="card-series-badge">📚 Серия</div>':''}
+                    ${m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:''}
                 </div>`;
-            grid.appendChild(card);
+            grid.appendChild(el);
         });
-        hasMore=(page+1)*data.limit<data.total;moreBtn.style.display=hasMore?'block':'none';page++;
-    }catch(e){if(!page)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
+        hasMore=data.items.length>=data.limit;
+        moreBtn.style.display=hasMore?'block':'none';
+        page++;
+    }catch(e){if(page===0)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
     loading=false;
 }
 
-async function openRandom(){try{const res=await fetch('/api/random?tg_user_id='+getTgUser());const data=await res.json();if(data.id)location.href='/read/'+data.id;}catch(e){}}
+async function openRandom(){
+    try{const res=await fetch('/api/random?tg_user_id='+getTgUser());const d=await res.json();if(d.id)window.location.href='/read/'+d.id;else showToast('😔 Нет манги');}catch(e){}
+}
 
-// ===== НОВИНКИ =====
-let sliderItems=[],sliderPos=0;
+// ===== NEW MANGA SLIDER =====
+let sliderPos=0,sliderItems=[];
 async function loadNew(){
-    try{
-        const res=await fetch('/api/new-manga');const data=await res.json();
-        if(!data.items?.length)return;
-        const sec=document.getElementById('new-section');sec.style.display='block';
-        document.getElementById('new-count').textContent=data.items.length;
-        sliderItems=data.items;
-        const track=document.getElementById('slider-track');
-        track.innerHTML=data.items.map(m=>{const src=m.cover_display||'';return `<a class="slide-card" href="/read/${m.id}"><span class="new-badge">NEW</span>${src?`<img class="slide-cover" src="${escapeHtml(src)}" loading="lazy" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="slide-cover-ph" style="${src?'display:none':'display:flex'}"><span style="font-size:26px">📖</span></div><div class="slide-info"><div class="slide-title">${escapeHtml(m.title)}</div></div></a>`;}).join('');
-        updateSliderArrows();
-    }catch(e){}
+    try{const res=await fetch('/api/new-manga');const data=await res.json();sliderItems=data.items||[];if(!sliderItems.length)return;const sec=document.getElementById('new-section');sec.style.display='block';document.getElementById('new-count').textContent=sliderItems.length;
+    const track=document.getElementById('slider-track');
+    track.innerHTML=sliderItems.map(m=>{const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';return`<a class="slide-card" href="/read/${m.id}">${src?`<img class="slide-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="slide-cover-ph" style="${src?'display:none':'display:flex'}">📖</div><div class="slide-title">${escapeHtml(m.title)}</div></a>`;}).join('');
+    updateSliderArrows();}catch(e){}
 }
 function slideLeft(){if(sliderPos>0){sliderPos--;updateSlider();}}
-function slideRight(){const t=document.getElementById('slider-track');const maxPos=Math.max(0,sliderItems.length-Math.floor(t.parentElement.offsetWidth/142));if(sliderPos<maxPos){sliderPos++;updateSlider();}}
-function updateSlider(){document.getElementById('slider-track').style.transform=`translateX(-${sliderPos*142}px)`;updateSliderArrows();}
-function updateSliderArrows(){const t=document.getElementById('slider-track');const maxPos=Math.max(0,sliderItems.length-Math.floor(t.parentElement.offsetWidth/142));document.getElementById('sl-left').classList.toggle('hidden',sliderPos<=0);document.getElementById('sl-right').classList.toggle('hidden',sliderPos>=maxPos);}
+function slideRight(){sliderPos++;updateSlider();}
+function updateSlider(){document.getElementById('slider-track').style.transform=`translateX(-${sliderPos*130}px)`;updateSliderArrows();}
+function updateSliderArrows(){const t=document.getElementById('slider-track');const maxPos=Math.max(0,sliderItems.length-Math.floor(t.parentElement.offsetWidth/130));document.getElementById('sl-left').classList.toggle('hidden',sliderPos<=0);document.getElementById('sl-right').classList.toggle('hidden',sliderPos>=maxPos);}
 
-// ===== ПРОДОЛЖИТЬ =====
+// ===== CONTINUE READING =====
 async function loadContinue(){
-    try{
-        const tgId=getTgUser();if(!tgId)return;
-        const res=await fetch('/api/progress?tg_user_id='+tgId);const data=await res.json();
-        if(!data.items?.length)return;
-        const sec=document.getElementById('cont-section');sec.style.display='block';
-        const list=document.getElementById('cont-list');
-        list.innerHTML=data.items.map(m=>{
-            const pct=m.total_pages>0?Math.round(m.page_num/m.total_pages*100):0;
-            let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;
-            const covId='cc'+m.id,phId='cp'+m.id;
-            const href=m.chapter_id?`/view-chapter/${m.chapter_id}`:`/read/${m.id}`;
-            let btnLabel;
-            if(m.is_series){
-                if(m.is_first_chapter) btnLabel='Читать →';
-                else if(m.total_pages>0) btnLabel=`Гл.${m.chapter_num} · Стр. ${m.page_num}/${m.total_pages}`;
-                else btnLabel=`Гл. ${m.chapter_num||1}`;
-            } else {
-                btnLabel=m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →';
-            }
-            const chapterLabel=m.chapter_id&&!m.is_first_chapter?`<div class="cont-chapter">Гл. ${escapeHtml(String(m.chapter_num||''))}</div>`:(m.is_series&&m.is_first_chapter?'<div class="cont-chapter">Серия</div>':'');
-            return `<a class="cont-card" href="${href}">
-                <div class="cont-cover-wrap">${src?`<img class="cont-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="cont-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:18px">📖</span></div></div>
-                <div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${chapterLabel}${m.total_pages>0&&!m.is_first_chapter?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${btnLabel}</div></div>
-            </a>`;
-        }).join('');
-    }catch(e){}
+    try{const tgId=getTgUser();if(!tgId)return;const res=await fetch('/api/progress?tg_user_id='+tgId);const data=await res.json();
+    if(!data.items?.length)return;const sec=document.getElementById('cont-section');sec.style.display='block';
+    const list=document.getElementById('cont-list');
+    list.innerHTML=data.items.map(m=>{
+        const pct=m.total_pages>0?Math.round(m.page_num/m.total_pages*100):0;
+        let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;
+        const covId='cc'+m.id,phId='cp'+m.id;
+        const href=m.chapter_id?`/view-chapter/${m.chapter_id}`:`/read/${m.id}`;
+        let btnLabel;
+        if(m.is_series){if(m.is_first_chapter)btnLabel='Читать →';else if(m.total_pages>0)btnLabel=`Гл.${m.chapter_num} · ${m.page_num}/${m.total_pages}`;else btnLabel=`Гл. ${m.chapter_num||1}`;}
+        else{btnLabel=m.total_pages>0?`Стр. ${m.page_num}/${m.total_pages}`:'Читать →';}
+        const chapterLabel=m.chapter_id&&!m.is_first_chapter?`<div class="cont-chapter">Гл. ${escapeHtml(String(m.chapter_num||''))}</div>`:(m.is_series&&m.is_first_chapter?'<div class="cont-chapter">Серия</div>':'');
+        return `<a class="cont-card" href="${href}"><div class="cont-cover-wrap">${src?`<img class="cont-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="cont-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:16px">📖</span></div></div><div class="cont-body"><div class="cont-title">${escapeHtml(m.title)}</div>${chapterLabel}${m.total_pages>0&&!m.is_first_chapter?`<div class="cont-bar-bg"><div class="cont-bar-fill" style="width:${pct}%"></div></div>`:''}<div class="cont-btn">${btnLabel}</div></div></a>`;
+    }).join('');}catch(e){}
 }
+
+// ===== MESSAGES MODAL =====
+function openMessagesModal(){document.getElementById('messages-modal').classList.add('open');loadUserMessages();}
+function closeMessagesModal(){document.getElementById('messages-modal').classList.remove('open');}
+async function loadUserMessages(){
+    try{const res=await fetch('/api/admin/messages');const data=await res.json();const list=document.getElementById('msg-list');
+    if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px;font-size:13px">📭 Сообщений нет</div>';return;}
+    list.innerHTML=data.items.map(m=>`<div class="msg-item"><div class="msg-text">${escapeHtml(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('');}catch(e){}
+}
+
+// ===== SUPPORT MODAL =====
+function openSupportModal(){document.getElementById('support-modal').classList.add('open');}
+function closeSupportModal(){document.getElementById('support-modal').classList.remove('open');}
+async function sendSupport(){const text=document.getElementById('support-text').value.trim();if(!text){showToast('Введи сообщение');return;}
+try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();const b=document.getElementById('support-result');if(d.success){b.className='result-banner success open';b.innerHTML='✅ Сообщение отправлено!';document.getElementById('support-text').value='';}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){}}
 
 // ===== ADD MANGA MODAL =====
 let coverFile=null,photoFiles=[],currentMangaType='single';
@@ -1157,9 +1557,9 @@ function openAddModal(){document.getElementById('add-modal').classList.add('open
 function closeAddModal(){document.getElementById('add-modal').classList.remove('open');}
 function setMangaType(t){currentMangaType=t;document.getElementById('type-single').classList.toggle('active',t==='single');document.getElementById('type-series').classList.toggle('active',t==='series');document.getElementById('pages-section').style.display=t==='single'?'block':'none';}
 function switchTab(tab){['zip','photos'].forEach(t=>{document.getElementById('tab-'+t).classList.toggle('active',t===tab);document.getElementById('panel-'+t).classList.toggle('active',t===tab);});}
-function onCoverChange(input){if(!input.files[0])return;coverFile=input.files[0];const preview=document.getElementById('cover-preview');const reader=new FileReader();reader.onload=e=>{preview.innerHTML=`<img class="preview-img" src="${e.target.result}" style="width:72px;height:96px">`};reader.readAsDataURL(coverFile);}
+function onCoverChange(input){if(!input.files[0])return;coverFile=input.files[0];const preview=document.getElementById('cover-preview');const reader=new FileReader();reader.onload=e=>{preview.innerHTML=`<img class="preview-img" src="${e.target.result}" style="width:70px;height:94px">`};reader.readAsDataURL(coverFile);}
 function onPhotosChange(input){photoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));if(!photoFiles.length)return;const preview=document.getElementById('photos-preview');preview.innerHTML=`<div class="preview-count">📸 ${photoFiles.length} фото</div>`;photoFiles.slice(0,5).forEach(f=>{const r=new FileReader();r.onload=e=>{const img=document.createElement('img');img.className='preview-img';img.src=e.target.result;preview.appendChild(img);};r.readAsDataURL(f);});}
-async function onZipChange(input){if(!input.files[0])return;const zipFile=input.files[0];const preview=document.getElementById('zip-preview');preview.innerHTML=`<div class="preview-count">⏳ Распаковка...</div>`;try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(zipFile);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((relPath,file)=>{if(file.dir)return;const ext=relPath.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:relPath,file,lastMod:file.date||new Date(0),name:relPath.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime,lastModified:file.date?file.date.getTime():0}));}photoFiles=blobs;preview.innerHTML=`<div class="preview-count">📦 ${blobs.length} страниц</div>`;blobs.slice(0,5).forEach(f=>{const r=new FileReader();r.onload=e=>{const img=document.createElement('img');img.className='preview-img';img.src=e.target.result;preview.appendChild(img);};r.readAsDataURL(f);});}catch(e){preview.innerHTML=`<div class="preview-count" style="color:#ff5050">❌ ${escapeHtml(e.message)}</div>`;}}
+async function onZipChange(input){if(!input.files[0])return;const zipFile=input.files[0];const preview=document.getElementById('zip-preview');preview.innerHTML=`<div class="preview-count">⏳ Распаковка...</div>`;try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(zipFile);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((relPath,file)=>{if(file.dir)return;const ext=relPath.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:relPath,file,lastMod:file.date||new Date(0),name:relPath.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime,lastModified:file.date?file.date.getTime():0}));}photoFiles=blobs;preview.innerHTML=`<div class="preview-count">📦 ${blobs.length} страниц</div>`;}catch(e){preview.innerHTML=`<div class="preview-count" style="color:#ff5050">❌ ${escapeHtml(e.message)}</div>`;}}
 let _jszip=null;
 async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
 async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read error'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
@@ -1191,130 +1591,107 @@ async function submitManga(){
 function openAdminPanel(){document.getElementById('admin-modal').classList.add('open');loadAdminStats();loadAdmins();}
 function closeAdminPanel(){document.getElementById('admin-modal').classList.remove('open');}
 function switchAdminTab(tab){
-    document.querySelectorAll('.atab').forEach((t,i)=>{const tabs=['stats','edit','add-chapter'];t.classList.toggle('active',tabs[i]===tab);});
+    const tabs=['stats','messages','edit','add-chapter'];
+    document.querySelectorAll('.atab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
     document.querySelectorAll('.apanel').forEach(p=>p.classList.remove('active'));
     document.getElementById('panel-'+tab).classList.add('active');
     if(tab==='stats')loadAdminStats();
+    if(tab==='messages')loadAdminMessages();
     if(tab==='edit')loadMangaEditList('',0);
 }
 function showStatsView(view){
     document.getElementById('stats-grid-view').style.display=view==='grid'?'block':'none';
     document.getElementById('stats-archive-view').style.display=view==='archive'?'block':'none';
     document.getElementById('stats-suggestions-view').style.display=view==='suggestions'?'block':'none';
-    document.querySelectorAll('.stab').forEach((t,i)=>{const views=['grid','archive'];t.classList.toggle('active',views[i]===view);});
     if(view==='archive')loadArchive(0);
     if(view==='suggestions')loadSuggestions(0);
 }
-
 async function loadAdminStats(){
-    try{
-        const res=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const data=await res.json();
-        document.getElementById('stat-grid').innerHTML=`
-            <div class="scard"><div class="scard-num">${data.manga_count}</div><div class="scard-lbl">Манг</div></div>
-            <div class="scard"><div class="scard-num">${data.chapters_count}</div><div class="scard-lbl">Глав</div></div>
-            <div class="scard"><div class="scard-num">${data.pages_count}</div><div class="scard-lbl">Страниц</div></div>
-            <div class="scard"><div class="scard-num">${data.users_count}</div><div class="scard-lbl">Пользователей</div></div>
-            <div class="scard green"><div class="scard-num">${data.new_today}</div><div class="scard-lbl">Новых за 24ч</div></div>
-            <div class="scard orange"><div class="scard-num">${data.votes_count}</div><div class="scard-lbl">Оценок</div></div>
-        `;
-        if(data.top_manga?.length){document.getElementById('top-list').innerHTML=data.top_manga.map((m,i)=>`<div class="top-row"><span class="top-name">${i+1}. ${escapeHtml(m.title)}</span><span class="top-likes">👍 ${m.likes}</span></div>`).join('');}
-        if(data.suggest_count>0){document.getElementById('suggest-badge').textContent=data.suggest_count;}
-    }catch(e){}
+    try{const res=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const data=await res.json();
+    if(data.error){document.getElementById('stat-grid').innerHTML='<div style="color:var(--muted);grid-column:1/-1;font-size:12px">Нет прав</div>';return;}
+    document.getElementById('stat-grid').innerHTML=`
+        <div class="scard"><div class="scard-num">${data.manga_count}</div><div class="scard-lbl">📚 Манг</div></div>
+        <div class="scard green"><div class="scard-num">${data.users_count}</div><div class="scard-lbl">👤 Юзеров</div></div>
+        <div class="scard orange"><div class="scard-num">${data.votes_count}</div><div class="scard-lbl">👍 Голосов</div></div>
+        <div class="scard"><div class="scard-num">${data.chapters_count}</div><div class="scard-lbl">📖 Глав</div></div>
+        <div class="scard green"><div class="scard-num">${data.new_today}</div><div class="scard-lbl">🔥 Сегодня</div></div>
+        <div class="scard"><div class="scard-num">${data.suggest_count}</div><div class="scard-lbl">💡 Предложек</div></div>`;
+    document.getElementById('top-list').innerHTML=(data.top_manga||[]).map(m=>`<div class="top-row"><div class="top-name">${escapeHtml(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('');
+    const sb=document.getElementById('suggest-badge2');if(sb)sb.textContent=data.suggest_count>0?data.suggest_count:'';}catch(e){}
 }
-
-async function loadAdmins(){
-    try{
-        const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();
-        const list=document.getElementById('admins-list');
-        if(!data.admins?.length){list.innerHTML='<div style="color:var(--muted);font-size:12px">Нет данных</div>';return;}
-        list.innerHTML=data.admins.map(a=>`<div class="admin-row"><div><div class="admin-tag">${escapeHtml(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard.writeText('${a.user_id}').then(()=>showToast('✅ ID скопирован!'))">Копировать ID</button></div>`).join('');
-    }catch(e){}
+async function loadArchive(pg){
+    try{const res=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    document.getElementById('archive-list').innerHTML=data.items.map(a=>`<div class="aitem"><div class="atype">${escapeHtml(a.action_type)}</div><div class="atext">${escapeHtml(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('');
+    const totalPages=Math.ceil(data.total/20);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadArchive(${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadArchive(${pg+1})">Вперёд →</button>`;
+    document.getElementById('archive-pagination').innerHTML=pages;}catch(e){}
 }
-
-let archivePage=0;
-async function loadArchive(pg=0){
-    archivePage=pg;
-    try{
-        const res=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
-        const list=document.getElementById('archive-list');
-        if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0">Архив пуст</div>';return;}
-        const icons={add_manga:'➕',edit_manga:'✏️',delete_manga:'🗑',add_chapter:'📚',delete_chapter:'🗑',set_cover:'🖼'};
-        list.innerHTML=data.items.map(a=>`<div class="aitem"><div class="atype">${icons[a.action_type]||'•'} ${a.action_type}</div><div class="atext">${escapeHtml(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('');
-        const total=data.total,limit=20,totalPages=Math.ceil(total/limit);
-        let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadArchive(${pg-1})">← Назад</button>`;pages+=`<span style="color:var(--muted);font-size:12px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadArchive(${pg+1})">Вперёд →</button>`;
-        document.getElementById('archive-pagination').innerHTML=pages;
-    }catch(e){}
+async function loadSuggestions(pg){
+    try{const res=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    document.getElementById('suggest-list').innerHTML=data.items.map(s=>`<div class="sug-item"><div class="sug-text">${escapeHtml(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div><button class="sug-read-btn" onclick="markSuggestion(${s.id},this)">✓ Прочитано</button></div>`).join('')||'<div style="color:var(--muted);font-size:12px">Новых нет</div>';
+    const totalPages=Math.ceil(data.total/15);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg+1})">Вперёд →</button>`;
+    document.getElementById('suggest-pagination').innerHTML=pages;}catch(e){}
 }
+async function markSuggestion(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
+async function loadAdmins(){try{const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();if(!data.admins)return;document.getElementById('admins-list').innerHTML=data.admins.map(a=>`<div class="admin-row"><div><div class="admin-tag">${escapeHtml(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard?.writeText?.('${a.user_id}');showToast('📋 Скопировано')">Копировать</button></div>`).join('');}catch(e){}}
 
-let suggestPage=0;
-async function loadSuggestions(pg=0){
-    suggestPage=pg;
-    try{
-        const res=await fetch(`/api/admin/suggestions?status=new&page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
-        const list=document.getElementById('suggest-list');
-        if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0">📭 Новых предложений нет</div>';return;}
-        list.innerHTML=data.items.map(s=>`<div class="sug-item" id="sug-${s.id}">
-            <div class="sug-text">${escapeHtml(s.text)}</div>
-            <div class="sug-meta">👤 #${s.user_id} • ${new Date(s.created_at).toLocaleString('ru-RU')}</div>
-            <div class="sug-actions"><button class="sug-read-btn" onclick="markSuggestion(${s.id})">✅ Прочитано</button></div>
-        </div>`).join('');
-        const total=data.total,limit=15,totalPages=Math.ceil(total/limit);
-        let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:12px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg+1})">Вперёд →</button>`;
-        document.getElementById('suggest-pagination').innerHTML=pages;
-    }catch(e){}
+// ===== ADMIN MESSAGES =====
+async function loadAdminMessages(){
+    try{const res=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const data=await res.json();
+    const list=document.getElementById('admin-msg-list');
+    if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px 0">Сообщений нет</div>';return;}
+    list.innerHTML=data.items.map(m=>`<div class="msg-item" id="amsg-${m.id}"><button class="msg-del" onclick="deleteAdminMessage(${m.id})">Удалить</button><div class="msg-text">${escapeHtml(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('');}catch(e){}
 }
-
-async function markSuggestion(id){try{await fetch(`/api/admin/suggestions/${id}/status?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read'})});const el=document.getElementById('sug-'+id);if(el){el.style.opacity='0';setTimeout(()=>{el.remove();},300);}showToast('✅ Отмечено');}catch(e){}}
+async function sendAdminMessage(){
+    const text=document.getElementById('admin-msg-text').value.trim();
+    if(!text){showToast('Введи сообщение');return;}
+    try{const res=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();if(d.success){showToast('✅ Сообщение отправлено');document.getElementById('admin-msg-text').value='';loadAdminMessages();}else showToast('❌ Ошибка');}catch(e){}
+}
+async function deleteAdminMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=document.getElementById('amsg-'+id);if(el)el.remove();showToast('🗑 Удалено');}catch(e){}}
 
 // ===== EDIT =====
-let editPage=0,editQuery='';
-async function loadMangaEditList(query='',pg=0){
-    editQuery=query;editPage=pg;
-    try{
-        const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(query)}&page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
-        const list=document.getElementById('manga-edit-list');
-        if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:10px 0;font-size:13px">Ничего не найдено</div>';document.getElementById('edit-pagination').innerHTML='';return;}
-        list.innerHTML=data.items.map(m=>{const src=m.cover_imgbb_url||'';const sl=m.is_series?'<span style="color:var(--accent);font-size:10px"> • Серия</span>':'';return `<div class="meitem" onclick="openEditManga(${m.id})">${src?`<img class="me-cover" src="${escapeHtml(src)}" onerror="this.style.display='none'">`:`<div class="me-cover">📖</div>`}<div style="flex:1;min-width:0"><div class="me-title">${escapeHtml(m.title)}${sl}</div><div class="me-meta">ID:${m.id} • 👍${m.likes}</div></div><span style="color:var(--muted);font-size:16px">›</span></div>`;}).join('');
-        const totalPages=Math.ceil(data.total/10);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:12px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg+1})">Вперёд →</button>`;
-        document.getElementById('edit-pagination').innerHTML=pages;
-    }catch(e){}
+let editQuery='',editPage=0;
+async function loadMangaEditList(q='',pg=0){
+    editQuery=q;editPage=pg;
+    try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    const list=document.getElementById('manga-edit-list');
+    if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:10px 0;font-size:12px">Ничего не найдено</div>';document.getElementById('edit-pagination').innerHTML='';return;}
+    list.innerHTML=data.items.map(m=>`<div class="meitem" onclick="openEditManga(${m.id})"><div class="me-cover">📖</div><div><div class="me-title">${escapeHtml(m.title)}</div><div class="me-meta">${m.is_series?'📚 Серия':'📄 Обычная'}</div></div></div>`).join('');
+    const totalPages=Math.ceil(data.total/10);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg+1})">Вперёд →</button>`;
+    document.getElementById('edit-pagination').innerHTML=pages;}catch(e){}
 }
 function searchMangaEdit(){loadMangaEditList(document.getElementById('edit-search-input').value.trim(),0);}
 document.getElementById('edit-search-input').addEventListener('keydown',e=>{if(e.key==='Enter')searchMangaEdit();});
-
 async function openEditManga(mangaId){
-    try{
-        const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await res.json();
-        document.getElementById('manga-edit-list').style.display='none';document.getElementById('edit-pagination').style.display='none';document.querySelector('#panel-edit .esearch-row').style.display='none';
-        const fw=document.getElementById('edit-manga-form-wrap');fw.style.display='block';
-        let chaptersHtml='';
-        if(manga.is_series&&manga.chapters?.length){chaptersHtml=`<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:7px">Главы</div><div class="ch-admin-list">${manga.chapters.map(ch=>`<div class="ch-admin-item"><span style="font-size:12px;font-weight:600">Гл. ${ch.chapter_num}${ch.title?' — '+escapeHtml(ch.title):''}</span><button class="del-ch-btn" onclick="deleteChapter(${ch.id},this)">🗑</button></div>`).join('')}</div></div>`;}
-        document.getElementById('edit-manga-form').innerHTML=`
-            <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
-            <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
-            <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
-            <div class="ef"><label>URL обложки</label><input type="text" id="ef-cover" value="${escapeHtml(manga.cover_imgbb_url||'')}"></div>
-            ${manga.cover_imgbb_url?`<img src="${escapeHtml(manga.cover_imgbb_url)}" style="width:72px;height:96px;object-fit:cover;border-radius:9px;margin-bottom:10px">`:''}
-            ${chaptersHtml}
-            <div class="edit-actions">
-                <button class="save-btn" onclick="saveMangaEdit(${mangaId})">💾 Сохранить</button>
-                <button class="del-btn" onclick="deleteManga(${mangaId})">🗑 Удалить</button>
-            </div>
-            <div class="result-banner" id="ef-result"></div>`;
-    }catch(e){showToast('❌ Ошибка загрузки');}
+    try{const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await res.json();
+    document.getElementById('manga-edit-list').style.display='none';document.getElementById('edit-pagination').style.display='none';document.querySelector('#panel-edit .esearch-row').style.display='none';
+    const fw=document.getElementById('edit-manga-form-wrap');fw.style.display='block';
+    let chaptersHtml='';
+    if(manga.is_series&&manga.chapters?.length){chaptersHtml=`<div style="margin-top:12px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Главы</div><div class="ch-admin-list">${manga.chapters.map(ch=>`<div class="ch-admin-item"><span style="font-size:11px;font-weight:600">Гл. ${ch.chapter_num}${ch.title?' — '+escapeHtml(ch.title):''}</span><button class="del-ch-btn" onclick="deleteChapter(${ch.id},this)">🗑</button></div>`).join('')}</div></div>`;}
+    document.getElementById('edit-manga-form').innerHTML=`
+        <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
+        <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
+        <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
+        <div class="ef"><label>URL обложки</label><input type="text" id="ef-cover" value="${escapeHtml(manga.cover_imgbb_url||'')}"></div>
+        ${manga.cover_imgbb_url?`<img src="${escapeHtml(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-bottom:9px">`:''}
+        ${chaptersHtml}
+        <div class="edit-actions">
+            <button class="save-btn" onclick="saveMangaEdit(${mangaId})">💾 Сохранить</button>
+            <button class="del-btn" onclick="deleteManga(${mangaId})">🗑 Удалить</button>
+        </div>
+        <div class="result-banner" id="ef-result"></div>`;}catch(e){showToast('❌ Ошибка загрузки');}
 }
 function backToMangaList(){document.getElementById('edit-manga-form-wrap').style.display='none';document.getElementById('manga-edit-list').style.display='flex';document.getElementById('edit-pagination').style.display='flex';document.querySelector('#panel-edit .esearch-row').style.display='flex';}
 async function saveMangaEdit(mangaId){try{const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('ef-title').value.trim(),description:document.getElementById('ef-desc').value.trim(),telegraph_url:document.getElementById('ef-link').value.trim(),cover_imgbb_url:document.getElementById('ef-cover').value.trim()})});const data=await res.json();const b=document.getElementById('ef-result');if(data.success){b.className='result-banner success open';b.innerHTML='✅ Сохранено!';load(true);}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){showToast('❌ Ошибка');}}
-async function deleteManga(mangaId){if(!confirm('Удалить эту мангу? Необратимо!'))return;try{const res=await fetch(`/api/admin/manga/${mangaId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){showToast('🗑 Удалено');backToMangaList();loadMangaEditList(editQuery,editPage);load(true);}}catch(e){}}
+async function deleteManga(mangaId){if(!confirm('Удалить эту мангу?'))return;try{const res=await fetch(`/api/admin/manga/${mangaId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){showToast('🗑 Удалено');backToMangaList();loadMangaEditList(editQuery,editPage);load(true);}}catch(e){}}
 async function deleteChapter(chapterId,btn){if(!confirm('Удалить главу?'))return;try{const res=await fetch(`/api/admin/chapter/${chapterId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){btn.closest('.ch-admin-item').remove();showToast('🗑 Глава удалена');}}catch(e){}}
 
 // ===== ADD CHAPTER =====
 let selectedMangaId=null,chPhotoFiles=[];
 async function searchMangaForChapter(){
     const q=document.getElementById('ch-manga-search').value.trim();
-    try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const data=await res.json();const list=document.getElementById('ch-manga-list');if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:10px 0;font-size:13px">Ничего не найдено</div>';return;}list.innerHTML=data.items.map(m=>`<div class="meitem" onclick="selectMangaForChapter(${m.id},'${escapeHtml(m.title).replace(/'/g,"\\'")}')"><div class="me-cover">📖</div><div><div class="me-title">${escapeHtml(m.title)}</div><div class="me-meta">${m.is_series?'📚 Серия':'📄 Обычная'}</div></div></div>`).join('');}catch(e){}
+    try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const data=await res.json();const list=document.getElementById('ch-manga-list');if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:9px 0;font-size:12px">Ничего не найдено</div>';return;}list.innerHTML=data.items.map(m=>`<div class="meitem" onclick="selectMangaForChapter(${m.id},'${escapeHtml(m.title).replace(/'/g,"\\'")}')"><div class="me-cover">📖</div><div><div class="me-title">${escapeHtml(m.title)}</div><div class="me-meta">${m.is_series?'📚 Серия':'📄 Обычная'}</div></div></div>`).join('');}catch(e){}
 }
-function selectMangaForChapter(id,title){selectedMangaId=id;document.getElementById('ch-add-form').style.display='block';document.getElementById('ch-manga-list').innerHTML=`<div style="background:rgba(124,92,255,0.08);border:1px solid rgba(124,92,255,0.25);border-radius:9px;padding:9px 12px;font-weight:600;color:var(--accent);font-size:13px">✅ ${escapeHtml(title)}</div>`;showToast('Выбрана: '+title);}
+function selectMangaForChapter(id,title){selectedMangaId=id;document.getElementById('ch-add-form').style.display='block';document.getElementById('ch-manga-list').innerHTML=`<div style="background:rgba(124,92,255,0.07);border:1px solid rgba(124,92,255,0.22);border-radius:9px;padding:8px 11px;font-weight:600;color:var(--accent);font-size:12px">✅ ${escapeHtml(title)}</div>`;showToast('Выбрана: '+title);}
 document.getElementById('ch-manga-search').addEventListener('keydown',e=>{if(e.key==='Enter')searchMangaForChapter();});
 function switchChTab(tab){['zip','photos'].forEach(t=>{document.getElementById('ch-tab-'+t).classList.toggle('active',t===tab);document.getElementById('ch-panel-'+t).classList.toggle('active',t===tab);});}
 function onChPhotosChange(input){chPhotoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));document.getElementById('ch-photos-preview').innerHTML=`<div class="preview-count">📸 ${chPhotoFiles.length} стр.</div>`;}
