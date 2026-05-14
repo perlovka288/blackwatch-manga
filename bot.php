@@ -643,7 +643,7 @@ function updateMangaMessage(int $chatId, int $msgId, array $manga, string $siteU
 function showCatalog(int $chatId, PDO $pdo, string $siteUrl, int $page = 0, string $q = '', string $sort = 'new'): void {
     $limit  = 8;
     $offset = $page * $limit;
-    $orderBy = match($sort) { 'popular' => 'likes DESC, id DESC', 'alpha' => 'title ASC', default => 'id DESC' };
+    $orderBy = match($sort) { 'popular' => 'likes DESC, id DESC', 'alpha' => "LOWER(REGEXP_REPLACE(title, '^[^а-яёa-z]+', '', 'i')) ASC", default => 'id DESC' };
     if ($q) {
         $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url, is_series, telegraph_url FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY {$orderBy} LIMIT ? OFFSET ?");
         $stmt->execute(["%{$q}%", $limit, $offset]);
@@ -704,13 +704,19 @@ function showChapters(int $chatId, int $msgId, int $mangaId, PDO $pdo, string $s
     $cStmt->execute([$mangaId]);
     $total = (int)$cStmt->fetchColumn();
 
-    $mangaTitleStmt = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
-    $mangaTitleStmt->execute([$mangaId]);
-    $mangaTitle = $mangaTitleStmt->fetchColumn() ?: 'Серия';
+    $mangaStmt = $pdo->prepare("SELECT title, cover_imgbb_url FROM manga WHERE id = ?");
+    $mangaStmt->execute([$mangaId]);
+    $mangaRow = $mangaStmt->fetch();
+    $mangaTitle = $mangaRow['title'] ?? 'Серия';
+    $hasCover = !empty($mangaRow['cover_imgbb_url']);
 
     if (empty($chapters)) {
-        tgApi('editMessageReplyMarkup', ['chat_id' => $chatId, 'message_id' => $msgId, 'reply_markup' => ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]]);
-        sendMsg($chatId, '📭 Глав пока нет.');
+        // Если у манги обложка — редактируем caption, иначе текст
+        if ($hasCover) {
+            editCaption($chatId, $msgId, "📭 Глав пока нет.", ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]);
+        } else {
+            editMsg($chatId, $msgId, '📭 Глав пока нет.', ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]]);
+        }
         return;
     }
 
@@ -727,10 +733,17 @@ function showChapters(int $chatId, int $msgId, int $mangaId, PDO $pdo, string $s
     $navRow[] = ['text' => ($page + 1) . '/' . $totalPages, 'callback_data' => 'noop'];
     if (($page + 1) < $totalPages) $navRow[] = ['text' => '→', 'callback_data' => "chapters:{$mangaId}:" . ($page + 1)];
     if (!empty($navRow)) $rows[] = $navRow;
-    $rows[] = [['text' => '← К манге', 'callback_data' => "manga:{$mangaId}"]];
+    $rows[] = [['text' => '← К манге', 'callback_data' => "back_manga:{$mangaId}"]];
 
-    $text = "📚 <b>" . htmlspecialchars($mangaTitle) . "</b>\nГлав: {$total}";
-    editMsg($chatId, $msgId, $text, ['inline_keyboard' => $rows]);
+    $kb = ['inline_keyboard' => $rows];
+    $captionText = "📚 <b>" . htmlspecialchars($mangaTitle) . "</b>\nГлав: {$total}";
+
+    // Если у манги обложка — сообщение было sendPhoto, редактируем caption
+    if ($hasCover) {
+        editCaption($chatId, $msgId, $captionText, $kb);
+    } else {
+        editMsg($chatId, $msgId, $captionText, $kb);
+    }
 }
 
 # =========================
@@ -1016,6 +1029,49 @@ if ($callbackQuery) {
         answerCallback($cbId);
         deleteMsg($chatId, $msgId);
         showCatalog($chatId, $pdo, $SITE_URL, (int)$m[1], urldecode($m[3]), $m[2]);
+        http_response_code(200); echo 'OK'; exit;
+    }
+
+    // back_manga:id — возврат к карточке манги (используется из списка глав)
+    if (preg_match('/^back_manga:(\d+)$/', $cbData, $m)) {
+        answerCallback($cbId);
+        $stmt = $pdo->prepare("SELECT * FROM manga WHERE id = ?");
+        $stmt->execute([(int)$m[1]]);
+        $manga = $stmt->fetch();
+        if ($manga) {
+            // Восстанавливаем правильные кнопки карточки манги
+            $mangaId  = (int)$manga['id'];
+            $isSeries = !empty($manga['is_series']);
+            $caption  = mangaCaption($manga);
+            $rows = [];
+            if ($isSeries) {
+                $rows[] = [['text' => '📚 Главы', 'callback_data' => "chapters:{$mangaId}:0"]];
+            } else {
+                $btnRead = ['text' => '📖 Читать', 'url' => "{$SITE_URL}/read/{$mangaId}"];
+                if (!empty($manga['telegraph_url'])) {
+                    $rows[] = [$btnRead, ['text' => '📄 Telegraph', 'url' => $manga['telegraph_url']]];
+                } else {
+                    $rows[] = [$btnRead];
+                }
+            }
+            $rows[] = [
+                ['text' => '👍 Лайк',    'callback_data' => "vote:like:{$mangaId}"],
+                ['text' => '👎 Дизлайк', 'callback_data' => "vote:dislike:{$mangaId}"],
+            ];
+            $rows[] = [
+                ['text' => '📖 Читаю',       'callback_data' => "status:now:{$mangaId}"],
+                ['text' => '🔖 Буду читать', 'callback_data' => "status:will:{$mangaId}"],
+                ['text' => '✅ Прочитано',   'callback_data' => "status:read:{$mangaId}"],
+            ];
+            $kb = ['inline_keyboard' => $rows];
+            if (!empty($manga['cover_imgbb_url'])) {
+                editCaption($chatId, $msgId, $caption, $kb);
+            } else {
+                editMsg($chatId, $msgId, $caption, $kb);
+            }
+        } else {
+            sendMsg($chatId, '❌ Манга не найдена.');
+        }
         http_response_code(200); echo 'OK'; exit;
     }
 
