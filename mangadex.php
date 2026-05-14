@@ -103,8 +103,9 @@ if ($path === '/api/mdex/search') {
     $lang = trim($_GET['lang'] ?? 'ru');
     if (!$q) { echo json_encode(['results'=>[]]); exit; }
 
+    // Поиск без фильтра языка — ищем по всей базе MangaDex.
+    // Язык применяется только при загрузке глав (/api/mdex/chapters).
     $params = ['title'=>$q,'limit'=>20,'includes[]'=>'cover_art','contentRating[]'=>['safe','suggestive','erotica','pornographic'],'order[relevance]'=>'desc'];
-    if ($lang) $params['availableTranslatedLanguage[]'] = $lang;
 
     $data = mdexGet('https://api.mangadex.org/manga', $params);
     if (!$data || empty($data['data'])) { echo json_encode(['results'=>[]]); exit; }
