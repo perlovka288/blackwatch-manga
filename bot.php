@@ -1,8 +1,14 @@
 <?php
 ob_start();
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
+register_shutdown_function(function(){
+    $e=error_get_last();
+    if($e&&in_array($e['type'],[E_ERROR,E_PARSE,E_COMPILE_ERROR])){
+        error_log('FATAL: '.$e['message'].' in '.$e['file'].':'.  $e['line']);
+    }
+});
 set_time_limit(0);
 ini_set('memory_limit', '512M');
 
@@ -161,8 +167,7 @@ $input  = file_get_contents('php://input');
 $update = json_decode($input, true);
 if (!$update) {
     $debugInfo = 'input_len=' . strlen($input) . ' method=' . ($_SERVER['REQUEST_METHOD'] ?? '?') . ' ct=' . ($_SERVER['CONTENT_TYPE'] ?? '?');
-    error_log('BOT_DEBUG: ' . $debugInfo . ' raw=' . substr($input, 0, 200));
-    http_response_code(200); echo 'OK'; exit;
+    http_response_code(200); echo 'DEBUG:' . $debugInfo . '|raw:' . substr($input,0,100); exit;
 }
 
 # =========================
