@@ -538,7 +538,6 @@ function adminMenuKb(): array {
         [['text' => '🔍 Найти мангу'],    ['text' => '📚 Моя библиотека']],
         [['text' => '🔥 Топ по лайкам'], ['text' => '🎲 Случайная манга']],
         [['text' => '⚙️ Админ-панель'],   ['text' => '🌐 Сайт каталога']],
-        [['text' => '💡 Поддержка']],
     ]);
 }
 
@@ -643,7 +642,7 @@ function updateMangaMessage(int $chatId, int $msgId, array $manga, string $siteU
 function showCatalog(int $chatId, PDO $pdo, string $siteUrl, int $page = 0, string $q = '', string $sort = 'new'): void {
     $limit  = 8;
     $offset = $page * $limit;
-    $orderBy = match($sort) { 'popular' => 'likes DESC, id DESC', 'alpha' => "LOWER(LTRIM(title, '♥ ')) ASC", default => 'id DESC' };
+    $orderBy = match($sort) { 'popular' => 'likes DESC, id DESC', 'alpha' => 'title ASC', default => 'id DESC' };
     if ($q) {
         $stmt = $pdo->prepare("SELECT id, title, likes, dislikes, cover_imgbb_url, is_series, telegraph_url FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY {$orderBy} LIMIT ? OFFSET ?");
         $stmt->execute(["%{$q}%", $limit, $offset]);
@@ -704,19 +703,13 @@ function showChapters(int $chatId, int $msgId, int $mangaId, PDO $pdo, string $s
     $cStmt->execute([$mangaId]);
     $total = (int)$cStmt->fetchColumn();
 
-    $mangaStmt = $pdo->prepare("SELECT title, cover_imgbb_url FROM manga WHERE id = ?");
-    $mangaStmt->execute([$mangaId]);
-    $mangaRow = $mangaStmt->fetch();
-    $mangaTitle = $mangaRow['title'] ?? 'Серия';
-    $hasCover = !empty($mangaRow['cover_imgbb_url']);
+    $mangaTitleStmt = $pdo->prepare("SELECT title FROM manga WHERE id = ?");
+    $mangaTitleStmt->execute([$mangaId]);
+    $mangaTitle = $mangaTitleStmt->fetchColumn() ?: 'Серия';
 
     if (empty($chapters)) {
-        // Если у манги обложка — редактируем caption, иначе текст
-        if ($hasCover) {
-            editCaption($chatId, $msgId, "📭 Глав пока нет.", ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]);
-        } else {
-            editMsg($chatId, $msgId, '📭 Глав пока нет.', ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]]);
-        }
+        tgApi('editMessageReplyMarkup', ['chat_id' => $chatId, 'message_id' => $msgId, 'reply_markup' => ['inline_keyboard' => [[['text' => '← Назад', 'callback_data' => "manga:{$mangaId}"]]]]]);
+        sendMsg($chatId, '📭 Глав пока нет.');
         return;
     }
 
@@ -733,17 +726,10 @@ function showChapters(int $chatId, int $msgId, int $mangaId, PDO $pdo, string $s
     $navRow[] = ['text' => ($page + 1) . '/' . $totalPages, 'callback_data' => 'noop'];
     if (($page + 1) < $totalPages) $navRow[] = ['text' => '→', 'callback_data' => "chapters:{$mangaId}:" . ($page + 1)];
     if (!empty($navRow)) $rows[] = $navRow;
-    $rows[] = [['text' => '← К манге', 'callback_data' => "back_manga:{$mangaId}"]];
+    $rows[] = [['text' => '← К манге', 'callback_data' => "manga:{$mangaId}"]];
 
-    $kb = ['inline_keyboard' => $rows];
-    $captionText = "📚 <b>" . htmlspecialchars($mangaTitle) . "</b>\nГлав: {$total}";
-
-    // Если у манги обложка — сообщение было sendPhoto, редактируем caption
-    if ($hasCover) {
-        editCaption($chatId, $msgId, $captionText, $kb);
-    } else {
-        editMsg($chatId, $msgId, $captionText, $kb);
-    }
+    $text = "📚 <b>" . htmlspecialchars($mangaTitle) . "</b>\nГлав: {$total}";
+    editMsg($chatId, $msgId, $text, ['inline_keyboard' => $rows]);
 }
 
 # =========================
@@ -1032,49 +1018,6 @@ if ($callbackQuery) {
         http_response_code(200); echo 'OK'; exit;
     }
 
-    // back_manga:id — возврат к карточке манги (используется из списка глав)
-    if (preg_match('/^back_manga:(\d+)$/', $cbData, $m)) {
-        answerCallback($cbId);
-        $stmt = $pdo->prepare("SELECT * FROM manga WHERE id = ?");
-        $stmt->execute([(int)$m[1]]);
-        $manga = $stmt->fetch();
-        if ($manga) {
-            // Восстанавливаем правильные кнопки карточки манги
-            $mangaId  = (int)$manga['id'];
-            $isSeries = !empty($manga['is_series']);
-            $caption  = mangaCaption($manga);
-            $rows = [];
-            if ($isSeries) {
-                $rows[] = [['text' => '📚 Главы', 'callback_data' => "chapters:{$mangaId}:0"]];
-            } else {
-                $btnRead = ['text' => '📖 Читать', 'url' => "{$SITE_URL}/read/{$mangaId}"];
-                if (!empty($manga['telegraph_url'])) {
-                    $rows[] = [$btnRead, ['text' => '📄 Telegraph', 'url' => $manga['telegraph_url']]];
-                } else {
-                    $rows[] = [$btnRead];
-                }
-            }
-            $rows[] = [
-                ['text' => '👍 Лайк',    'callback_data' => "vote:like:{$mangaId}"],
-                ['text' => '👎 Дизлайк', 'callback_data' => "vote:dislike:{$mangaId}"],
-            ];
-            $rows[] = [
-                ['text' => '📖 Читаю',       'callback_data' => "status:now:{$mangaId}"],
-                ['text' => '🔖 Буду читать', 'callback_data' => "status:will:{$mangaId}"],
-                ['text' => '✅ Прочитано',   'callback_data' => "status:read:{$mangaId}"],
-            ];
-            $kb = ['inline_keyboard' => $rows];
-            if (!empty($manga['cover_imgbb_url'])) {
-                editCaption($chatId, $msgId, $caption, $kb);
-            } else {
-                editMsg($chatId, $msgId, $caption, $kb);
-            }
-        } else {
-            sendMsg($chatId, '❌ Манга не найдена.');
-        }
-        http_response_code(200); echo 'OK'; exit;
-    }
-
     // manga:id
     if (preg_match('/^manga:(\d+)$/', $cbData, $m)) {
         answerCallback($cbId);
@@ -1288,22 +1231,6 @@ if ($text === '/cancel' || $text === '❌ Отмена') {
 # =========================
 # FSM ОБРАБОТКА
 # =========================
-
-// Все тексты кнопок меню — они НЕ должны перехватываться FSM
-$ALL_MENU_BUTTONS = [
-    '🔍 Найти мангу', '📚 Моя библиотека', '🔥 Топ по лайкам', '🎲 Случайная манга',
-    '🌐 Сайт каталога', '💡 Поддержка', '⚙️ Админ-панель', '🔙 Режим читателя',
-    '➕ Добавить через альбом', '📦 Добавить через ZIP', '📚 Добавить серию',
-    '📑 Добавить главу', '✏️ Редактирование', '📊 Статистика', '📥 Предложки',
-    '🗂 Архив бота', '❓ FAQ и Команды', '🏠 Главная',
-];
-
-// Если текст — это кнопка меню, очищаем FSM и даём управление обработчикам кнопок
-if ($state && $text && in_array($text, $ALL_MENU_BUTTONS)) {
-    clearState($pdo, $userId);
-    $state = null; // сбрасываем, чтобы FSM-блок не запустился
-}
-
 if ($state) {
     $currentState = $state['state'];
     $stateData    = $state['data'];
@@ -1646,7 +1573,7 @@ if ($state) {
             foreach ($HARDCODED_ADMINS as $adminId) {
                 sendMsg($adminId, "💡 <b>Новое предложение</b> от пользователя {$userId}:\n\n" . htmlspecialchars(mb_substr($text, 0, 500)));
             }
-            sendMsg($chatId, "🙏 <b>Спасибо!</b> Предложение передано администраторам.", $isAdmin ? adminMenuKb() : mainMenuKb());
+            sendMsg($chatId, "🙏 <b>Спасибо!</b> Предложение передано администраторам.", mainMenuKb());
         }
         http_response_code(200); echo 'OK'; exit;
     }
@@ -1773,7 +1700,7 @@ if ($text === '💡 Поддержка') {
 // Режим читателя
 if ($text === '🔙 Режим читателя' && $isAdmin) {
     clearState($pdo, $userId);
-    sendMsg($chatId, "👋 Вышел в режим читателя.", adminMenuKb());
+    sendMsg($chatId, "👋 Вышел в режим читателя.", mainMenuKb());
     http_response_code(200); echo 'OK'; exit;
 }
 
@@ -1939,7 +1866,7 @@ $menuTexts = [
     '🌐 Сайт каталога', '💡 Поддержка', '⚙️ Админ-панель', '🔙 Режим читателя',
     '➕ Добавить через альбом', '📦 Добавить через ZIP', '📚 Добавить серию',
     '📑 Добавить главу', '✏️ Редактирование', '📊 Статистика', '📥 Предложки',
-    '🗂 Архив бота', '❓ FAQ и Команды', '🏠 Главная',
+    '🗂 Архив бота', '❓ FAQ и Команды',
 ];
 if ($text && $text[0] !== '/' && !in_array($text, $menuTexts) && strlen($text) >= 2 && strlen($text) <= 100) {
     // Быстрый поиск без перехода в FSM
