@@ -598,10 +598,10 @@ function showCatalog(int $chatId, PDO $pdo, string $siteUrl, int $page = 0, stri
 
     // Пагинация
     $navRow = [];
-    if ($page > 0) $navRow[] = ['text' => '← Назад', 'callback_data' => "catalog:{$page-1}:{$sort}:" . urlencode($q)];
+    if ($page > 0) $navRow[] = ['text' => '← Назад', 'callback_data' => "catalog:".($page-1).":{$sort}:" . urlencode($q)];
     $totalPages = max(1, (int)ceil($total / $limit));
     $navRow[] = ['text' => ($page + 1) . '/' . $totalPages, 'callback_data' => 'noop'];
-    if (($page + 1) < $totalPages) $navRow[] = ['text' => 'Вперёд →', 'callback_data' => "catalog:{$page+1}:{$sort}:" . urlencode($q)];
+    if (($page + 1) < $totalPages) $navRow[] = ['text' => 'Вперёд →', 'callback_data' => "catalog:".($page+1).":{$sort}:" . urlencode($q)];
     if (!empty($navRow)) $rows[] = $navRow;
 
     // Сортировка
@@ -868,10 +868,10 @@ function showSeriesList(int $chatId, PDO $pdo, int $page = 0, string $q = ''): v
     }
 
     $navRow = [];
-    if ($page > 0) $navRow[] = ['text' => '←', 'callback_data' => "seriespick:{$page-1}:" . urlencode($q)];
+    if ($page > 0) $navRow[] = ['text' => '←', 'callback_data' => "seriespick:".($page-1).":" . urlencode($q)];
     $totalPages = max(1, (int)ceil($total / $limit));
     $navRow[] = ['text' => ($page + 1) . '/' . $totalPages, 'callback_data' => 'noop'];
-    if (($page + 1) < $totalPages) $navRow[] = ['text' => '→', 'callback_data' => "seriespick:{$page+1}:" . urlencode($q)];
+    if (($page + 1) < $totalPages) $navRow[] = ['text' => '→', 'callback_data' => "seriespick:".($page+1).":" . urlencode($q)];
     if (!empty($navRow)) $rows[] = $navRow;
 
     sendMsg($chatId, "📚 Выбери серию для добавления главы:", inlineKb($rows));
@@ -1147,7 +1147,7 @@ if ($state) {
             if (!empty($message['document'])) {
                 $doc      = $message['document'];
                 $fileName = strtolower($doc['file_name'] ?? '');
-                if (str_ends_with($fileName, '.zip')) {
+                if (substr(strtolower($fileName), -4) === '.zip') {
                     sendMsg($chatId, '⏳ Скачиваю ZIP-архив...');
                     $zipPath = downloadTgFile($doc['file_id']);
                     if (!$zipPath) {
@@ -1328,7 +1328,7 @@ if ($state) {
             if (!empty($message['document'])) {
                 $doc      = $message['document'];
                 $fileName = strtolower($doc['file_name'] ?? '');
-                if (str_ends_with($fileName, '.zip')) {
+                if (substr(strtolower($fileName), -4) === '.zip') {
                     sendMsg($chatId, '⏳ Скачиваю ZIP...');
                     $zipPath = downloadTgFile($doc['file_id']);
                     if ($zipPath) {
