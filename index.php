@@ -41,6 +41,11 @@ try {
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE");
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL");
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)");
 } catch (Exception $e) {}
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -660,6 +665,211 @@ if ($path==='/api/profile/upload-image' && $_SERVER['REQUEST_METHOD']==='POST') 
         $pdo->prepare("INSERT INTO profile_customizations (account_id,banner_url,updated_at) VALUES (?,?,NOW()) ON CONFLICT (account_id) DO UPDATE SET banner_url=EXCLUDED.banner_url, updated_at=NOW()")->execute([$aid,$uploadedUrl]);
     }
     echo json_encode(['success'=>true,'url'=>$uploadedUrl]);
+    exit;
+}
+
+// API: Изменить никнейм
+if ($path==='/api/profile/change-username' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $newUsername = trim($input['username'] ?? '');
+    if (!$newUsername || strlen($newUsername)<3 || strlen($newUsername)>30) { echo json_encode(['success'=>false,'error'=>'Username: 3-30 символов']); exit; }
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $newUsername)) { echo json_encode(['success'=>false,'error'=>'Только буквы, цифры, _']); exit; }
+    try {
+        $check = $pdo->prepare("SELECT id FROM accounts WHERE username=? AND id!=?");
+        $check->execute([$newUsername, (int)$account['id']]);
+        if ($check->fetch()) { echo json_encode(['success'=>false,'error'=>'Этот никнейм уже занят']); exit; }
+        $pdo->prepare("UPDATE accounts SET username=? WHERE id=?")->execute([$newUsername, (int)$account['id']]);
+        echo json_encode(['success'=>true]);
+    } catch(Exception $e) { echo json_encode(['success'=>false,'error'=>'Ошибка сервера']); }
+    exit;
+}
+
+// API: Изменить email (требует пароль + код на почту)
+if ($path==='/api/profile/change-email' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $step = $input['step'] ?? 'request'; // request | confirm
+    if ($step === 'request') {
+        $password = $input['password'] ?? '';
+        $newEmail = strtolower(trim($input['new_email'] ?? ''));
+        if (!password_verify($password, $account['password_hash'])) { echo json_encode(['success'=>false,'error'=>'Неверный пароль']); exit; }
+        if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) { echo json_encode(['success'=>false,'error'=>'Неверный email']); exit; }
+        $chk = $pdo->prepare("SELECT id FROM accounts WHERE email=? AND id!=?"); $chk->execute([$newEmail,(int)$account['id']]);
+        if ($chk->fetch()) { echo json_encode(['success'=>false,'error'=>'Email уже занят']); exit; }
+        $code = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
+        $expires = date('Y-m-d H:i:s', time()+900);
+        $pdo->prepare("INSERT INTO email_verifications (email,code,expires_at) VALUES (?,?,?)")->execute([$newEmail,$code,$expires]);
+        // Store pending email in session data (we use a temp column approach)
+        $pdo->prepare("UPDATE accounts SET verify_code=?, verify_expires=? WHERE id=?")->execute([$code,$expires,(int)$account['id']]);
+        // send code to NEW email
+        $html = "<div style='font-family:Inter,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Смена email</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Код подтверждения для смены email:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center;margin-bottom:20px'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 15 минут</div></div></div>";
+        sendBrevoEmail($newEmail, $account['username'], 'Смена email | BLACKWATCH', $html);
+        // Store new_email pending in session
+        $_SESSION['pending_email_change'] = $newEmail;
+        echo json_encode(['success'=>true,'message'=>'Код отправлен на новый email']);
+    } else {
+        $code = trim($input['code'] ?? '');
+        $newEmail = $_SESSION['pending_email_change'] ?? '';
+        if (!$newEmail) { echo json_encode(['success'=>false,'error'=>'Сессия истекла, начни заново']); exit; }
+        $row = $pdo->prepare("SELECT verify_code,verify_expires FROM accounts WHERE id=?"); $row->execute([(int)$account['id']]); $r=$row->fetch();
+        if (!$r || $r['verify_code'] !== $code) { echo json_encode(['success'=>false,'error'=>'Неверный код']); exit; }
+        if (strtotime($r['verify_expires']) < time()) { echo json_encode(['success'=>false,'error'=>'Код истёк']); exit; }
+        $pdo->prepare("UPDATE accounts SET email=?, verify_code=NULL, verify_expires=NULL WHERE id=?")->execute([$newEmail,(int)$account['id']]);
+        unset($_SESSION['pending_email_change']);
+        echo json_encode(['success'=>true]);
+    }
+    exit;
+}
+
+// API: Приватность профиля
+if ($path==='/api/profile/privacy' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mode = $input['mode'] ?? 'public'; // public | friends | private
+    if (!in_array($mode,['public','friends','private'])) { echo json_encode(['success'=>false,'error'=>'Неверный режим']); exit; }
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'"); } catch(Exception $e){}
+    $pdo->prepare("UPDATE accounts SET profile_privacy=? WHERE id=?")->execute([$mode,(int)$account['id']]);
+    echo json_encode(['success'=>true]);
+    exit;
+}
+
+// API: Публичный профиль пользователя
+if (preg_match('#^/api/profile/view/([a-zA-Z0-9_]+)$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $targetUsername = $m[1];
+    $stmt = $pdo->prepare("SELECT id,username,email,created_at,is_verified,tg_user_id,profile_privacy FROM accounts WHERE username=?");
+    $stmt->execute([$targetUsername]); $target = $stmt->fetch();
+    if (!$target) { echo json_encode(['success'=>false,'error'=>'Пользователь не найден']); exit; }
+    $tid = (int)$target['id'];
+    $privacy = $target['profile_privacy'] ?? 'public';
+    // Check viewer
+    $viewer = getCurrentAccount($pdo);
+    $viewerIsAdmin = false;
+    if ($viewer) {
+        $vtg = (int)($viewer['tg_user_id']??0);
+        $viewerIsAdmin = in_array($vtg,$hardcodedAdmins) || (!empty($viewer['is_admin'])&&$viewer['is_admin']);
+    }
+    $isFriend = false;
+    if ($viewer && (int)$viewer['id'] !== $tid) {
+        $fStmt = $pdo->prepare("SELECT id FROM friendships WHERE ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)) AND status='accepted'");
+        $fStmt->execute([(int)$viewer['id'],$tid,$tid,(int)$viewer['id']]); $isFriend = (bool)$fStmt->fetch();
+    }
+    $isSelf = $viewer && (int)$viewer['id'] === $tid;
+    $canView = $viewerIsAdmin || $isSelf || $privacy==='public' || ($privacy==='friends'&&$isFriend);
+    // Get customization
+    $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?"); $custStmt->execute([$tid]);
+    $custom = $custStmt->fetch()?:['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
+    // Admin check for target
+    $tgid = (int)($target['tg_user_id']??0);
+    $targetIsAdmin = in_array($tgid,$hardcodedAdmins) || (function() use($pdo,$tid){ try{$s=$pdo->prepare("SELECT is_admin FROM accounts WHERE id=? AND is_admin=TRUE");$s->execute([$tid]);return (bool)$s->fetch();}catch(Exception $e){return false;} })();
+    $adminTag = null;
+    try{$s=$pdo->prepare("SELECT admin_tag FROM accounts WHERE id=?");$s->execute([$tid]);$r=$s->fetch();$adminTag=$r['admin_tag']??null;}catch(Exception $e){}
+    $data = [
+        'id'=>$tid,'username'=>$target['username'],'created_at'=>$target['created_at'],
+        'is_verified'=>(bool)$target['is_verified'],'is_admin'=>$targetIsAdmin,'admin_tag'=>$adminTag,
+        'privacy'=>$privacy,'can_view_library'=>$canView,'is_friend'=>$isFriend,'is_self'=>$isSelf,
+        'custom'=>$custom
+    ];
+    if ($canView) {
+        // Stats
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
+        // Library items
+        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
+        $libStmt->execute([$tid]);$data['library']=$libStmt->fetchAll();
+    }
+    // Friends list (only if can_view or public)
+    $fListStmt=$pdo->prepare("SELECT a.username,pc.avatar_url,f.status FROM friendships f JOIN accounts a ON (CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END)=a.id LEFT JOIN profile_customizations pc ON pc.account_id=a.id WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted' LIMIT 20");
+    $fListStmt->execute([$tid,$tid,$tid]);$data['friends']=$fListStmt->fetchAll();
+    // Friendship status with viewer
+    if ($viewer && !$isSelf) {
+        $fsStmt=$pdo->prepare("SELECT id,status,requester_id FROM friendships WHERE (requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)");
+        $fsStmt->execute([(int)$viewer['id'],$tid,$tid,(int)$viewer['id']]);$fs=$fsStmt->fetch();
+        $data['friendship'] = $fs?['id'=>$fs['id'],'status'=>$fs['status'],'is_mine'=>(int)$fs['requester_id']===(int)$viewer['id']]:null;
+    }
+    echo json_encode(['success'=>true,'data'=>$data]);
+    exit;
+}
+
+// API: Ежемесячная переаутентификация — проверить нужно ли
+if ($path==='/api/auth/reauth-check' && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['needs_reauth'=>false]); exit; }
+    $lastConfirm = $_SESSION['last_reauth_confirm'] ?? 0;
+    $needs = (time() - $lastConfirm) > (30*24*3600);
+    echo json_encode(['needs_reauth'=>$needs]);
+    exit;
+}
+
+// API: Ежемесячная переаутентификация — подтвердить
+if ($path==='/api/auth/reauth-confirm' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $step = $input['step'] ?? 'password';
+    if ($step === 'password') {
+        $password = $input['password'] ?? '';
+        if (!password_verify($password, $account['password_hash'])) { echo json_encode(['success'=>false,'error'=>'Неверный пароль']); exit; }
+        // Send code to email
+        $code = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
+        $_SESSION['reauth_code'] = $code;
+        $_SESSION['reauth_code_expires'] = time()+600;
+        $html = "<div style='font-family:Inter,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Подтверждение входа</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Ежемесячное подтверждение аккаунта. Твой код:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 10 минут</div></div></div>";
+        sendBrevoEmail($account['email'],$account['username'],'Подтверждение сессии | BLACKWATCH',$html);
+        echo json_encode(['success'=>true,'message'=>'Код отправлен на email']);
+    } else {
+        $code = trim($input['code']??'');
+        if (!isset($_SESSION['reauth_code']) || $_SESSION['reauth_code']!==$code || time()>($_SESSION['reauth_code_expires']??0)) {
+            echo json_encode(['success'=>false,'error'=>'Неверный или истёкший код']); exit;
+        }
+        $_SESSION['last_reauth_confirm'] = time();
+        unset($_SESSION['reauth_code'],$_SESSION['reauth_code_expires']);
+        echo json_encode(['success'=>true]);
+    }
+    exit;
+}
+
+// API: Назначить админа по TG ID (для суперадминов)
+if ($path==='/api/admin/assign-by-tgid' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $superAdmins = [1710365896, 1181510470];
+    $tgId = (int)($account['tg_user_id']??0);
+    if (!in_array($tgId,$superAdmins)) { echo json_encode(['success'=>false,'error'=>'Нет прав суперадмина']); exit; }
+    $input = json_decode(file_get_contents('php://input'),true);
+    $targetTgId = (int)($input['tg_id']??0);
+    $tagName = trim($input['tag']??'Администратор');
+    $action = $input['action']??'add';
+    if (!$targetTgId) { echo json_encode(['success'=>false,'error'=>'Укажи TG ID']); exit; }
+    // Check if account with this TG ID exists
+    $accStmt=$pdo->prepare("SELECT id,username,email FROM accounts WHERE tg_user_id=?");$accStmt->execute([$targetTgId]);$targetAcc=$accStmt->fetch();
+    if (!$targetAcc) { echo json_encode(['success'=>false,'error'=>'Пользователь с таким TG ID не привязан к аккаунту на сайте']); exit; }
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"); } catch(Exception $e){}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL"); } catch(Exception $e){}
+    if ($action==='add') {
+        $pdo->prepare("INSERT INTO bot_admins (user_id) VALUES (?) ON CONFLICT DO NOTHING")->execute([$targetTgId]);
+        $pdo->prepare("INSERT INTO admin_tags (user_id,tag_name) VALUES (?,?) ON CONFLICT (user_id) DO UPDATE SET tag_name=EXCLUDED.tag_name")->execute([$targetTgId,$tagName]);
+        $pdo->prepare("UPDATE accounts SET is_admin=TRUE, admin_tag=? WHERE id=?")->execute([$tagName,(int)$targetAcc['id']]);
+        sendTgNotify($targetTgId,"⚡ <b>Ты назначен администратором!</b>\n\nТег: <b>{$tagName}</b>\n\n🌐 Зайди на сайт чтобы открыть панель управления.");
+        echo json_encode(['success'=>true,'message'=>"Админ {$targetAcc['username']} добавлен"]);
+    } else {
+        $pdo->prepare("DELETE FROM bot_admins WHERE user_id=?")->execute([$targetTgId]);
+        $pdo->prepare("DELETE FROM admin_tags WHERE user_id=?")->execute([$targetTgId]);
+        $pdo->prepare("UPDATE accounts SET is_admin=FALSE, admin_tag=NULL WHERE id=?")->execute([(int)$targetAcc['id']]);
+        sendTgNotify($targetTgId,"❌ Твои права администратора были сняты.");
+        echo json_encode(['success'=>true,'message'=>"Права сняты с {$targetAcc['username']}"]);
+    }
     exit;
 }
 
