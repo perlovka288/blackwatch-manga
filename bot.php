@@ -99,12 +99,15 @@ try {
         user_id BIGINT PRIMARY KEY,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
+     $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, tg_user_id BIGINT DEFAULT NULL, tg_link_token TEXT DEFAULT NULL, is_verified BOOLEAN DEFAULT FALSE, last_login TIMESTAMP DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account_id INT NOT NULL, ip TEXT, user_agent TEXT, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS bot_states (
         user_id BIGINT PRIMARY KEY,
         state TEXT NOT NULL,
         data JSONB DEFAULT '{}',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
+    
     $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (
         id SERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL,
