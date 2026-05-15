@@ -594,6 +594,149 @@ if ($path==='/api/profile/customization' && $_SERVER['REQUEST_METHOD']==='POST')
     exit;
 }
 
+// API: Загрузка фото профиля (аватарка или баннер)
+if ($path==='/api/profile/upload-image' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $type = trim($_GET['type'] ?? 'avatar'); // avatar | banner
+    if (!in_array($type, ['avatar','banner'])) { echo json_encode(['success'=>false,'error'=>'Неверный тип']); exit; }
+    if (empty($_FILES['image']['tmp_name'])) { echo json_encode(['success'=>false,'error'=>'Файл не загружен']); exit; }
+    $file = $_FILES['image'];
+    $maxSize = 8 * 1024 * 1024; // 8 MB
+    if ($file['size'] > $maxSize) { echo json_encode(['success'=>false,'error'=>'Файл слишком большой (макс. 8 МБ)']); exit; }
+    $allowedTypes = ['image/jpeg','image/jpg','image/png','image/webp','image/gif'];
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($file['tmp_name']);
+    if (!in_array($mime, $allowedTypes)) { echo json_encode(['success'=>false,'error'=>'Неверный формат файла']); exit; }
+    // Upload to ImgBB
+    $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
+    $imageData = base64_encode(file_get_contents($file['tmp_name']));
+    $uploadedUrl = null;
+    foreach ($imgbbKeys as $key) {
+        $ch = curl_init('https://api.imgbb.com/1/upload');
+        curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>['key'=>$key,'image'=>$imageData],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>90,CURLOPT_SSL_VERIFYPEER=>false]);
+        $response = curl_exec($ch); $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        if ($httpCode === 200) { $data = json_decode($response, true); if (!empty($data['data']['url'])) { $uploadedUrl = $data['data']['url']; break; } }
+    }
+    if (!$uploadedUrl) { echo json_encode(['success'=>false,'error'=>'Ошибка загрузки на сервер']); exit; }
+    // Save to DB
+    $aid = (int)$account['id'];
+    if ($type === 'avatar') {
+        $pdo->prepare("INSERT INTO profile_customizations (account_id,avatar_url,updated_at) VALUES (?,?,NOW()) ON CONFLICT (account_id) DO UPDATE SET avatar_url=EXCLUDED.avatar_url, updated_at=NOW()")->execute([$aid,$uploadedUrl]);
+    } else {
+        $pdo->prepare("INSERT INTO profile_customizations (account_id,banner_url,updated_at) VALUES (?,?,NOW()) ON CONFLICT (account_id) DO UPDATE SET banner_url=EXCLUDED.banner_url, updated_at=NOW()")->execute([$aid,$uploadedUrl]);
+    }
+    echo json_encode(['success'=>true,'url'=>$uploadedUrl]);
+    exit;
+}
+
+// API: Поиск пользователей для добавления в друзья
+if ($path==='/api/users/search' && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'users'=>[]]); exit; }
+    $q = trim($_GET['q'] ?? '');
+    if (strlen($q) < 2) { echo json_encode(['success'=>true,'users'=>[]]); exit; }
+    $aid = (int)$account['id'];
+    $stmt = $pdo->prepare("SELECT a.id, a.username, pc.avatar_url FROM accounts a LEFT JOIN profile_customizations pc ON pc.account_id=a.id WHERE a.username ILIKE ? AND a.id != ? LIMIT 8");
+    $stmt->execute(["$q%", $aid]);
+    $users = $stmt->fetchAll();
+    echo json_encode(['success'=>true,'users'=>$users]);
+    exit;
+}
+
+// API: Назначить/снять админа (только суперадмины)
+if ($path==='/api/admin/assign' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $superAdmins = [1710365896, 1181510470];
+    $tgId = (int)($account['tg_user_id'] ?? 0);
+    if (!in_array($tgId, $superAdmins)) { echo json_encode(['success'=>false,'error'=>'Нет прав суперадмина']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $targetEmail = strtolower(trim($input['email'] ?? ''));
+    $tagName = trim($input['tag'] ?? 'Администратор');
+    $action = $input['action'] ?? 'add'; // add | remove
+    if (!$targetEmail) { echo json_encode(['success'=>false,'error'=>'Укажи email']); exit; }
+    $targetStmt = $pdo->prepare("SELECT id, username, tg_user_id, email FROM accounts WHERE email=?");
+    $targetStmt->execute([$targetEmail]); $target = $targetStmt->fetch();
+    if (!$target) { echo json_encode(['success'=>false,'error'=>'Пользователь не найден']); exit; }
+    $targetAccountId = (int)$target['id'];
+    $targetTgId = $target['tg_user_id'] ? (int)$target['tg_user_id'] : null;
+    if ($action === 'add') {
+        // Add to bot_admins if TG linked
+        if ($targetTgId) {
+            $pdo->prepare("INSERT INTO bot_admins (user_id) VALUES (?) ON CONFLICT DO NOTHING")->execute([$targetTgId]);
+            $pdo->prepare("INSERT INTO admin_tags (user_id,tag_name) VALUES (?,?) ON CONFLICT (user_id) DO UPDATE SET tag_name=EXCLUDED.tag_name")->execute([$targetTgId,$tagName]);
+        }
+        // Store admin assignment with account_id reference
+        // We use a flag in accounts table - add column if not exists
+        try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+        try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL"); } catch(Exception $e) {}
+        $pdo->prepare("UPDATE accounts SET is_admin=TRUE, admin_tag=? WHERE id=?")->execute([$tagName, $targetAccountId]);
+        // Send email notification
+        $html = "
+        <div style='font-family:Inter,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
+          <div style='font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div>
+          <h2 style='color:#ef4444;font-size:18px;margin-bottom:16px'>⚡ Ты назначен администратором</h2>
+          <p style='color:#aaa;font-size:14px;margin-bottom:20px'>Привет, <strong style='color:#f2f2f2'>{$target['username']}</strong>! Тебе выдан тег администратора:</p>
+          <div style='background:#161616;border:1px solid rgba(239,68,68,0.4);border-radius:12px;padding:20px;text-align:center;margin-bottom:20px'>
+            <div style='font-size:20px;font-weight:800;color:#ef4444;letter-spacing:2px'>{$tagName}</div>
+          </div>
+          <p style='color:#aaa;font-size:13px;margin-bottom:10px'>Теперь тебе доступна <strong style='color:#f2f2f2'>Админ-панель</strong> на сайте".($targetTgId?' и в Telegram боте':'').".</p>
+          ".(!$targetTgId?'<p style="color:#fb923c;font-size:12px">⚠️ Для доступа к Telegram боту привяжи свой аккаунт Telegram на странице профиля.</p>':'')."
+        </div>";
+        sendBrevoEmail($target['email'], $target['username'], '⚡ Ты назначен администратором | BLACKWATCH', $html);
+        // Send TG notification
+        if ($targetTgId) {
+            sendTgNotify($targetTgId, "⚡ <b>Ты назначен администратором!</b>\n\nТег: <b>{$tagName}</b>\n\n🌐 Зайди на сайт чтобы открыть панель управления.");
+        }
+        echo json_encode(['success'=>true,'message'=>"Администратор назначен. Уведомление отправлено на {$target['email']}".($targetTgId?" и в Telegram":'')]);
+    } else {
+        // Remove admin
+        if ($targetTgId) {
+            $pdo->prepare("DELETE FROM bot_admins WHERE user_id=?")->execute([$targetTgId]);
+            $pdo->prepare("DELETE FROM admin_tags WHERE user_id=?")->execute([$targetTgId]);
+        }
+        try { $pdo->prepare("UPDATE accounts SET is_admin=FALSE, admin_tag=NULL WHERE id=?")->execute([$targetAccountId]); } catch(Exception $e) {}
+        if ($targetTgId) sendTgNotify($targetTgId, "❌ Твои права администратора были сняты.");
+        echo json_encode(['success'=>true,'message'=>'Права администратора сняты']);
+    }
+    exit;
+}
+
+// API: Список администраторов (расширенный)
+if ($path==='/api/admin/list-all' && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['error'=>'Нет прав']); exit; }
+    $tgId = (int)($account['tg_user_id'] ?? 0);
+    if (!isAdmin($tgId, $hardcodedAdmins)) { echo json_encode(['error'=>'Нет прав']); exit; }
+    // Get all admins from bot_admins + accounts.is_admin
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL"); } catch(Exception $e) {}
+    $superAdmins = [1710365896, 1181510470];
+    $admins = [];
+    // Bot admins
+    $stmt = $pdo->query("SELECT ba.user_id, at.tag_name, a.username, a.email FROM bot_admins ba LEFT JOIN admin_tags at ON at.user_id=ba.user_id LEFT JOIN accounts a ON a.tg_user_id=ba.user_id");
+    foreach ($stmt->fetchAll() as $row) {
+        $isSuper = in_array((int)$row['user_id'], $superAdmins);
+        $admins[(int)$row['user_id']] = ['tg_id'=>(int)$row['user_id'],'tag'=>$row['tag_name']??'Администратор','username'=>$row['username']??null,'email'=>$row['email']??null,'is_super'=>$isSuper,'source'=>'bot'];
+    }
+    // Super admins (hardcoded)
+    foreach ($superAdmins as $sid) {
+        if (!isset($admins[$sid])) {
+            $accR = $pdo->prepare("SELECT username,email FROM accounts WHERE tg_user_id=?"); $accR->execute([$sid]); $ar = $accR->fetch();
+            $admins[$sid] = ['tg_id'=>$sid,'tag'=>'Суперадмин','username'=>$ar['username']??null,'email'=>$ar['email']??null,'is_super'=>true,'source'=>'hardcoded'];
+        } else {
+            $admins[$sid]['is_super'] = true; $admins[$sid]['tag'] = 'Суперадмин';
+        }
+    }
+    echo json_encode(['admins'=>array_values($admins)]);
+    exit;
+}
+
 // API: Друзья — список
 if ($path==='/api/friends' && $_SERVER['REQUEST_METHOD']==='GET') {
     header('Content-Type: application/json');
