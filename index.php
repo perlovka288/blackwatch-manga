@@ -552,25 +552,14 @@ if ($path==='/api/auth/profile-stats') {
     $account = getCurrentAccount($pdo);
     if (!$account) { echo json_encode(['success'=>false]); exit; }
     $aid = (int)$account['id'];
-    $uid = $account['tg_user_id'] ? (int)$account['tg_user_id'] : null;
+    $uid = $account['tg_user_id'];
 
-    // Считаем уникальные манги по account_id ИЛИ tg_user_id (старые записи через бота)
-    if ($uid) {
-        $stTotal = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id=? OR user_id=?"); $stTotal->execute([$aid,$uid]);
-        $stRead  = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE (account_id=? OR user_id=?) AND status='read'"); $stRead->execute([$aid,$uid]);
-        $stNow   = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE (account_id=? OR user_id=?) AND status='now'"); $stNow->execute([$aid,$uid]);
-        $stWill  = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE (account_id=? OR user_id=?) AND status='will'"); $stWill->execute([$aid,$uid]);
-    } else {
-        $stTotal = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id=?"); $stTotal->execute([$aid]);
-        $stRead  = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id=? AND status='read'"); $stRead->execute([$aid]);
-        $stNow   = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id=? AND status='now'"); $stNow->execute([$aid]);
-        $stWill  = $pdo->prepare("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id=? AND status='will'"); $stWill->execute([$aid]);
-    }
-    $total=(int)$stTotal->fetchColumn();
-    $read=(int)$stRead->fetchColumn();
-    $now=(int)$stNow->fetchColumn();
-    $will=(int)$stWill->fetchColumn();
-    echo json_encode(['success'=>true,'total'=>$total,'read'=>$read,'now'=>$now,'will'=>$will]);
+    // Считаем по account_id (новые записи) + tg_user_id (старые) если TG привязан
+    $total = (int)$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?")->execute([$aid]) ? 0 : 0;
+    $stTotal = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?"); $stTotal->execute([$aid]); $total=(int)$stTotal->fetchColumn();
+    $stRead  = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'"); $stRead->execute([$aid]); $read=(int)$stRead->fetchColumn();
+    $stNow   = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'"); $stNow->execute([$aid]); $now=(int)$stNow->fetchColumn();
+    echo json_encode(['success'=>true,'total'=>$total,'read'=>$read,'now'=>$now]);
     exit;
 }
 
@@ -1251,8 +1240,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .bio-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
 .joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
 .sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px;padding:22px 24px 0}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:0 24px 22px}
-.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:10px 6px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:var(--text)}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
+.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:var(--text)}
 .stat:hover{border-color:var(--border2)}
 .stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
 .stat-l{font-size:10px;color:var(--muted);margin-top:2px}
@@ -1394,7 +1383,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Всего</div></a>
             <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Читаю</div></a>
             <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Прочитано</div></a>
-            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Буду читать</div></a>
         </div>
     </div>
 
@@ -1461,24 +1449,14 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card">
         <div class="admin-inner">
             <div class="sec-title" style="padding:0;margin-bottom:13px">⚡ Управление администраторами</div>
+            <div class="admin-add-row">
+                <input type="text" id="new-admin-input" placeholder="Email или TG ID пользователя">
+                <input type="text" id="new-admin-tag" placeholder="Тег (например: Редактор)">
+                <button class="admin-add-btn" onclick="addAdmin()">➕ Добавить администратора</button>
+            </div>
+            <div id="admin-result" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Список администраторов</div>
             <div id="admins-full-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            <div style="margin-top:13px">
-                <button onclick="toggleAdminAddForm()" style="width:100%;padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:9px;color:#ef4444;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">➕ Добавить нового администратора</button>
-                <div id="admin-add-form" style="display:none;margin-top:11px">
-                    <div class="admin-add-row">
-                        <input type="text" id="new-admin-input" placeholder="Email или TG ID пользователя">
-                        <input type="text" id="new-admin-tag" placeholder="Тег (например: Редактор)">
-                        <select id="new-admin-method" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;width:100%">
-                            <option value="auto">Авто (по email или TG ID)</option>
-                            <option value="email">По email</option>
-                            <option value="tgid">По TG ID</option>
-                        </select>
-                        <button class="admin-add-btn" onclick="addAdmin()">✅ Назначить администратором</button>
-                    </div>
-                    <div id="admin-result" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
-                </div>
-            </div>
         </div>
     </div>
     <?php endif; ?>
@@ -1526,7 +1504,7 @@ async function genLink(){const btn=document.getElementById('gen-btn');btn.disabl
 function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Скопировано!');}
 async function unlinkTg(){if(!confirm('Отвязать Telegram?'))return;const res=await fetch('/api/auth/tg-unlink',{method:'POST'});const d=await res.json();if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}}
 
-async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></a><a class="stat" href="/library"><div class="stat-n">${d.will||0}</div><div class="stat-l">Буду читать</div></a>`;}}catch(e){}}
+async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></a>`;}}catch(e){}}
 
 async function setPrivacy(mode){
     const btns=document.querySelectorAll('.privacy-btn');
@@ -1602,7 +1580,6 @@ async function reauthStep2(){
 }
 
 <?php if ($isSuperAdmin): ?>
-function toggleAdminAddForm(){const f=document.getElementById('admin-add-form');f.style.display=f.style.display==='none'?'block':'none';}
 async function addAdmin(){
     const input=document.getElementById('new-admin-input').value.trim();
     const tag=document.getElementById('new-admin-tag').value.trim()||'Администратор';
@@ -1614,7 +1591,7 @@ async function addAdmin(){
     else{body.email=input;}
     const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
-    if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;loadAdminsList();document.getElementById('new-admin-input').value='';document.getElementById('new-admin-tag').value='';document.getElementById('admin-add-form').style.display='none';}
+    if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;loadAdminsList();}
     else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}
 }
 async function removeAdmin(tgId){
@@ -1841,8 +1818,7 @@ async function uploadImage(input, type){
                 zone.style.padding='0';
                 zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'banner')"><img class="img-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить баннер</div>`;
             }
-            showToast('✅ Изображение обновлено! Переходим в профиль...');
-            setTimeout(()=>window.location.href='/profile',1500);
+            showToast('✅ Изображение обновлено!');
         } else {
             statusEl.textContent = '❌ '+d.error;
         }
@@ -1855,9 +1831,8 @@ function pickBannerColor(c){
         const onclick=el.getAttribute('onclick')||'';
         el.classList.toggle('active', onclick.includes(`'${c}'`));
     });
-    // Save immediately and show toast
-    fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({banner_color:c,bio:document.getElementById('cust-bio').value.trim()})})
-    .then(r=>r.json()).then(d=>{if(d.success)showToast('🎨 Цвет сохранён! Нажми "Сохранить изменения" для применения.');});
+    // Also save immediately
+    fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({banner_color:c,bio:document.getElementById('cust-bio').value.trim()})});
 }
 
 async function saveBio(){
@@ -1867,7 +1842,7 @@ async function saveBio(){
     ok.classList.remove('show');err.classList.remove('show');
     const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bio,banner_color:color})});
     const d=await res.json();
-    if(d.success){ok.textContent='✅ Сохранено! Возвращаю в профиль...';ok.classList.add('show');showToast('✅ Профиль обновлён!');setTimeout(()=>window.location.href='/profile',1200);}
+    if(d.success){ok.textContent='✅ Сохранено!';ok.classList.add('show');showToast('✅ Профиль обновлён!');}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 
@@ -3441,6 +3416,17 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
                 <div class="admins-wrap" style="margin-top:14px">
                     <div class="admin-lbl">Список админов</div>
                     <div id="admins-list"><div style="color:var(--muted);font-size:11px">Загрузка...</div></div>
+                    <button onclick="toggleAdminAddPanel()" id="admin-add-toggle-btn" style="width:100%;margin-top:8px;padding:8px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">➕ Добавить нового администратора</button>
+                    <div id="admin-add-panel" style="display:none;margin-top:9px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:12px">
+                        <div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:9px">⚡ Назначить администратора</div>
+                        <input id="ap-admin-input" type="text" placeholder="Email или TG ID" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <input id="ap-admin-tag" type="text" placeholder="Тег (например: Редактор)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <div style="display:flex;gap:6px">
+                            <button onclick="submitAddAdmin()" style="flex:1;padding:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:7px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">&#10003; Назначить</button>
+                            <button onclick="toggleAdminAddPanel()" style="padding:8px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">Отмена</button>
+                        </div>
+                        <div id="ap-admin-result" style="font-size:11px;margin-top:7px"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3745,6 +3731,8 @@ async function loadSuggestions(pg){
 }
 async function markSuggestion(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
 async function loadAdmins(){try{const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();if(!data.admins)return;document.getElementById('admins-list').innerHTML=data.admins.map(a=>`<div class="admin-row"><div><div class="admin-tag">${escapeHtml(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard?.writeText?.('${a.user_id}');showToast('📋 Скопировано')">Копировать</button></div>`).join('');}catch(e){}}
+function toggleAdminAddPanel(){const p=document.getElementById('admin-add-panel');p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block'){document.getElementById('ap-admin-input').focus();document.getElementById('ap-admin-result').textContent='';}}
+async function submitAddAdmin(){const input=document.getElementById('ap-admin-input').value.trim();const tag=document.getElementById('ap-admin-tag').value.trim()||'Администратор';const result=document.getElementById('ap-admin-result');if(!input){result.style.color='var(--red)';result.textContent='❌ Введи email или TG ID';return;}let endpoint='/api/admin/assign';let body={tag,action:'add'};if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await res.json();if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;document.getElementById('ap-admin-input').value='';document.getElementById('ap-admin-tag').value='';setTimeout(()=>{toggleAdminAddPanel();loadAdmins();},1500);}else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}}catch(e){result.style.color='var(--red)';result.textContent='❌ Ошибка сети';}}
 
 // ===== ADMIN MESSAGES =====
 async function loadAdminMessages(){
