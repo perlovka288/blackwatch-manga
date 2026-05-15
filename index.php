@@ -1190,16 +1190,29 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
 </body></html><?php exit; }
 
 // /profile
+
+// /profile
 if ($path==='/profile') {
     $account = requireAuth($pdo);
     $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
     $isAccountAdmin = in_array((int)($account['tg_user_id'] ?? 0), $hardcodedAdmins)
         || (!empty($account['is_admin']) && $account['is_admin']);
+    $isSuperAdmin = in_array((int)($account['tg_user_id'] ?? 0), [1710365896, 1181510470]);
     $accountAdminTag = $account['admin_tag'] ?? null;
     // Load profile customization
     $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?");
     $custStmt->execute([(int)$account['id']]);
     $custom = $custStmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
+    // Load friends count
+    $friendsCountStmt = $pdo->prepare("SELECT COUNT(*) FROM friendships WHERE (requester_id=? OR addressee_id=?) AND status='accepted'");
+    $friendsCountStmt->execute([(int)$account['id'],(int)$account['id']]);
+    $friendsCount = (int)$friendsCountStmt->fetchColumn();
+    // Reauth check
+    $needsReauth = false;
+    if ($account) {
+        $lastConfirm = $_SESSION['last_reauth_confirm'] ?? 0;
+        $needsReauth = (time() - $lastConfirm) > (30*24*3600);
+    }
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Профиль | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1209,29 +1222,29 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}
 .back:hover{color:var(--text)}
-.wrap{max-width:560px;margin:0 auto;position:relative;z-index:1}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:0;margin-bottom:14px;overflow:hidden}
-.card-inner{padding:22px 24px}
-/* PROFILE BANNER */
-.profile-banner{width:100%;height:110px;background:var(--banner-color,#1a1a2e);background-size:cover;background-position:center;position:relative}
+.wrap{max-width:580px;margin:0 auto;position:relative;z-index:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;margin-bottom:14px;overflow:hidden}
+.profile-banner{width:100%;height:120px;background:<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>;background-size:cover;background-position:center;position:relative;overflow:hidden}
 .profile-banner-img{width:100%;height:100%;object-fit:cover;display:block}
-/* AVATAR */
-.avatar-wrap{position:relative;margin-top:-42px;margin-left:20px;display:inline-block}
-.avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:3px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:32px;object-fit:cover;overflow:hidden}
+.avatar-wrap{position:relative;margin-top:-46px;margin-left:20px;display:inline-block;z-index:2}
+.avatar{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:4px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:36px;overflow:hidden;flex-shrink:0}
 .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.profile-header-row{display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px 16px}
+.profile-name-col{flex:1;min-width:0}
+.edit-profile-btn{padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:9px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;margin-top:10px;margin-left:12px}
+.edit-profile-btn:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.04)}
 .admin-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;margin-left:8px;vertical-align:middle}
 .verify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:var(--green);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle}
-.unverify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:var(--orange);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle;cursor:pointer}
-.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px;margin-top:10px}
+.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px;margin-top:12px}
 .email{font-size:12px;color:var(--muted);margin-bottom:8px}
 .bio-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
 .joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
 .sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px;padding:22px 24px 0}
 .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
-.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center}
+.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:var(--text)}
+.stat:hover{border-color:var(--border2)}
 .stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
 .stat-l{font-size:10px;color:var(--muted);margin-top:2px}
-/* VERIFY BANNER */
 .verify-banner{background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.2);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
 .verify-icon{font-size:22px;flex-shrink:0}
 .verify-info{flex:1}
@@ -1240,19 +1253,12 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .verify-input-row input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:8px 12px;font-family:monospace;letter-spacing:4px;text-align:center}
 .verify-input-row button{padding:8px 14px;background:var(--orange);border:none;border-radius:8px;color:#000;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
 .resend-link{font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:5px;display:inline-block}
-/* CUSTOMIZE SECTION */
-.customize-card{padding:22px 24px}
-.cust-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.cust-field label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-.cust-field input,.cust-field textarea{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;transition:border-color .2s;resize:none}
-.cust-field input:focus,.cust-field textarea:focus{border-color:var(--border2)}
-.cust-field.full{grid-column:1/-1}
-.color-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
-.color-preset{width:24px;height:24px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
-.color-preset.active{border-color:#fff;transform:scale(1.2)}
-.save-cust-btn{width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
-.save-cust-btn:hover{opacity:.85}
-/* TG section */
+.reauth-banner{background:rgba(124,92,255,0.08);border:1px solid rgba(124,92,255,0.25);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
+.privacy-row{display:flex;gap:6px;padding:0 24px 22px}
+.privacy-btn{flex:1;padding:8px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;text-align:center}
+.privacy-btn.active-public{background:rgba(74,222,128,0.08);border-color:rgba(74,222,128,0.3);color:var(--green)}
+.privacy-btn.active-friends{background:rgba(124,92,255,0.1);border-color:rgba(124,92,255,0.3);color:#a78bfa}
+.privacy-btn.active-private{background:rgba(248,113,113,0.06);border-color:rgba(248,113,113,0.25);color:var(--red)}
 .tg-inner{padding:22px 24px}
 .tg-connected{display:flex;align-items:center;justify-content:space-between;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.18);border-radius:11px;padding:12px 14px;margin-bottom:10px}
 .tg-info{font-size:13px;color:var(--green);font-weight:600}
@@ -1269,25 +1275,45 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .copy-cmd:hover{color:var(--text)}
 .gen-btn{width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:11px;transition:all .2s}
 .gen-btn:hover{border-color:var(--border2);color:var(--text)}
-/* FRIENDS */
 .friends-inner{padding:22px 24px}
 .friend-add-row{display:flex;gap:7px;margin-bottom:14px}
 .friend-add-row input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none}
 .friend-add-row input:focus{border-color:var(--border2)}
 .friend-add-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
 .friend-item{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:7px}
-.friend-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#3b3b5e);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;object-fit:cover}
-.friend-name{font-size:13px;font-weight:600;color:var(--text2)}
+.friend-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#3b3b5e);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
+.friend-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.friend-name{font-size:13px;font-weight:600;color:var(--text2);text-decoration:none}
+.friend-name:hover{color:var(--text)}
 .friend-status{font-size:10px;color:var(--muted);margin-top:1px}
 .friend-actions{margin-left:auto;display:flex;gap:5px}
 .f-btn{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;border:1px solid}
 .f-btn.accept{background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.3);color:var(--green)}
 .f-btn.reject,.f-btn.remove{background:rgba(248,113,113,.06);border-color:rgba(248,113,113,.25);color:var(--red)}
-/* LOGOUT */
+.profile-link{font-size:11px;color:var(--accent);text-decoration:none}
+.profile-link:hover{text-decoration:underline}
+.admin-inner{padding:22px 24px}
+.admin-add-row{display:flex;flex-direction:column;gap:9px;margin-bottom:13px}
+.admin-add-row input,.admin-add-row select{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;width:100%}
+.admin-add-row input:focus{border-color:var(--border2)}
+.admin-add-btn{padding:11px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:9px;color:#ef4444;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
+.admin-add-btn:hover{background:rgba(239,68,68,0.18)}
 .logout-btn{width:100%;padding:11px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:block;text-align:center;margin-bottom:14px}
 .logout-btn:hover{background:rgba(248,113,113,.12)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;border:1px solid var(--border2);animation:ti .25s ease;white-space:nowrap}
 @keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);backdrop-filter:blur(14px);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px;max-width:360px;width:100%}
+.modal-box h2{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:6px}
+.modal-box p{color:var(--muted);font-size:13px;margin-bottom:18px;line-height:1.6}
+.fi{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;margin-bottom:10px}
+.fi:focus{border-color:var(--border2)}
+.sbtn{width:100%;padding:11px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.sbtn:hover{opacity:.85}
+.sbtn:disabled{opacity:.4;cursor:not-allowed}
+.err-msg{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:9px 13px;color:#fca5a5;font-size:12px;margin-bottom:10px;display:none}
+.err-msg.show{display:block}
 </style>
 </head>
 <body>
@@ -1308,33 +1334,45 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
     <?php endif; ?>
 
+    <?php if ($needsReauth): ?>
+    <div class="reauth-banner">
+        <div style="font-size:22px;flex-shrink:0">🔑</div>
+        <div style="flex:1">
+            <p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">Ежемесячное подтверждение. Нажми чтобы подтвердить аккаунт.</p>
+            <button onclick="openReauthModal()" style="padding:7px 14px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Подтвердить сейчас</button>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- PROFILE CARD -->
     <div class="card">
-        <div class="profile-banner" id="profile-banner" style="background-color:<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+        <div class="profile-banner">
             <?php if (!empty($custom['banner_url'])): ?>
             <img class="profile-banner-img" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
             <?php endif; ?>
         </div>
-        <div class="card-inner">
-            <div class="avatar-wrap">
-                <div class="avatar">
-                    <?php if (!empty($custom['avatar_url'])): ?>
-                    <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                    <?php else: ?>
-                    👤
-                    <?php endif; ?>
+        <div class="avatar-wrap">
+            <div class="avatar">
+                <?php if (!empty($custom['avatar_url'])): ?>
+                <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
+                <?php else: ?>👤<?php endif; ?>
+            </div>
+        </div>
+        <div class="profile-header-row">
+            <div class="profile-name-col">
+                <div class="username">
+                    <?=htmlspecialchars($account['username'])?>
+                    <?php if ($isAccountAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($accountAdminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($account['is_verified']): ?><span class="verify-badge">✓ Верифицирован</span><?php endif; ?>
                 </div>
+                <div class="email"><?=htmlspecialchars($account['email'])?></div>
+                <?php if (!empty($custom['bio'])): ?>
+                <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
+                <?php endif; ?>
+                <div class="joined">На сайте с: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
+                <div style="margin-top:8px"><a href="/u/<?=htmlspecialchars($account['username'])?>" class="profile-link">👁 Открыть публичный профиль</a></div>
             </div>
-            <div class="username">
-                <?=htmlspecialchars($account['username'])?>
-                <?php if ($isAccountAdmin): ?><span class="admin-badge">⚡ ADMIN</span><?php endif; ?>
-                <?php if ($account['is_verified']): ?><span class="verify-badge">✓ Верифицирован</span><?php endif; ?>
-            </div>
-            <div class="email"><?=htmlspecialchars($account['email'])?></div>
-            <?php if (!empty($custom['bio'])): ?>
-            <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
-            <?php endif; ?>
-            <div class="joined">Зарегистрирован: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
+            <a href="/profile/edit" class="edit-profile-btn">✏️ Редактировать</a>
         </div>
     </div>
 
@@ -1342,71 +1380,37 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row" id="stats-row">
-            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Всего</div></div>
-            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Читаю</div></div>
-            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Прочитано</div></div>
+            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Всего</div></a>
+            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Читаю</div></a>
+            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Прочитано</div></a>
         </div>
     </div>
 
-    <!-- CUSTOMIZATION -->
+    <!-- PRIVACY -->
     <div class="card">
-        <div class="customize-card">
-            <div class="sec-title" style="padding:0;margin-bottom:14px">🎨 Кастомизация профиля</div>
-            <!-- Avatar upload -->
-            <div style="margin-bottom:14px">
-                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Аватарка</label>
-                <div class="upload-img-zone" id="avatar-zone" onclick="document.getElementById('avatar-file').click()" title="Нажми чтобы выбрать фото">
-                    <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="uploadProfileImage(this,'avatar')">
-                    <?php if(!empty($custom['avatar_url'])): ?>
-                    <img id="avatar-preview" src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                    <div class="upload-img-overlay">📷 Изменить</div>
-                    <?php else: ?>
-                    <div class="upload-img-ph" id="avatar-ph">👤<br><span>Загрузить фото</span></div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <!-- Banner upload -->
-            <div style="margin-bottom:14px">
-                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Шапка профиля (баннер)</label>
-                <div class="upload-img-zone banner-zone" id="banner-zone" onclick="document.getElementById('banner-file').click()" title="Нажми чтобы выбрать фото">
-                    <input type="file" id="banner-file" accept="image/*" style="display:none" onchange="uploadProfileImage(this,'banner')">
-                    <?php if(!empty($custom['banner_url'])): ?>
-                    <img id="banner-preview" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
-                    <div class="upload-img-overlay">📷 Изменить</div>
-                    <?php elseif(!empty($custom['banner_color'])&&$custom['banner_color']!=='#1a1a2e'): ?>
-                    <div class="upload-img-ph" id="banner-ph" style="background:<?=htmlspecialchars($custom['banner_color'])?>">🖼<br><span>Загрузить баннер</span></div>
-                    <?php else: ?>
-                    <div class="upload-img-ph" id="banner-ph">🖼<br><span>Загрузить баннер</span></div>
-                    <?php endif; ?>
-                </div>
-                <div style="margin-top:8px">
-                    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Или выбери цвет шапки</div>
-                    <div class="color-presets">
-                        <?php foreach(['#1a1a2e','#0f2027','#1a0a2e','#0a1a2e','#0a2e1a','#2e1a0a','#2e0a0a','#0a0a0a','#7c5cff22','#3b82f622'] as $c): ?>
-                        <div class="color-preset <?=$custom['banner_color']===$c?'active':''?>" style="background:<?=htmlspecialchars($c)?>" onclick="pickBannerColor('<?=htmlspecialchars($c)?>')"></div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-            <!-- Bio -->
-            <div style="margin-bottom:14px">
-                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">О себе</label>
-                <textarea id="cust-bio" rows="2" placeholder="Расскажи о себе..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;resize:none"><?=htmlspecialchars($custom['bio']??'')?></textarea>
-            </div>
-            <input type="hidden" id="cust-color" value="<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
-            <button class="save-cust-btn" onclick="saveBio()">💾 Сохранить профиль</button>
-            <div id="cust-upload-status" style="margin-top:8px;font-size:12px;color:var(--muted);text-align:center"></div>
+        <div class="sec-title">🔒 Видимость профиля</div>
+        <?php $privacy = $account['profile_privacy'] ?? 'public'; ?>
+        <div class="privacy-row">
+            <button class="privacy-btn <?=$privacy==='public'?'active-public':''?>" onclick="setPrivacy('public')">🌐 Открытый</button>
+            <button class="privacy-btn <?=$privacy==='friends'?'active-friends':''?>" onclick="setPrivacy('friends')">👥 Для друзей</button>
+            <button class="privacy-btn <?=$privacy==='private'?'active-private':''?>" onclick="setPrivacy('private')">🔒 Закрытый</button>
+        </div>
+        <div style="padding:0 24px 16px;font-size:11px;color:var(--muted)" id="privacy-desc">
+            <?php if($privacy==='public'): ?>Профиль виден всем пользователям
+            <?php elseif($privacy==='friends'): ?>Профиль виден только друзьям
+            <?php else: ?>Профиль закрыт (только для администраторов)<?php endif; ?>
         </div>
     </div>
 
     <!-- FRIENDS -->
     <div class="card">
         <div class="friends-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:14px">👥 Друзья</div>
+            <div class="sec-title" style="padding:0;margin-bottom:14px">👥 Друзья <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(<?=$friendsCount?>)</span></div>
             <div class="friend-add-row">
-                <input type="text" id="friend-username" placeholder="Имя пользователя...">
+                <input type="text" id="friend-username" placeholder="Username друга..." oninput="searchUsers(this.value)">
                 <button class="friend-add-btn" onclick="addFriend()">+ Добавить</button>
             </div>
+            <div id="user-suggestions" style="margin-bottom:10px"></div>
             <div id="friends-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
         </div>
     </div>
@@ -1440,12 +1444,48 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
     </div>
 
+    <?php if ($isSuperAdmin): ?>
+    <!-- ADMIN MANAGEMENT (only for superadmins) -->
+    <div class="card">
+        <div class="admin-inner">
+            <div class="sec-title" style="padding:0;margin-bottom:13px">⚡ Управление администраторами</div>
+            <div class="admin-add-row">
+                <input type="text" id="new-admin-input" placeholder="Email или TG ID пользователя">
+                <input type="text" id="new-admin-tag" placeholder="Тег (например: Редактор)">
+                <button class="admin-add-btn" onclick="addAdmin()">➕ Добавить администратора</button>
+            </div>
+            <div id="admin-result" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Список администраторов</div>
+            <div id="admins-full-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <a href="/logout" class="logout-btn">Выйти из аккаунта</a>
 </div>
+
+<!-- REAUTH MODAL -->
+<div class="modal-overlay" id="reauth-modal">
+<div class="modal-box">
+    <h2>🔑 Подтверждение</h2>
+    <p>Ежемесячное подтверждение. Введи пароль, затем код из письма.</p>
+    <div class="err-msg" id="reauth-err"></div>
+    <div id="reauth-step1">
+        <input class="fi" type="password" id="reauth-pass" placeholder="Твой пароль">
+        <button class="sbtn" id="reauth-pass-btn" onclick="reauthStep1()">Продолжить →</button>
+    </div>
+    <div id="reauth-step2" style="display:none">
+        <p style="color:var(--text2);font-size:12px;margin-bottom:12px">Код отправлен на email. Введи его:</p>
+        <input class="fi" type="text" id="reauth-code" placeholder="000000" maxlength="6" style="font-family:monospace;letter-spacing:6px;text-align:center;font-size:20px">
+        <button class="sbtn" onclick="reauthStep2()">Подтвердить</button>
+    </div>
+</div>
+</div>
+
 <script>
 function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 
-// Verify email
 async function verifyEmail(){
     const code=document.getElementById('vcode').value.trim();
     if(code.length!==6){showToast('Введи 6 цифр');return;}
@@ -1460,46 +1500,49 @@ async function resendCode(){
     showToast(d.success?'📧 Код отправлен заново':'❌ '+d.error);
 }
 
-// Banner color
-function pickBannerColor(c){
-    document.getElementById('cust-color').value=c;
-    document.querySelectorAll('.color-preset').forEach(el=>el.classList.toggle('active',el.style.background===c||el.getAttribute('onclick').includes(c)));
-}
-
-// Customization save
-async function saveCustomization(){
-    const payload={
-        avatar_url:document.getElementById('cust-avatar').value.trim(),
-        banner_url:document.getElementById('cust-banner').value.trim(),
-        banner_color:document.getElementById('cust-color').value.trim()||'#1a1a2e',
-        bio:document.getElementById('cust-bio').value.trim()
-    };
-    const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const d=await res.json();
-    if(d.success){showToast('✅ Профиль сохранён!');setTimeout(()=>location.reload(),700);}
-    else showToast('❌ Ошибка');
-}
-
-// TG linking
 async function genLink(){const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';try{const res=await fetch('/api/auth/tg-link-token',{method:'POST'});const d=await res.json();if(d.success){document.getElementById('cmd-text').textContent=d.command;document.getElementById('link-command').style.display='block';btn.textContent='🔄 Обновить команду';}else showToast('Ошибка: '+d.error);}catch(e){showToast('Ошибка сети');}btn.disabled=false;}
 function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Скопировано!');}
 async function unlinkTg(){if(!confirm('Отвязать Telegram?'))return;const res=await fetch('/api/auth/tg-unlink',{method:'POST'});const d=await res.json();if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}}
 
-// Library stats
-async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){document.getElementById('stats-row').innerHTML=`<div class="stat"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></div><div class="stat"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></div><div class="stat"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></div>`;}}catch(e){}}
+async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></a>`;}}catch(e){}}
 
-// Friends
+async function setPrivacy(mode){
+    const btns=document.querySelectorAll('.privacy-btn');
+    btns.forEach(b=>b.classList.remove('active-public','active-friends','active-private'));
+    const map={public:'active-public',friends:'active-friends',private:'active-private'};
+    event.target.classList.add(map[mode]);
+    const labels={public:'Профиль виден всем пользователям',friends:'Профиль виден только друзьям',private:'Профиль закрыт (только для администраторов)'};
+    document.getElementById('privacy-desc').textContent=labels[mode];
+    const res=await fetch('/api/profile/privacy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
+    const d=await res.json();
+    if(d.success){showToast('✅ '+labels[mode]);}
+    else showToast('❌ Ошибка');
+}
+
+let searchTimer;
+async function searchUsers(q){
+    clearTimeout(searchTimer);
+    const sug=document.getElementById('user-suggestions');
+    if(q.length<2){sug.innerHTML='';return;}
+    searchTimer=setTimeout(async()=>{
+        try{const res=await fetch('/api/users/search?q='+encodeURIComponent(q));const d=await res.json();
+        if(!d.users||!d.users.length){sug.innerHTML='';return;}
+        sug.innerHTML=d.users.map(u=>`<div onclick="selectUser('${escapeHtml(u.username)}')" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:5px;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">${u.avatar_url?`<img src="${escapeHtml(u.avatar_url)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:'<div style="width:28px;height:28px;border-radius:50%;background:#1a1a2e;display:flex;align-items:center;justify-content:center;font-size:12px">👤</div>'}<span style="font-size:13px;font-weight:600;color:var(--text2)">${escapeHtml(u.username)}</span></div>`).join('');}catch(e){}
+    },300);
+}
+function selectUser(username){document.getElementById('friend-username').value=username;document.getElementById('user-suggestions').innerHTML='';}
+
 async function loadFriends(){
     try{const res=await fetch('/api/friends');const d=await res.json();const list=document.getElementById('friends-list');
     if(!d.friends||!d.friends.length){list.innerHTML='<div style="color:var(--muted);font-size:12px">Друзей пока нет</div>';return;}
     list.innerHTML=d.friends.map(f=>{
         const isPending=f.status==='pending';const isMine=f.is_mine;
-        const avatarHtml=f.avatar_url?`<img class="friend-avatar" src="${escapeHtml(f.avatar_url)}" alt="">`:`<div class="friend-avatar">👤</div>`;
+        const avatarHtml=f.avatar_url?`<img src="${escapeHtml(f.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div class="friend-avatar">👤</div>`;
         let actions='';
-        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">✓</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
-        else if(isPending&&isMine)actions=`<span style="font-size:10px;color:var(--muted)">Ожидание...</span>`;
+        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">✓ Принять</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
+        else if(isPending&&isMine)actions=`<span style="font-size:10px;color:var(--muted)">⏳ Ожидание...</span>`;
         else actions=`<button class="f-btn remove" onclick="friendAction(${f.id},'remove')">Удалить</button>`;
-        return `<div class="friend-item">${avatarHtml}<div><div class="friend-name">${escapeHtml(f.username)}</div><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
+        return `<div class="friend-item"><div class="friend-avatar" style="overflow:hidden">${avatarHtml}</div><div style="flex:1;min-width:0"><a href="/u/${escapeHtml(f.username)}" class="friend-name">${escapeHtml(f.username)}</a><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'👥 Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
     }).join('');}catch(e){}
 }
 async function addFriend(){
@@ -1507,18 +1550,551 @@ async function addFriend(){
     if(!username){showToast('Введи имя пользователя');return;}
     const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){showToast('✅ Запрос отправлен!');document.getElementById('friend-username').value='';loadFriends();}
+    if(d.success){showToast('✅ Запрос отправлен!');document.getElementById('friend-username').value='';document.getElementById('user-suggestions').innerHTML='';loadFriends();}
     else showToast('❌ '+(d.error||'Ошибка'));
 }
 async function friendAction(id,action){
     await fetch(`/api/friends/${id}/${action}`,{method:'POST'});loadFriends();
     showToast(action==='accept'?'✅ Принято!':action==='reject'?'Отклонено':'Удалено');
 }
-function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+function openReauthModal(){document.getElementById('reauth-modal').classList.add('open');}
+async function reauthStep1(){
+    const pass=document.getElementById('reauth-pass').value;
+    const err=document.getElementById('reauth-err');err.classList.remove('show');
+    if(!pass){err.textContent='Введи пароль';err.classList.add('show');return;}
+    document.getElementById('reauth-pass-btn').disabled=true;
+    const res=await fetch('/api/auth/reauth-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'password',password:pass})});
+    const d=await res.json();
+    if(d.success){document.getElementById('reauth-step1').style.display='none';document.getElementById('reauth-step2').style.display='block';}
+    else{err.textContent=d.error||'Ошибка';err.classList.add('show');document.getElementById('reauth-pass-btn').disabled=false;}
+}
+async function reauthStep2(){
+    const code=document.getElementById('reauth-code').value.trim();
+    const err=document.getElementById('reauth-err');err.classList.remove('show');
+    if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
+    const res=await fetch('/api/auth/reauth-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'code',code})});
+    const d=await res.json();
+    if(d.success){showToast('✅ Подтверждено!');document.getElementById('reauth-modal').classList.remove('open');setTimeout(()=>location.reload(),500);}
+    else{err.textContent=d.error||'Неверный код';err.classList.add('show');}
+}
+
+<?php if ($isSuperAdmin): ?>
+async function addAdmin(){
+    const input=document.getElementById('new-admin-input').value.trim();
+    const tag=document.getElementById('new-admin-tag').value.trim()||'Администратор';
+    const result=document.getElementById('admin-result');
+    if(!input){showToast('Введи email или TG ID');return;}
+    let endpoint='/api/admin/assign';
+    let body={tag,action:'add'};
+    if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}
+    else{body.email=input;}
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await res.json();
+    if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;loadAdminsList();}
+    else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}
+}
+async function removeAdmin(tgId){
+    if(!confirm('Снять права администратора?'))return;
+    const res=await fetch('/api/admin/assign-by-tgid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_id:tgId,action:'remove'})});
+    const d=await res.json();
+    if(d.success){showToast('✅ Права сняты');loadAdminsList();}
+    else showToast('❌ '+d.error);
+}
+async function loadAdminsList(){
+    try{const res=await fetch('/api/admin/list-all');const d=await res.json();
+    if(d.error){document.getElementById('admins-full-list').innerHTML='<div style="color:var(--muted);font-size:12px">Нет прав</div>';return;}
+    document.getElementById('admins-full-list').innerHTML=d.admins.map(a=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:5px">
+            <div>
+                <div style="font-size:12px;font-weight:600;color:${a.is_super?'#ef4444':'var(--text2)'}">${escapeHtml(a.tag||'Администратор')}${a.is_super?' ⭐':''}</div>
+                <div style="font-size:10px;color:var(--muted)">${a.username?'@'+escapeHtml(a.username)+' · ':''}TG: ${a.tg_id}</div>
+                ${a.email?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(a.email)}</div>`:''}
+            </div>
+            ${!a.is_super&&a.tg_id?`<button onclick="removeAdmin(${a.tg_id})" style="padding:3px 10px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:var(--red);font-size:10px;cursor:pointer;font-family:inherit;font-weight:600">Снять</button>`:'<span style="font-size:10px;color:var(--muted)">Суперадмин</span>'}
+        </div>`).join('');}catch(e){}
+}
+loadAdminsList();
+<?php endif; ?>
 
 loadStats();loadFriends();
 </script>
 </body></html><?php exit; }
+
+// /profile/edit
+if ($path==='/profile/edit') {
+    $account = requireAuth($pdo);
+    $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?");
+    $custStmt->execute([(int)$account['id']]);
+    $custom = $custStmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Редактировать профиль | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80;--orange:#fb923c;--red:#f87171}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
+.back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}.back:hover{color:var(--text)}
+.wrap{max-width:540px;margin:0 auto;position:relative;z-index:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:14px}
+.card-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:18px;color:var(--text)}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+.fi{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;transition:border-color .2s}
+.fi:focus{border-color:var(--border2)}
+.fta{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;resize:none;min-height:70px}
+.fta:focus{border-color:var(--border2)}
+.img-upload-zone{border:1.5px dashed var(--border);border-radius:12px;cursor:pointer;position:relative;overflow:hidden;transition:all .18s;background:rgba(255,255,255,0.02)}
+.img-upload-zone:hover{border-color:var(--border2);background:rgba(255,255,255,0.04)}
+.img-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.avatar-zone{width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px}
+.banner-zone{width:100%;height:110px;display:flex;align-items:center;justify-content:center}
+.img-preview{width:100%;height:100%;object-fit:cover;display:block}
+.avatar-preview{border-radius:50%;width:100%;height:100%;object-fit:cover}
+.upload-ph{font-size:13px;color:var(--muted);text-align:center;padding:10px;line-height:1.5}
+.upload-ph span{font-size:20px;display:block;margin-bottom:4px}
+.upload-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#fff;opacity:0;transition:opacity .18s;pointer-events:none}
+.img-upload-zone:hover .upload-overlay{opacity:1}
+.upload-status{font-size:11px;color:var(--muted);margin-top:5px;text-align:center;min-height:16px}
+.color-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.color-preset{width:26px;height:26px;border-radius:7px;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
+.color-preset.active{border-color:#fff;transform:scale(1.2)}
+.save-btn{width:100%;padding:12px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.save-btn:hover{opacity:.88}
+.save-btn:disabled{opacity:.4;cursor:not-allowed}
+.err-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:9px 13px;color:#fca5a5;font-size:12px;margin-bottom:10px;display:none}
+.err-box.show{display:block}
+.ok-box{background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.2);border-radius:9px;padding:9px 13px;color:#86efac;font-size:12px;margin-bottom:10px;display:none}
+.ok-box.show{display:block}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;border:1px solid var(--border2);animation:ti .25s ease;white-space:nowrap}
+@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.tab-nav{display:flex;gap:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:18px}
+.tab-btn{flex:1;padding:8px;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;transition:all .18s}
+.tab-btn.active{background:var(--card);border:1px solid var(--border2);color:var(--text)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <a href="/profile" class="back">← Профиль</a>
+    <h1 style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:18px">✏️ Редактировать профиль</h1>
+
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('visuals')">🖼 Внешний вид</button>
+        <button class="tab-btn" onclick="switchTab('account')">👤 Аккаунт</button>
+    </div>
+
+    <!-- TAB: VISUALS -->
+    <div class="tab-panel active" id="tab-visuals">
+        <!-- AVATAR -->
+        <div class="card">
+            <div class="card-title">🖼 Аватарка</div>
+            <div style="display:flex;align-items:center;gap:16px">
+                <div class="img-upload-zone avatar-zone" id="avatar-zone">
+                    <input type="file" accept="image/*" id="avatar-input" onchange="uploadImage(this,'avatar')">
+                    <?php if(!empty($custom['avatar_url'])): ?>
+                    <img id="avatar-preview" class="avatar-preview" src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
+                    <div class="upload-overlay">📷 Изменить</div>
+                    <?php else: ?>
+                    <div class="upload-ph"><span>👤</span>Загрузить</div>
+                    <div class="upload-overlay">📷</div>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:5px">Нажми чтобы загрузить фото</div>
+                    <div style="font-size:11px;color:var(--muted)">JPG, PNG, WebP • Макс. 8 МБ<br>Квадратное фото — лучший вариант</div>
+                    <div class="upload-status" id="avatar-status"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BANNER -->
+        <div class="card">
+            <div class="card-title">🖼 Шапка профиля (баннер)</div>
+            <div class="img-upload-zone banner-zone" id="banner-zone" style="margin-bottom:10px;<?=!empty($custom['banner_url'])?'padding:0':''?>">
+                <input type="file" accept="image/*" id="banner-input" onchange="uploadImage(this,'banner')">
+                <?php if(!empty($custom['banner_url'])): ?>
+                <img id="banner-preview" class="img-preview" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
+                <div class="upload-overlay">📷 Изменить баннер</div>
+                <?php else: ?>
+                <div class="upload-ph"><span>🖼</span>Загрузить баннер<br><small>или выбери цвет ниже</small></div>
+                <div class="upload-overlay">📷 Загрузить</div>
+                <?php endif; ?>
+            </div>
+            <div class="upload-status" id="banner-status"></div>
+            <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:8px">Или выбери цвет шапки</div>
+            <div class="color-presets">
+                <?php foreach(['#1a1a2e','#0f2027','#1a0a2e','#0a1a2e','#0a2e1a','#2e1a0a','#2e0a0a','#0a0a0a','#1e1b4b','#064e3b'] as $c): ?>
+                <div class="color-preset <?=$custom['banner_color']===$c?'active':''?>" style="background:<?=htmlspecialchars($c)?>" onclick="pickBannerColor('<?=htmlspecialchars($c)?>')"></div>
+                <?php endforeach; ?>
+            </div>
+            <input type="hidden" id="cust-color" value="<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+        </div>
+
+        <!-- BIO -->
+        <div class="card">
+            <div class="card-title">📝 О себе</div>
+            <div class="fg">
+                <label class="fl">Биография</label>
+                <textarea class="fta" id="cust-bio" placeholder="Расскажи о себе..." maxlength="300"><?=htmlspecialchars($custom['bio']??'')?></textarea>
+            </div>
+            <div class="ok-box" id="bio-ok"></div>
+            <div class="err-box" id="bio-err"></div>
+            <button class="save-btn" onclick="saveBio()">💾 Сохранить изменения</button>
+        </div>
+    </div>
+
+    <!-- TAB: ACCOUNT -->
+    <div class="tab-panel" id="tab-account">
+        <!-- CHANGE USERNAME -->
+        <div class="card">
+            <div class="card-title">🔤 Изменить никнейм</div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['username'])?></strong></p>
+            <div class="fg">
+                <label class="fl">Новый никнейм</label>
+                <input class="fi" type="text" id="new-username" placeholder="новый_ник" maxlength="30">
+            </div>
+            <div class="ok-box" id="nick-ok"></div>
+            <div class="err-box" id="nick-err"></div>
+            <button class="save-btn" onclick="changeUsername()">Сохранить никнейм</button>
+        </div>
+
+        <!-- CHANGE EMAIL -->
+        <div class="card">
+            <div class="card-title">📧 Изменить email</div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['email'])?></strong></p>
+            <div id="email-step1">
+                <div class="fg">
+                    <label class="fl">Пароль (подтверждение)</label>
+                    <input class="fi" type="password" id="email-pass" placeholder="Введи пароль">
+                </div>
+                <div class="fg">
+                    <label class="fl">Новый Email</label>
+                    <input class="fi" type="email" id="new-email" placeholder="new@email.com">
+                </div>
+                <div class="ok-box" id="email-ok1"></div>
+                <div class="err-box" id="email-err1"></div>
+                <button class="save-btn" onclick="changeEmailStep1()">Получить код →</button>
+            </div>
+            <div id="email-step2" style="display:none">
+                <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Код отправлен на новый email. Введи его:</p>
+                <div class="fg">
+                    <input class="fi" type="text" id="email-code" placeholder="000000" maxlength="6" style="font-family:monospace;letter-spacing:8px;text-align:center;font-size:20px">
+                </div>
+                <div class="ok-box" id="email-ok2"></div>
+                <div class="err-box" id="email-err2"></div>
+                <button class="save-btn" onclick="changeEmailStep2()">Подтвердить смену email</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
+
+function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['visuals','account'][i]===tab));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('tab-'+tab).classList.add('active');
+}
+
+async function uploadImage(input, type){
+    const file = input.files[0];
+    if(!file) return;
+    const statusEl = document.getElementById(type+'-status');
+    statusEl.textContent = '⏳ Загружаю...';
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+        const res = await fetch('/api/profile/upload-image?type='+type, {method:'POST', body:formData});
+        const d = await res.json();
+        if(d.success){
+            statusEl.textContent = '✅ Загружено!';
+            if(type==='avatar'){
+                const zone = document.getElementById('avatar-zone');
+                zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'avatar')"><img class="avatar-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить</div>`;
+            } else {
+                const zone = document.getElementById('banner-zone');
+                zone.style.padding='0';
+                zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'banner')"><img class="img-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить баннер</div>`;
+            }
+            showToast('✅ Изображение обновлено!');
+        } else {
+            statusEl.textContent = '❌ '+d.error;
+        }
+    } catch(e){statusEl.textContent = '❌ Ошибка загрузки';}
+}
+
+function pickBannerColor(c){
+    document.getElementById('cust-color').value=c;
+    document.querySelectorAll('.color-preset').forEach(el=>{
+        const onclick=el.getAttribute('onclick')||'';
+        el.classList.toggle('active', onclick.includes(`'${c}'`));
+    });
+    // Also save immediately
+    fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({banner_color:c,bio:document.getElementById('cust-bio').value.trim()})});
+}
+
+async function saveBio(){
+    const bio=document.getElementById('cust-bio').value.trim();
+    const color=document.getElementById('cust-color').value||'#1a1a2e';
+    const ok=document.getElementById('bio-ok');const err=document.getElementById('bio-err');
+    ok.classList.remove('show');err.classList.remove('show');
+    const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bio,banner_color:color})});
+    const d=await res.json();
+    if(d.success){ok.textContent='✅ Сохранено!';ok.classList.add('show');showToast('✅ Профиль обновлён!');}
+    else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
+}
+
+async function changeUsername(){
+    const username=document.getElementById('new-username').value.trim();
+    const ok=document.getElementById('nick-ok');const err=document.getElementById('nick-err');
+    ok.classList.remove('show');err.classList.remove('show');
+    if(!username){err.textContent='Введи новый никнейм';err.classList.add('show');return;}
+    const res=await fetch('/api/profile/change-username',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+    const d=await res.json();
+    if(d.success){ok.textContent='✅ Никнейм изменён! Перезагружаю...';ok.classList.add('show');setTimeout(()=>location.reload(),1000);}
+    else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
+}
+
+async function changeEmailStep1(){
+    const password=document.getElementById('email-pass').value;
+    const new_email=document.getElementById('new-email').value.trim();
+    const ok=document.getElementById('email-ok1');const err=document.getElementById('email-err1');
+    ok.classList.remove('show');err.classList.remove('show');
+    if(!password||!new_email){err.textContent='Заполни все поля';err.classList.add('show');return;}
+    const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'request',password,new_email})});
+    const d=await res.json();
+    if(d.success){ok.textContent='📧 '+d.message;ok.classList.add('show');document.getElementById('email-step1').style.display='none';document.getElementById('email-step2').style.display='block';}
+    else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
+}
+async function changeEmailStep2(){
+    const code=document.getElementById('email-code').value.trim();
+    const ok=document.getElementById('email-ok2');const err=document.getElementById('email-err2');
+    ok.classList.remove('show');err.classList.remove('show');
+    if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
+    const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'confirm',code})});
+    const d=await res.json();
+    if(d.success){ok.textContent='✅ Email изменён!';ok.classList.add('show');showToast('✅ Email обновлён!');setTimeout(()=>location.reload(),1000);}
+    else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
+}
+</script>
+</body></html><?php exit; }
+
+// /u/username — PUBLIC USER PROFILE PAGE
+if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
+    $targetUsername = $um[1];
+    $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag FROM accounts WHERE username=?");
+    $stmt->execute([$targetUsername]);
+    $target = $stmt->fetch();
+    if (!$target) { http_response_code(404); echo '<!DOCTYPE html><html><body style="background:#0c0c0c;color:#f2f2f2;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">😔</div><h1 style="font-size:22px">Пользователь не найден</h1><a href="/" style="color:#7c5cff;text-decoration:none;margin-top:16px;display:block">← В каталог</a></div></body></html>'; exit; }
+    $tid = (int)$target['id'];
+    $privacy = $target['profile_privacy'] ?? 'public';
+    $viewer = $currentAccount;
+    $viewerIsAdmin = false;
+    if ($viewer) {
+        $vtg = (int)($viewer['tg_user_id']??0);
+        $viewerIsAdmin = in_array($vtg,$hardcodedAdmins) || (!empty($viewer['is_admin'])&&$viewer['is_admin']);
+    }
+    $isSelf = $viewer && (int)$viewer['id'] === $tid;
+    if ($isSelf) { header('Location: /profile'); exit; }
+    $isFriend = false;
+    $friendshipId = null;
+    $friendshipStatus = null;
+    $friendshipIsMine = false;
+    if ($viewer) {
+        $fStmt = $pdo->prepare("SELECT id,status,requester_id FROM friendships WHERE ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))");
+        $fStmt->execute([(int)$viewer['id'],$tid,$tid,(int)$viewer['id']]);
+        $fs = $fStmt->fetch();
+        if ($fs) {
+            $friendshipId = (int)$fs['id'];
+            $friendshipStatus = $fs['status'];
+            $friendshipIsMine = (int)$fs['requester_id'] === (int)$viewer['id'];
+            $isFriend = $fs['status'] === 'accepted';
+        }
+    }
+    $canView = $viewerIsAdmin || $privacy==='public' || ($privacy==='friends'&&$isFriend);
+    $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?"); $custStmt->execute([$tid]);
+    $custom = $custStmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
+    $tgid = (int)($target['tg_user_id']??0);
+    $targetIsAdmin = in_array($tgid,$hardcodedAdmins) || (!empty($target['is_admin'])&&$target['is_admin']);
+    $adminTag = $target['admin_tag'] ?? null;
+    $libItems = [];
+    $libStats = ['total'=>0,'read'=>0,'now'=>0];
+    if ($canView) {
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$libStats['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$libStats['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$libStats['now']=(int)$stNow->fetchColumn();
+        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
+        $libStmt->execute([$tid]);$libItems=$libStmt->fetchAll();
+    }
+    $fListStmt=$pdo->prepare("SELECT a.username,pc.avatar_url FROM friendships f JOIN accounts a ON (CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END)=a.id LEFT JOIN profile_customizations pc ON pc.account_id=a.id WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted' LIMIT 12");
+    $fListStmt->execute([$tid,$tid,$tid]);$friendsList=$fListStmt->fetchAll();
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($target['username'])?> | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80;--orange:#fb923c;--red:#f87171}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
+.back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}.back:hover{color:var(--text)}
+.wrap{max-width:580px;margin:0 auto;position:relative;z-index:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;margin-bottom:14px;overflow:hidden}
+.profile-banner{width:100%;height:120px;background:<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>;background-size:cover;background-position:center;overflow:hidden}
+.profile-banner-img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar-wrap{position:relative;margin-top:-46px;margin-left:20px;display:inline-block;z-index:2}
+.avatar{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:4px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:36px;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.profile-header-row{padding:0 20px 20px;display:flex;align-items:flex-start;justify-content:space-between}
+.admin-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;margin-left:8px;vertical-align:middle}
+.verify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:var(--green);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle}
+.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:3px;margin-top:12px}
+.bio-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
+.joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
+.friend-action-btn{padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid;transition:all .2s;flex-shrink:0;margin-top:10px;margin-left:12px;text-align:center}
+.btn-add-friend{background:rgba(124,92,255,0.15);border-color:rgba(124,92,255,0.3);color:#a78bfa}
+.btn-add-friend:hover{background:rgba(124,92,255,0.25)}
+.btn-pending{background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--muted)}
+.btn-accept{background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:var(--green)}
+.btn-friends{background:rgba(74,222,128,0.06);border-color:rgba(74,222,128,0.2);color:var(--green)}
+.sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;padding:22px 24px 0;margin-bottom:13px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
+.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center}
+.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
+.stat-l{font-size:10px;color:var(--muted);margin-top:2px}
+.lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:9px;padding:0 20px 20px}
+.lib-card{text-decoration:none;color:var(--text);transition:all .2s}
+.lib-card:hover{transform:translateY(-2px)}
+.lib-cover{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:9px;background:var(--border);display:block}
+.lib-cover-ph{width:100%;aspect-ratio:2/3;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px}
+.lib-title{font-size:10px;font-weight:600;margin-top:4px;line-height:1.3;color:var(--text2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.friends-row{display:flex;gap:10px;flex-wrap:wrap;padding:0 20px 20px}
+.friend-chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;padding:7px 10px;text-decoration:none;color:var(--text2);transition:all .2s}
+.friend-chip:hover{border-color:var(--border2)}
+.friend-chip-av{width:28px;height:28px;border-radius:50%;background:#1a1a2e;display:flex;align-items:center;justify-content:center;font-size:12px;overflow:hidden;flex-shrink:0}
+.friend-chip-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.friend-chip-name{font-size:12px;font-weight:600}
+.private-notice{padding:40px 24px;text-align:center;color:var(--muted)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;border:1px solid var(--border2);animation:ti .25s ease;white-space:nowrap}
+@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <a href="/" class="back">← Каталог</a>
+
+    <div class="card">
+        <div class="profile-banner">
+            <?php if (!empty($custom['banner_url'])): ?>
+            <img class="profile-banner-img" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
+            <?php endif; ?>
+        </div>
+        <div class="avatar-wrap">
+            <div class="avatar">
+                <?php if (!empty($custom['avatar_url'])): ?>
+                <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
+                <?php else: ?>👤<?php endif; ?>
+            </div>
+        </div>
+        <div class="profile-header-row">
+            <div>
+                <div class="username">
+                    <?=htmlspecialchars($target['username'])?>
+                    <?php if ($targetIsAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($adminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($target['is_verified']): ?><span class="verify-badge">✓</span><?php endif; ?>
+                </div>
+                <?php if (!empty($custom['bio'])): ?>
+                <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
+                <?php endif; ?>
+                <div class="joined">На сайте с: <?=date('d.m.Y', strtotime($target['created_at']))?></div>
+            </div>
+            <?php if ($viewer): ?>
+            <div>
+                <?php if ($friendshipStatus === 'accepted'): ?>
+                <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">👥 Друзья</button>
+                <?php elseif ($friendshipStatus === 'pending' && $friendshipIsMine): ?>
+                <button class="friend-action-btn btn-pending">⏳ Ожидание</button>
+                <?php elseif ($friendshipStatus === 'pending' && !$friendshipIsMine): ?>
+                <button class="friend-action-btn btn-accept" onclick="acceptFriend(<?=$friendshipId?>)">✓ Принять</button>
+                <?php else: ?>
+                <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">+ В друзья</button>
+                <?php endif; ?>
+            </div>
+            <?php else: ?>
+            <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">+ В друзья</a>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php if ($canView): ?>
+    <div class="card">
+        <div class="sec-title">📚 Библиотека</div>
+        <div class="stats-row">
+            <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">Всего</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">Читает</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">Прочитано</div></div>
+        </div>
+        <?php if (!empty($libItems)): ?>
+        <div class="lib-grid">
+            <?php foreach(array_slice($libItems,0,12) as $li): ?>
+            <a class="lib-card" href="/read/<?=(int)$li['id']?>">
+                <?php if(!empty($li['cover_imgbb_url'])): ?>
+                <img class="lib-cover" src="<?=htmlspecialchars($li['cover_imgbb_url'])?>" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">
+                <div class="lib-cover-ph" style="display:none">📖</div>
+                <?php else: ?>
+                <div class="lib-cover-ph">📖</div>
+                <?php endif; ?>
+                <div class="lib-title"><?=htmlspecialchars($li['title'])?></div>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php elseif ($privacy === 'private'): ?>
+    <div class="card"><div class="private-notice">🔒 Профиль закрыт</div></div>
+    <?php else: ?>
+    <div class="card"><div class="private-notice">👥 Только для друзей<br><small style="font-size:11px;margin-top:6px;display:block">Добавь пользователя в друзья чтобы видеть библиотеку</small></div></div>
+    <?php endif; ?>
+
+    <?php if (!empty($friendsList)): ?>
+    <div class="card">
+        <div class="sec-title">👥 Друзья</div>
+        <div class="friends-row">
+            <?php foreach($friendsList as $fl): ?>
+            <a href="/u/<?=htmlspecialchars($fl['username'])?>" class="friend-chip">
+                <div class="friend-chip-av">
+                    <?php if(!empty($fl['avatar_url'])): ?><img src="<?=htmlspecialchars($fl['avatar_url'])?>" alt=""><?php else: ?>👤<?php endif; ?>
+                </div>
+                <div class="friend-chip-name"><?=htmlspecialchars($fl['username'])?></div>
+            </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+
+<script>
+function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
+async function addFriend(username){
+    const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+    const d=await res.json();
+    if(d.success){showToast('✅ Запрос отправлен!');setTimeout(()=>location.reload(),800);}
+    else showToast('❌ '+(d.error||'Ошибка'));
+}
+async function acceptFriend(id){
+    const res=await fetch(`/api/friends/${id}/accept`,{method:'POST'});
+    const d=await res.json();
+    if(d.success){showToast('✅ Теперь вы друзья!');setTimeout(()=>location.reload(),800);}
+}
+async function removeFriend(id){
+    if(!confirm('Удалить из друзей?'))return;
+    const res=await fetch(`/api/friends/${id}/remove`,{method:'POST'});
+    const d=await res.json();
+    if(d.success){showToast('Удалено из друзей');setTimeout(()=>location.reload(),800);}
+}
+</script>
+</body></html><?php exit; }
+
 
 // /verify-email (separate page after registration)
 if ($path==='/verify-email') {
