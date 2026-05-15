@@ -34,6 +34,13 @@ try {
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_series BOOLEAN DEFAULT FALSE");
     $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
     $pdo->exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS chapter_id INT DEFAULT NULL");
+    // New tables for friends, profile customization, email verification
+    $pdo->exec("CREATE TABLE IF NOT EXISTS email_verifications (id SERIAL PRIMARY KEY, email TEXT NOT NULL, code VARCHAR(6) NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS profile_customizations (account_id INT PRIMARY KEY, avatar_url TEXT DEFAULT NULL, banner_url TEXT DEFAULT NULL, banner_color VARCHAR(20) DEFAULT '#1a1a2e', bio TEXT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (id SERIAL PRIMARY KEY, requester_id INT NOT NULL, addressee_id INT NOT NULL, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(requester_id, addressee_id))");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL");
 } catch (Exception $e) {}
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -61,6 +68,46 @@ function sendTgNotify($userId, $text) {
     $ch = curl_init("https://api.telegram.org/bot{$botToken}/sendMessage");
     curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode(['chat_id'=>$userId,'text'=>$text,'parse_mode'=>'HTML']),CURLOPT_HTTPHEADER=>['Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>5,CURLOPT_SSL_VERIFYPEER=>false]);
     @curl_exec($ch); curl_close($ch);
+}
+
+// ===== BREVO EMAIL =====
+function sendBrevoEmail(string $toEmail, string $toName, string $subject, string $htmlContent): bool {
+    $apiKey = getenv('BREVO_API_KEY');
+    if (!$apiKey) return false;
+    $payload = json_encode([
+        'sender'     => ['name' => 'BLACKWATCH Manga', 'email' => 'andreikostlim@gmail.com'],
+        'to'         => [['email' => $toEmail, 'name' => $toName]],
+        'subject'    => $subject,
+        'htmlContent'=> $htmlContent,
+    ]);
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'api-key: '.$apiKey],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $res  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $code >= 200 && $code < 300;
+}
+
+function sendVerificationEmail(string $email, string $username, string $code): bool {
+    $html = "
+    <div style='font-family:Inter,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
+      <div style='font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div>
+      <h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Подтверждение email</h2>
+      <p style='color:#aaa;font-size:14px;margin-bottom:20px'>Привет, <strong style='color:#f2f2f2'>{$username}</strong>! Введи этот код для подтверждения аккаунта:</p>
+      <div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center;margin-bottom:20px'>
+        <div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div>
+        <div style='color:#666;font-size:12px;margin-top:8px'>Код действителен 15 минут</div>
+      </div>
+      <p style='color:#555;font-size:12px'>Если ты не регистрировался на BLACKWATCH — просто проигнорируй это письмо.</p>
+    </div>";
+    return sendBrevoEmail($email, $username, 'Подтверждение регистрации | BLACKWATCH', $html);
 }
 
 function uploadToImgbb($filePathOrUrl, $apiKeys, $retries=2) {
@@ -396,12 +443,18 @@ if ($path==='/api/auth/register' && $_SERVER['REQUEST_METHOD']==='POST') {
         if ($check->fetch()) { echo json_encode(['success'=>false,'error'=>'Email или username уже занят']); exit; }
 
         $hash = password_hash($password, PASSWORD_BCRYPT);
-        $ins = $pdo->prepare("INSERT INTO accounts (email,username,password_hash,is_verified) VALUES (?,?,?,TRUE) RETURNING id");
-        $ins->execute([$email, $username, $hash]);
+        $verifyCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $verifyExpires = date('Y-m-d H:i:s', time() + 900); // 15 min
+        $ins = $pdo->prepare("INSERT INTO accounts (email,username,password_hash,is_verified,verify_code,verify_expires) VALUES (?,?,?,FALSE,?,?) RETURNING id");
+        $ins->execute([$email, $username, $hash, $verifyCode, $verifyExpires]);
         $accountId = (int)$ins->fetchColumn();
 
+        // Send verification email
+        sendVerificationEmail($email, $username, $verifyCode);
+
+        // Create session anyway (they can verify later)
         createSession($pdo, $accountId, true);
-        echo json_encode(['success'=>true,'username'=>$username]);
+        echo json_encode(['success'=>true,'username'=>$username,'needs_verify'=>true]);
     } catch (Exception $e) {
         echo json_encode(['success'=>false,'error'=>'Ошибка сервера: '.$e->getMessage()]);
     }
@@ -470,6 +523,130 @@ if ($path==='/api/auth/profile-stats') {
     $stRead  = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'"); $stRead->execute([$aid]); $read=(int)$stRead->fetchColumn();
     $stNow   = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'"); $stNow->execute([$aid]); $now=(int)$stNow->fetchColumn();
     echo json_encode(['success'=>true,'total'=>$total,'read'=>$read,'now'=>$now]);
+    exit;
+}
+
+// API: Подтверждение email
+if ($path==='/api/auth/verify-email' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code = trim($input['code'] ?? '');
+    if (!$code) { echo json_encode(['success'=>false,'error'=>'Введи код']); exit; }
+    $stmt = $pdo->prepare("SELECT verify_code, verify_expires FROM accounts WHERE id=?");
+    $stmt->execute([(int)$account['id']]);
+    $row = $stmt->fetch();
+    if (!$row || $row['verify_code'] !== $code) { echo json_encode(['success'=>false,'error'=>'Неверный код']); exit; }
+    if (strtotime($row['verify_expires']) < time()) { echo json_encode(['success'=>false,'error'=>'Код истёк']); exit; }
+    $pdo->prepare("UPDATE accounts SET is_verified=TRUE, verify_code=NULL, verify_expires=NULL WHERE id=?")->execute([(int)$account['id']]);
+    echo json_encode(['success'=>true]);
+    exit;
+}
+
+// API: Повторная отправка кода
+if ($path==='/api/auth/resend-verify' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    if ($account['is_verified']) { echo json_encode(['success'=>false,'error'=>'Уже подтверждён']); exit; }
+    $verifyCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $verifyExpires = date('Y-m-d H:i:s', time() + 900);
+    $pdo->prepare("UPDATE accounts SET verify_code=?, verify_expires=? WHERE id=?")->execute([$verifyCode, $verifyExpires, (int)$account['id']]);
+    sendVerificationEmail($account['email'], $account['username'], $verifyCode);
+    echo json_encode(['success'=>true]);
+    exit;
+}
+
+// API: Кастомизация профиля — получить
+if ($path==='/api/profile/customization' && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $username = trim($_GET['username'] ?? '');
+    if ($username) {
+        $acc = $pdo->prepare("SELECT id FROM accounts WHERE username=?"); $acc->execute([$username]); $row = $acc->fetch();
+        $aid = $row ? (int)$row['id'] : 0;
+    } else {
+        $account = getCurrentAccount($pdo);
+        $aid = $account ? (int)$account['id'] : 0;
+    }
+    if (!$aid) { echo json_encode(['success'=>false]); exit; }
+    $stmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?"); $stmt->execute([$aid]);
+    $custom = $stmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
+    echo json_encode(['success'=>true,'data'=>$custom]);
+    exit;
+}
+
+// API: Кастомизация профиля — сохранить
+if ($path==='/api/profile/customization' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $avatarUrl    = trim($input['avatar_url'] ?? '');
+    $bannerUrl    = trim($input['banner_url'] ?? '');
+    $bannerColor  = trim($input['banner_color'] ?? '#1a1a2e');
+    $bio          = mb_substr(trim($input['bio'] ?? ''), 0, 300);
+    $pdo->prepare("INSERT INTO profile_customizations (account_id,avatar_url,banner_url,banner_color,bio,updated_at)
+        VALUES (?,?,?,?,?,NOW())
+        ON CONFLICT (account_id) DO UPDATE SET avatar_url=EXCLUDED.avatar_url, banner_url=EXCLUDED.banner_url, banner_color=EXCLUDED.banner_color, bio=EXCLUDED.bio, updated_at=NOW()")
+        ->execute([(int)$account['id'], $avatarUrl?:null, $bannerUrl?:null, $bannerColor, $bio?:null]);
+    echo json_encode(['success'=>true]);
+    exit;
+}
+
+// API: Друзья — список
+if ($path==='/api/friends' && $_SERVER['REQUEST_METHOD']==='GET') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'friends'=>[]]); exit; }
+    $aid = (int)$account['id'];
+    $stmt = $pdo->prepare("
+        SELECT a.id, a.username, f.status, f.requester_id,
+               (SELECT avatar_url FROM profile_customizations WHERE account_id=a.id) as avatar_url
+        FROM friendships f
+        JOIN accounts a ON (CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END)=a.id
+        WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status IN ('accepted','pending')
+        ORDER BY f.created_at DESC
+    ");
+    $stmt->execute([$aid,$aid,$aid]);
+    $rows = $stmt->fetchAll();
+    foreach($rows as &$r) { $r['is_mine'] = ((int)$r['requester_id'] === $aid); } unset($r);
+    echo json_encode(['success'=>true,'friends'=>$rows]);
+    exit;
+}
+
+// API: Добавить в друзья
+if ($path==='/api/friends/add' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $username = trim($input['username'] ?? '');
+    $target = $pdo->prepare("SELECT id FROM accounts WHERE username=?"); $target->execute([$username]); $row = $target->fetch();
+    if (!$row) { echo json_encode(['success'=>false,'error'=>'Пользователь не найден']); exit; }
+    $tid = (int)$row['id']; $aid = (int)$account['id'];
+    if ($tid === $aid) { echo json_encode(['success'=>false,'error'=>'Нельзя добавить себя']); exit; }
+    try {
+        $pdo->prepare("INSERT INTO friendships (requester_id,addressee_id,status) VALUES (?,?,'pending') ON CONFLICT DO NOTHING")->execute([$aid,$tid]);
+        echo json_encode(['success'=>true]);
+    } catch(Exception $e) { echo json_encode(['success'=>false,'error'=>'Уже отправлено']); }
+    exit;
+}
+
+// API: Принять/отклонить запрос в друзья
+if (preg_match('#^/api/friends/(\d+)/(accept|reject|remove)$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false]); exit; }
+    $fid = (int)$m[1]; $action = $m[2]; $aid = (int)$account['id'];
+    if ($action === 'accept') {
+        $pdo->prepare("UPDATE friendships SET status='accepted' WHERE id=? AND addressee_id=?")->execute([$fid,$aid]);
+    } elseif ($action === 'reject') {
+        $pdo->prepare("DELETE FROM friendships WHERE id=? AND (addressee_id=? OR requester_id=?)")->execute([$fid,$aid,$aid]);
+    } elseif ($action === 'remove') {
+        $pdo->prepare("DELETE FROM friendships WHERE id=?")->execute([$fid]);
+    }
+    echo json_encode(['success'=>true]);
     exit;
 }
 
@@ -618,7 +795,7 @@ async function doRegister(){
             confirm:document.getElementById('confirm').value
         })});
         const d=await res.json();
-        if(d.success){window.location.href='/';}
+        if(d.success){window.location.href='/verify-email';}
         else{err.textContent=d.error||'Ошибка';err.classList.add('show');}
     }catch(e){err.textContent='Ошибка сети';err.classList.add('show');}
     btn.disabled=false;btn.textContent='Зарегистрироваться';
@@ -631,26 +808,65 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
 if ($path==='/profile') {
     $account = requireAuth($pdo);
     $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
+    $isAccountAdmin = in_array((int)($account['tg_user_id'] ?? 0), $hardcodedAdmins);
+    // Load profile customization
+    $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?");
+    $custStmt->execute([(int)$account['id']]);
+    $custom = $custStmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Профиль | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--green:#4ade80;--orange:#fb923c}
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80;--orange:#fb923c;--red:#f87171}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(255,255,255,0.025) 0%,transparent 55%);pointer-events:none}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}
 .back:hover{color:var(--text)}
-.wrap{max-width:520px;margin:0 auto;position:relative;z-index:1}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px;margin-bottom:14px}
-.avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:14px}
-.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px}
-.email{font-size:13px;color:var(--muted);margin-bottom:14px}
+.wrap{max-width:560px;margin:0 auto;position:relative;z-index:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:0;margin-bottom:14px;overflow:hidden}
+.card-inner{padding:22px 24px}
+/* PROFILE BANNER */
+.profile-banner{width:100%;height:110px;background:var(--banner-color,#1a1a2e);background-size:cover;background-position:center;position:relative}
+.profile-banner-img{width:100%;height:100%;object-fit:cover;display:block}
+/* AVATAR */
+.avatar-wrap{position:relative;margin-top:-42px;margin-left:20px;display:inline-block}
+.avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:3px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:32px;object-fit:cover;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.admin-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;margin-left:8px;vertical-align:middle}
+.verify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:var(--green);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle}
+.unverify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:var(--orange);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle;cursor:pointer}
+.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px;margin-top:10px}
+.email{font-size:12px;color:var(--muted);margin-bottom:8px}
+.bio-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
 .joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
-.sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px}
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:0}
+.sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px;padding:22px 24px 0}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
 .stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center}
 .stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
 .stat-l{font-size:10px;color:var(--muted);margin-top:2px}
+/* VERIFY BANNER */
+.verify-banner{background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.2);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
+.verify-icon{font-size:22px;flex-shrink:0}
+.verify-info{flex:1}
+.verify-info p{font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5}
+.verify-input-row{display:flex;gap:7px}
+.verify-input-row input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:8px 12px;font-family:monospace;letter-spacing:4px;text-align:center}
+.verify-input-row button{padding:8px 14px;background:var(--orange);border:none;border-radius:8px;color:#000;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.resend-link{font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:5px;display:inline-block}
+/* CUSTOMIZE SECTION */
+.customize-card{padding:22px 24px}
+.cust-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.cust-field label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.cust-field input,.cust-field textarea{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;transition:border-color .2s;resize:none}
+.cust-field input:focus,.cust-field textarea:focus{border-color:var(--border2)}
+.cust-field.full{grid-column:1/-1}
+.color-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.color-preset{width:24px;height:24px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
+.color-preset.active{border-color:#fff;transform:scale(1.2)}
+.save-cust-btn{width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.save-cust-btn:hover{opacity:.85}
+/* TG section */
+.tg-inner{padding:22px 24px}
 .tg-connected{display:flex;align-items:center;justify-content:space-between;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.18);border-radius:11px;padding:12px 14px;margin-bottom:10px}
 .tg-info{font-size:13px;color:var(--green);font-weight:600}
 .tg-meta{font-size:10px;color:var(--muted);margin-top:2px}
@@ -666,7 +882,22 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .copy-cmd:hover{color:var(--text)}
 .gen-btn{width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:11px;transition:all .2s}
 .gen-btn:hover{border-color:var(--border2);color:var(--text)}
-.logout-btn{width:100%;padding:11px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:block;text-align:center}
+/* FRIENDS */
+.friends-inner{padding:22px 24px}
+.friend-add-row{display:flex;gap:7px;margin-bottom:14px}
+.friend-add-row input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none}
+.friend-add-row input:focus{border-color:var(--border2)}
+.friend-add-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.friend-item{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:7px}
+.friend-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#3b3b5e);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;object-fit:cover}
+.friend-name{font-size:13px;font-weight:600;color:var(--text2)}
+.friend-status{font-size:10px;color:var(--muted);margin-top:1px}
+.friend-actions{margin-left:auto;display:flex;gap:5px}
+.f-btn{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;border:1px solid}
+.f-btn.accept{background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.3);color:var(--green)}
+.f-btn.reject,.f-btn.remove{background:rgba(248,113,113,.06);border-color:rgba(248,113,113,.25);color:var(--red)}
+/* LOGOUT */
+.logout-btn{width:100%;padding:11px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:block;text-align:center;margin-bottom:14px}
 .logout-btn:hover{background:rgba(248,113,113,.12)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;border:1px solid var(--border2);animation:ti .25s ease;white-space:nowrap}
 @keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
@@ -675,13 +906,52 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <body>
 <div class="wrap">
     <a href="/" class="back">← Каталог</a>
+
+    <?php if (!$account['is_verified']): ?>
+    <div class="verify-banner">
+        <div class="verify-icon">📧</div>
+        <div class="verify-info">
+            <p>Подтверди email <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong> — мы отправили 6-значный код.</p>
+            <div class="verify-input-row">
+                <input type="text" id="vcode" placeholder="000000" maxlength="6" inputmode="numeric">
+                <button onclick="verifyEmail()">Подтвердить</button>
+            </div>
+            <span class="resend-link" onclick="resendCode()">Отправить повторно</span>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- PROFILE CARD -->
     <div class="card">
-        <div class="avatar">👤</div>
-        <div class="username"><?=htmlspecialchars($account['username'])?></div>
-        <div class="email"><?=htmlspecialchars($account['email'])?></div>
-        <div class="joined">Зарегистрирован: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
+        <div class="profile-banner" id="profile-banner" style="background-color:<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+            <?php if (!empty($custom['banner_url'])): ?>
+            <img class="profile-banner-img" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
+            <?php endif; ?>
+        </div>
+        <div class="card-inner">
+            <div class="avatar-wrap">
+                <div class="avatar">
+                    <?php if (!empty($custom['avatar_url'])): ?>
+                    <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
+                    <?php else: ?>
+                    👤
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="username">
+                <?=htmlspecialchars($account['username'])?>
+                <?php if ($isAccountAdmin): ?><span class="admin-badge">⚡ ADMIN</span><?php endif; ?>
+                <?php if ($account['is_verified']): ?><span class="verify-badge">✓ Верифицирован</span><?php endif; ?>
+            </div>
+            <div class="email"><?=htmlspecialchars($account['email'])?></div>
+            <?php if (!empty($custom['bio'])): ?>
+            <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
+            <?php endif; ?>
+            <div class="joined">Зарегистрирован: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
+        </div>
     </div>
 
+    <!-- STATS -->
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row" id="stats-row">
@@ -691,66 +961,214 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
     </div>
 
+    <!-- CUSTOMIZATION -->
     <div class="card">
-        <div class="sec-title">🤖 Telegram</div>
-        <?php if ($account['tg_user_id']): ?>
-        <div class="tg-connected">
-            <div>
-                <div class="tg-info">✅ Telegram привязан</div>
-                <div class="tg-meta">TG ID: <?=(int)$account['tg_user_id']?></div>
+        <div class="customize-card">
+            <div class="sec-title" style="padding:0;margin-bottom:14px">🎨 Кастомизация профиля</div>
+            <div class="cust-grid">
+                <div class="cust-field">
+                    <label>URL аватарки</label>
+                    <input type="text" id="cust-avatar" placeholder="https://..." value="<?=htmlspecialchars($custom['avatar_url']??'')?>">
+                </div>
+                <div class="cust-field">
+                    <label>URL шапки (баннер)</label>
+                    <input type="text" id="cust-banner" placeholder="https://..." value="<?=htmlspecialchars($custom['banner_url']??'')?>">
+                </div>
+                <div class="cust-field full">
+                    <label>О себе (до 300 символов)</label>
+                    <textarea id="cust-bio" rows="2" placeholder="Расскажи о себе..."><?=htmlspecialchars($custom['bio']??'')?></textarea>
+                </div>
+                <div class="cust-field full">
+                    <label>Цвет шапки</label>
+                    <input type="text" id="cust-color" placeholder="#1a1a2e" value="<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+                    <div class="color-presets">
+                        <?php foreach(['#1a1a2e','#0f2027','#1a0a2e','#0a1a2e','#0a2e1a','#2e1a0a','#2e0a0a','#0a0a0a','#7c5cff22','#3b82f622'] as $c): ?>
+                        <div class="color-preset <?=$custom['banner_color']===$c?'active':''?>" style="background:<?=htmlspecialchars($c)?>" onclick="pickBannerColor('<?=htmlspecialchars($c)?>')"></div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
-            <button class="unlink-btn" onclick="unlinkTg()">Отвязать</button>
+            <button class="save-cust-btn" onclick="saveCustomization()">💾 Сохранить профиль</button>
         </div>
-        <p style="font-size:12px;color:var(--muted);line-height:1.6">Твоя библиотека и прогресс синхронизированы с Telegram-ботом.</p>
-        <?php else: ?>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">Привяжи Telegram чтобы пользоваться ботом с теми же данными что и на сайте.</p>
-        <div class="tg-steps">
-            <div class="step"><div class="step-n">1</div><div class="step-text">Нажми кнопку ниже — сгенерируется одноразовая команда</div></div>
-            <div class="step"><div class="step-n">2</div><div class="step-text">Открой бота <strong>@<?=htmlspecialchars($botUsername)?></strong> и отправь эту команду</div></div>
-            <div class="step"><div class="step-n">3</div><div class="step-text">Готово — аккаунты связаны!</div></div>
-        </div>
-        <div id="link-command" style="display:none">
-            <div class="command-box">
-                <span id="cmd-text"></span>
-                <button class="copy-cmd" onclick="copyCmd()">Копировать</button>
+    </div>
+
+    <!-- FRIENDS -->
+    <div class="card">
+        <div class="friends-inner">
+            <div class="sec-title" style="padding:0;margin-bottom:14px">👥 Друзья</div>
+            <div class="friend-add-row">
+                <input type="text" id="friend-username" placeholder="Имя пользователя...">
+                <button class="friend-add-btn" onclick="addFriend()">+ Добавить</button>
             </div>
-            <p style="font-size:11px;color:var(--muted);margin-top:7px">Токен действителен 10 минут. После привязки обновите страницу.</p>
+            <div id="friends-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
         </div>
-        <button class="gen-btn" id="gen-btn" onclick="genLink()">🔗 Получить команду привязки</button>
-        <?php endif; ?>
+    </div>
+
+    <!-- TELEGRAM -->
+    <div class="card">
+        <div class="tg-inner">
+            <div class="sec-title" style="padding:0;margin-bottom:13px">🤖 Telegram</div>
+            <?php if ($account['tg_user_id']): ?>
+            <div class="tg-connected">
+                <div>
+                    <div class="tg-info">✅ Telegram привязан</div>
+                    <div class="tg-meta">TG ID: <?=(int)$account['tg_user_id']?></div>
+                </div>
+                <button class="unlink-btn" onclick="unlinkTg()">Отвязать</button>
+            </div>
+            <p style="font-size:12px;color:var(--muted);line-height:1.6">Твоя библиотека и прогресс синхронизированы с ботом.</p>
+            <?php else: ?>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">Привяжи Telegram для синхронизации с ботом.</p>
+            <div class="tg-steps">
+                <div class="step"><div class="step-n">1</div><div class="step-text">Нажми кнопку ниже — сгенерируется одноразовая команда</div></div>
+                <div class="step"><div class="step-n">2</div><div class="step-text">Открой <strong>@<?=htmlspecialchars($botUsername)?></strong> и отправь команду</div></div>
+                <div class="step"><div class="step-n">3</div><div class="step-text">Готово — аккаунты связаны!</div></div>
+            </div>
+            <div id="link-command" style="display:none">
+                <div class="command-box"><span id="cmd-text"></span><button class="copy-cmd" onclick="copyCmd()">Копировать</button></div>
+                <p style="font-size:11px;color:var(--muted);margin-top:7px">Токен действителен 10 минут.</p>
+            </div>
+            <button class="gen-btn" id="gen-btn" onclick="genLink()">🔗 Получить команду привязки</button>
+            <?php endif; ?>
+        </div>
     </div>
 
     <a href="/logout" class="logout-btn">Выйти из аккаунта</a>
 </div>
 <script>
 function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
-async function genLink(){
-    const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';
-    try{
-        const res=await fetch('/api/auth/tg-link-token',{method:'POST'});
-        const d=await res.json();
-        if(d.success){
-            document.getElementById('cmd-text').textContent=d.command;
-            document.getElementById('link-command').style.display='block';
-            btn.textContent='🔄 Обновить команду';
-        } else { showToast('Ошибка: '+d.error); }
-    }catch(e){showToast('Ошибка сети');}
-    btn.disabled=false;
-}
-function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Команда скопирована!');}
-async function unlinkTg(){
-    if(!confirm('Отвязать Telegram?'))return;
-    const res=await fetch('/api/auth/tg-unlink',{method:'POST'});
+
+// Verify email
+async function verifyEmail(){
+    const code=document.getElementById('vcode').value.trim();
+    if(code.length!==6){showToast('Введи 6 цифр');return;}
+    const res=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
     const d=await res.json();
-    if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('✅ Email подтверждён!');setTimeout(()=>location.reload(),800);}
+    else showToast('❌ '+d.error);
 }
-async function loadStats(){
-    try{
-        const res=await fetch('/api/auth/profile-stats');const d=await res.json();
-        if(d.success){document.getElementById('stats-row').innerHTML=`<div class="stat"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></div><div class="stat"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></div><div class="stat"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></div>`;}
-    }catch(e){}
+async function resendCode(){
+    const res=await fetch('/api/auth/resend-verify',{method:'POST'});
+    const d=await res.json();
+    showToast(d.success?'📧 Код отправлен заново':'❌ '+d.error);
 }
-loadStats();
+
+// Banner color
+function pickBannerColor(c){
+    document.getElementById('cust-color').value=c;
+    document.querySelectorAll('.color-preset').forEach(el=>el.classList.toggle('active',el.style.background===c||el.getAttribute('onclick').includes(c)));
+}
+
+// Customization save
+async function saveCustomization(){
+    const payload={
+        avatar_url:document.getElementById('cust-avatar').value.trim(),
+        banner_url:document.getElementById('cust-banner').value.trim(),
+        banner_color:document.getElementById('cust-color').value.trim()||'#1a1a2e',
+        bio:document.getElementById('cust-bio').value.trim()
+    };
+    const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await res.json();
+    if(d.success){showToast('✅ Профиль сохранён!');setTimeout(()=>location.reload(),700);}
+    else showToast('❌ Ошибка');
+}
+
+// TG linking
+async function genLink(){const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';try{const res=await fetch('/api/auth/tg-link-token',{method:'POST'});const d=await res.json();if(d.success){document.getElementById('cmd-text').textContent=d.command;document.getElementById('link-command').style.display='block';btn.textContent='🔄 Обновить команду';}else showToast('Ошибка: '+d.error);}catch(e){showToast('Ошибка сети');}btn.disabled=false;}
+function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Скопировано!');}
+async function unlinkTg(){if(!confirm('Отвязать Telegram?'))return;const res=await fetch('/api/auth/tg-unlink',{method:'POST'});const d=await res.json();if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}}
+
+// Library stats
+async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){document.getElementById('stats-row').innerHTML=`<div class="stat"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></div><div class="stat"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></div><div class="stat"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></div>`;}}catch(e){}}
+
+// Friends
+async function loadFriends(){
+    try{const res=await fetch('/api/friends');const d=await res.json();const list=document.getElementById('friends-list');
+    if(!d.friends||!d.friends.length){list.innerHTML='<div style="color:var(--muted);font-size:12px">Друзей пока нет</div>';return;}
+    list.innerHTML=d.friends.map(f=>{
+        const isPending=f.status==='pending';const isMine=f.is_mine;
+        const avatarHtml=f.avatar_url?`<img class="friend-avatar" src="${escapeHtml(f.avatar_url)}" alt="">`:`<div class="friend-avatar">👤</div>`;
+        let actions='';
+        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">✓</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
+        else if(isPending&&isMine)actions=`<span style="font-size:10px;color:var(--muted)">Ожидание...</span>`;
+        else actions=`<button class="f-btn remove" onclick="friendAction(${f.id},'remove')">Удалить</button>`;
+        return `<div class="friend-item">${avatarHtml}<div><div class="friend-name">${escapeHtml(f.username)}</div><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
+    }).join('');}catch(e){}
+}
+async function addFriend(){
+    const username=document.getElementById('friend-username').value.trim();
+    if(!username){showToast('Введи имя пользователя');return;}
+    const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+    const d=await res.json();
+    if(d.success){showToast('✅ Запрос отправлен!');document.getElementById('friend-username').value='';loadFriends();}
+    else showToast('❌ '+(d.error||'Ошибка'));
+}
+async function friendAction(id,action){
+    await fetch(`/api/friends/${id}/${action}`,{method:'POST'});loadFriends();
+    showToast(action==='accept'?'✅ Принято!':action==='reject'?'Отклонено':'Удалено');
+}
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+loadStats();loadFriends();
+</script>
+</body></html><?php exit; }
+
+// /verify-email (separate page after registration)
+if ($path==='/verify-email') {
+    $account = getCurrentAccount($pdo);
+    if (!$account) { header('Location: /register'); exit; }
+    if ($account['is_verified']) { header('Location: /'); exit; }
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Подтверждение email | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--orange:#fb923c}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:400px;text-align:center}
+.logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:2px;color:var(--text2);text-decoration:none;display:block;margin-bottom:24px}
+.icon{font-size:48px;margin-bottom:16px}
+h1{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px}
+p{color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6}
+.code-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:28px;font-family:monospace;letter-spacing:10px;text-align:center;padding:16px;outline:none;transition:border-color .2s;margin-bottom:12px}
+.code-input:focus{border-color:var(--border2)}
+.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s;margin-bottom:12px}
+.btn:hover{opacity:.88}.btn:disabled{opacity:.4;cursor:not-allowed}
+.err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:12px;display:none}
+.err.show{display:block}
+.resend{color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline}
+.skip{display:block;margin-top:16px;color:var(--muted);font-size:12px;text-decoration:none}
+.skip:hover{color:var(--text)}
+</style></head>
+<body>
+<div class="box">
+    <a href="/" class="logo">⚫ BLACKWATCH</a>
+    <div class="icon">📧</div>
+    <h1>Подтверди email</h1>
+    <p>Мы отправили 6-значный код на <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong></p>
+    <div class="err" id="err"></div>
+    <input class="code-input" type="text" id="code" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+    <button class="btn" id="btn" onclick="verify()">Подтвердить →</button>
+    <span class="resend" onclick="resend()">Отправить повторно</span>
+    <a href="/" class="skip">Пропустить, сделаю позже →</a>
+</div>
+<script>
+async function verify(){
+    const btn=document.getElementById('btn');const err=document.getElementById('err');
+    const code=document.getElementById('code').value.trim();
+    if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
+    btn.disabled=true;btn.textContent='Проверяем...';err.classList.remove('show');
+    const res=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const d=await res.json();
+    if(d.success){window.location.href='/';}
+    else{err.textContent=d.error||'Неверный код';err.classList.add('show');}
+    btn.disabled=false;btn.textContent='Подтвердить →';
+}
+async function resend(){
+    const res=await fetch('/api/auth/resend-verify',{method:'POST'});
+    const d=await res.json();
+    alert(d.success?'📧 Код отправлен повторно!':'Ошибка: '+d.error);
+}
+document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter')verify();});
 </script>
 </body></html><?php exit; }
 
@@ -865,6 +1283,41 @@ init();
 if (preg_match('#^/read/(\d+)$#',$path,$m)){
     $id=(int)$m[1];$stmt=$pdo->prepare("SELECT id,title,description,cover_imgbb_url,file_id,telegraph_url,likes,dislikes,is_series FROM manga WHERE id=?");$stmt->execute([$id]);$manga=$stmt->fetch();
     if(!$manga){http_response_code(404);die('404');}
+    // AUTH GATE: require login for reading
+    if (!$currentAccount) {
+        $title = htmlspecialchars($manga['title']);
+        $cover = !empty($manga['cover_imgbb_url']) ? htmlspecialchars($manga['cover_imgbb_url']) : '';
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=$title?> | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+<?php if($cover):?>body::before{content:'';position:fixed;inset:0;background:url('<?=$cover?>') center/cover no-repeat;filter:blur(40px) brightness(0.15);pointer-events:none;z-index:0}<?php endif;?>
+.box{position:relative;z-index:1;max-width:380px;width:100%}
+.lock{font-size:56px;margin-bottom:16px}
+h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}
+p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}
+.btns{display:flex;gap:10px;flex-direction:column}
+.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;display:block;font-family:inherit}
+.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:block;font-family:inherit}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}
+.manga-title{font-size:15px;color:rgba(255,255,255,0.6);margin-bottom:18px;font-style:italic}
+</style>
+</head>
+<body>
+<div class="box">
+    <a href="/" class="back">← Каталог</a>
+    <div class="lock">🔒</div>
+    <div class="manga-title">«<?=$title?>»</div>
+    <h1>Нужна регистрация</h1>
+    <p>Чтобы читать мангу, следить за прогрессом и сохранять в библиотеку — создай аккаунт. Это бесплатно!</p>
+    <div class="btns">
+        <a href="/register" class="btn-reg">🚀 Зарегистрироваться</a>
+        <a href="/login?redirect=/read/<?=$id?>" class="btn-login">Войти</a>
+    </div>
+</div>
+</body></html><?php exit; }
     $userId=getEffectiveUserId($pdo);$stmtStatus=$pdo->prepare("SELECT status FROM user_manga_status WHERE user_id=? AND manga_id=?");$stmtStatus->execute([$userId,$id]);$currentStatus=$stmtStatus->fetchColumn()?:'';
     $pagesCount=0;if(!$manga['is_series']){$pagesStmt=$pdo->prepare("SELECT COUNT(*) FROM manga_pages WHERE manga_id=? AND page_url IS NOT NULL AND page_url!=''");$pagesStmt->execute([$id]);$pagesCount=(int)$pagesStmt->fetchColumn();}
     $coverSrc=!empty($manga['cover_imgbb_url'])?htmlspecialchars($manga['cover_imgbb_url']):(!empty($manga['file_id'])?'/api/cover/'.htmlspecialchars($manga['file_id']):'');
@@ -1176,6 +1629,11 @@ loadChapters();
 </script></body></html><?php exit;}
 
 if ($path==='/library'){
+    if (!$currentAccount) {
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}.box{max-width:360px;width:100%}.lock{font-size:56px;margin-bottom:16px}h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}.btns{display:flex;gap:10px;flex-direction:column}.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;display:block}.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;display:block}.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}</style>
+</head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock">📚</div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
     $userId=getEffectiveUserId($pdo);
     // Get custom statuses
     $csStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$csStmt->execute([$userId]);$customStatuses=$csStmt->fetchAll();
@@ -1436,17 +1894,16 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;back
 /* ===== HEADER ===== */
 header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);background:rgba(12,12,12,0.92);border-bottom:1px solid var(--border)}
 .light header{background:rgba(247,247,247,0.92);border-bottom:1px solid var(--border)}
-.header-inner{max-width:1280px;margin:auto;height:58px;display:flex;align-items:center;gap:12px;padding:0 22px;position:relative}
+.header-inner{max-width:1280px;margin:auto;height:58px;display:flex;align-items:center;gap:12px;padding:0 22px}
 .logo{font-size:17px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);text-decoration:none;flex-shrink:0;letter-spacing:2px;text-transform:uppercase;opacity:0.9}
 .logo span{color:var(--text);opacity:1}
-/* Search */
-.search-wrap{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:440px;z-index:10}
-@media(max-width:768px){.search-wrap{position:relative;left:auto;transform:none;max-width:none;flex:1}}
-.search{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:9px 15px 9px 38px;transition:all 0.2s;outline:none;letter-spacing:0.1px}
+/* Top search (below header) */
+.top-search-wrap{position:relative;width:100%;max-width:640px;margin:0 auto 14px;z-index:10}
+.search{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:12px 18px 12px 42px;transition:all 0.2s;outline:none;letter-spacing:0.1px}
 .light .search{background:rgba(0,0,0,0.03);border-color:var(--border)}
-.search:focus{border-color:var(--border2);background:rgba(255,255,255,0.06);box-shadow:0 0 0 3px rgba(255,255,255,0.04)}
+.search:focus{border-color:var(--border2);background:rgba(255,255,255,0.06);box-shadow:0 0 0 3px rgba(124,92,255,0.1)}
 .light .search:focus{box-shadow:0 0 0 3px rgba(0,0,0,0.06)}
-.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+.search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
 /* Search dropdown — smooth fade-in */
 .search-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);z-index:300;overflow:hidden;max-height:380px;overflow-y:auto;opacity:0;transform:translateY(-8px) scale(0.99);transition:opacity 0.2s ease,transform 0.2s ease;pointer-events:none}
 .search-dropdown.open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
@@ -1751,7 +2208,6 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 /* ===== MOBILE ===== */
 @media(max-width:768px){
     .header-inner{height:50px;padding:0 14px}
-    .search-wrap{max-width:none;flex:1}
     .hbtn-tg{display:none}
     .wrap{padding:14px 12px 70px}
     .new-section,.cont-section{padding:13px 12px 11px;border-radius:13px}
@@ -1760,6 +2216,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
     .stats-layout{grid-template-columns:1fr}
     .func-orange-row{grid-template-columns:1fr 1fr}
     .modal{padding:18px 14px;border-radius:15px}
+    .top-search-wrap{max-width:none}
 }
 @media(max-width:480px){
     .logo{font-size:14px}
@@ -1790,17 +2247,13 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 <header>
 <div class="header-inner">
     <a href="/" class="logo">⚫ BLACKWATCH</a>
-    <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input class="search" type="text" placeholder="Поиск манги..." id="search" oninput="onSearch(this.value)" autocomplete="off">
-        <div class="search-dropdown" id="search-dropdown"></div>
-    </div>
     <div class="header-actions">
         <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
         <a href="/library" class="hbtn hbtn-lib">📚 <span>Библиотека</span></a>
         <?php if ($currentAccount): ?>
-        <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?></span></a>
+        <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins); ?>
+        <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span></a>
         <?php else: ?>
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn" style="background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18)">Регистрация</a>
@@ -1825,6 +2278,13 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 </div>
 
 <div class="wrap">
+    <!-- ПОИСК ПОД ШАПКОЙ -->
+    <div class="top-search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search" type="text" placeholder="Поиск манги..." id="search" oninput="onSearch(this.value)" autocomplete="off">
+        <div class="search-dropdown" id="search-dropdown"></div>
+    </div>
+
     <!-- НОВИНКИ -->
     <div class="new-section" id="new-section" style="display:none">
         <div class="sec-header">
@@ -2110,7 +2570,7 @@ function onSearch(val){
         }catch(e){}
     },280);
 }
-document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))searchDrop.classList.remove('open');});
+document.addEventListener('click',e=>{if(!e.target.closest('.top-search-wrap'))searchDrop.classList.remove('open');});
 
 async function load(reset=false){
     if(loading)return;loading=true;
