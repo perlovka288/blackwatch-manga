@@ -38,6 +38,10 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 session_start();
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
 
+// ===== АВТОРИЗАЦИЯ =====
+require_once __DIR__ . '/auth.php';
+$currentAccount = getCurrentAccount($pdo); // null если не залогинен
+
 $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
@@ -48,13 +52,7 @@ function isAdmin($userId, $admins) { return $userId > 0 && in_array((int)$userId
 
 $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
 
-function getEffectiveUserId($pdo) {
-    $tgUser = $_GET['tg_user_id'] ?? $_POST['tg_user_id'] ?? '';
-    if ($tgUser && is_numeric($tgUser)) { if (!headers_sent()) setcookie('tg_user_id', $tgUser, time()+86400*30,'/',''  ,false,false); $_SESSION['tg_user_id']=$tgUser; return (int)$tgUser; }
-    if (!empty($_SESSION['tg_user_id']) && is_numeric($_SESSION['tg_user_id'])) return (int)$_SESSION['tg_user_id'];
-    if (!empty($_COOKIE['tg_user_id']) && is_numeric($_COOKIE['tg_user_id'])) { $_SESSION['tg_user_id']=$_COOKIE['tg_user_id']; return (int)$_COOKIE['tg_user_id']; }
-    return (int)$_SESSION['guest_id'];
-}
+// getEffectiveUserId теперь из auth.php — совместимая обёртка
 
 function sendTgNotify($userId, $text) {
     $botToken = getenv('BOT_TOKEN'); if (!$botToken||!$userId) return;
@@ -372,6 +370,387 @@ if ($path==='/api/admin/suggestions'){header('Content-Type: application/json');$
 if (preg_match('#^/api/admin/suggestions/(\d+)/status$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$input=json_decode(file_get_contents('php://input'),true);$newStatus=$input['status']??'read';$pdo->prepare("UPDATE suggestions SET status=? WHERE id=?")->execute([$newStatus,(int)$m[1]]);echo json_encode(['success'=>true]);exit;}
 
 if ($path==='/api/admin/admins'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$admins=[];foreach($hardcodedAdmins as $id){$tag=null;try{$s=$pdo->prepare("SELECT tag_name FROM admin_tags WHERE user_id=?");$s->execute([$id]);$tag=$s->fetchColumn();}catch(Exception $e){}$admins[]=['user_id'=>$id,'tag'=>$tag?:"ID: $id"];}echo json_encode(['admins'=>$admins]);exit;}
+
+# ========================= AUTH API =========================
+
+// API: Регистрация
+if ($path==='/api/auth/register' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $input = json_decode(file_get_contents('php://input'), true);
+    $email    = strtolower(trim($input['email'] ?? ''));
+    $username = trim($input['username'] ?? '');
+    $password = $input['password'] ?? '';
+    $confirm  = $input['confirm'] ?? '';
+
+    if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) { echo json_encode(['success'=>false,'error'=>'Неверный email']); exit; }
+    if (!$username || strlen($username)<3 || strlen($username)>30) { echo json_encode(['success'=>false,'error'=>'Username: 3-30 символов']); exit; }
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) { echo json_encode(['success'=>false,'error'=>'Username: только буквы, цифры, _']); exit; }
+    if (strlen($password)<6) { echo json_encode(['success'=>false,'error'=>'Пароль минимум 6 символов']); exit; }
+    if ($password !== $confirm) { echo json_encode(['success'=>false,'error'=>'Пароли не совпадают']); exit; }
+
+    try {
+        $check = $pdo->prepare("SELECT id FROM accounts WHERE email=? OR username=?");
+        $check->execute([$email, $username]);
+        if ($check->fetch()) { echo json_encode(['success'=>false,'error'=>'Email или username уже занят']); exit; }
+
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $ins = $pdo->prepare("INSERT INTO accounts (email,username,password_hash,is_verified) VALUES (?,?,?,TRUE) RETURNING id");
+        $ins->execute([$email, $username, $hash]);
+        $accountId = (int)$ins->fetchColumn();
+
+        createSession($pdo, $accountId, true);
+        echo json_encode(['success'=>true,'username'=>$username]);
+    } catch (Exception $e) {
+        echo json_encode(['success'=>false,'error'=>'Ошибка сервера: '.$e->getMessage()]);
+    }
+    exit;
+}
+
+// API: Вход
+if ($path==='/api/auth/login' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $input    = json_decode(file_get_contents('php://input'), true);
+    $login    = strtolower(trim($input['login'] ?? '')); // email или username
+    $password = $input['password'] ?? '';
+    $remember = !empty($input['remember']);
+
+    if (!$login || !$password) { echo json_encode(['success'=>false,'error'=>'Заполни все поля']); exit; }
+
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM accounts WHERE email=? OR username=?");
+        $stmt->execute([$login, $login]);
+        $account = $stmt->fetch();
+
+        if (!$account || !password_verify($password, $account['password_hash'])) {
+            echo json_encode(['success'=>false,'error'=>'Неверный email/username или пароль']);
+            exit;
+        }
+        createSession($pdo, (int)$account['id'], $remember);
+        echo json_encode(['success'=>true,'username'=>$account['username']]);
+    } catch (Exception $e) {
+        echo json_encode(['success'=>false,'error'=>'Ошибка сервера']);
+    }
+    exit;
+}
+
+// API: Получить токен привязки TG
+if ($path==='/api/auth/tg-link-token' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $token = generateTgLinkToken($pdo, (int)$account['id']);
+    $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
+    echo json_encode(['success'=>true,'token'=>$token,'command'=>"/start link_{$token}",'bot'=>$botUsername]);
+    exit;
+}
+
+// API: Отвязать TG
+if ($path==='/api/auth/tg-unlink' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
+    $pdo->prepare("UPDATE accounts SET tg_user_id=NULL, tg_link_token=NULL WHERE id=?")->execute([(int)$account['id']]);
+    echo json_encode(['success'=>true]);
+    exit;
+}
+
+// API: Статистика профиля
+if ($path==='/api/auth/profile-stats') {
+    header('Content-Type: application/json');
+    $account = getCurrentAccount($pdo);
+    if (!$account) { echo json_encode(['success'=>false]); exit; }
+    $aid = (int)$account['id'];
+    $uid = $account['tg_user_id'];
+
+    // Считаем по account_id (новые записи) + tg_user_id (старые) если TG привязан
+    $total = (int)$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?")->execute([$aid]) ? 0 : 0;
+    $stTotal = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?"); $stTotal->execute([$aid]); $total=(int)$stTotal->fetchColumn();
+    $stRead  = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'"); $stRead->execute([$aid]); $read=(int)$stRead->fetchColumn();
+    $stNow   = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'"); $stNow->execute([$aid]); $now=(int)$stNow->fetchColumn();
+    echo json_encode(['success'=>true,'total'=>$total,'read'=>$read,'now'=>$now]);
+    exit;
+}
+
+// Логаут
+if ($path==='/logout') {
+    destroySession($pdo);
+    header('Location: /');
+    exit;
+}
+
+# ========================= AUTH PAGES =========================
+
+// /login
+if ($path==='/login') {
+    if (getCurrentAccount($pdo)) { header('Location: /'); exit; }
+    $redirect = htmlspecialchars($_GET['redirect'] ?? '/');
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Вход | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(255,255,255,0.03) 0%,transparent 60%);pointer-events:none}
+.box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:400px;position:relative;z-index:1}
+.logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:2px;color:var(--text2);text-decoration:none;display:block;text-align:center;margin-bottom:28px;opacity:0.85}
+h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+.sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:26px}
+.fg{margin-bottom:14px}
+label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px}
+input[type=text],input[type=email],input[type=password]{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
+input:focus{border-color:var(--border2)}
+.remember{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:18px}
+.remember input{width:auto;accent-color:var(--accent)}
+.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .2s;margin-bottom:12px}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:14px;display:none}
+.err.show{display:block}
+.link{text-align:center;font-size:13px;color:var(--muted)}
+.link a{color:var(--text2);text-decoration:none;font-weight:500}
+.link a:hover{color:var(--text)}
+.divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:11px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+</style>
+</head>
+<body>
+<div class="box">
+    <a href="/" class="logo">⚫ BLACKWATCH</a>
+    <h1>Добро пожаловать</h1>
+    <p class="sub">Войди чтобы читать мангу</p>
+    <div class="err" id="err"></div>
+    <div class="fg"><label>Email или Username</label><input type="text" id="login" placeholder="user@mail.com или username" autocomplete="username"></div>
+    <div class="fg"><label>Пароль</label><input type="password" id="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <label class="remember"><input type="checkbox" id="remember" checked> Запомнить меня</label>
+    <button class="btn" id="btn" onclick="doLogin()">Войти</button>
+    <div class="divider">или</div>
+    <div class="link">Нет аккаунта? <a href="/register">Зарегистрироваться</a></div>
+</div>
+<script>
+const redirect = <?=json_encode($redirect)?>;
+async function doLogin() {
+    const btn = document.getElementById('btn');
+    const err = document.getElementById('err');
+    err.classList.remove('show');
+    btn.disabled = true; btn.textContent = 'Входим...';
+    try {
+        const res = await fetch('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                login: document.getElementById('login').value.trim(),
+                password: document.getElementById('password').value,
+                remember: document.getElementById('remember').checked
+            })
+        });
+        const d = await res.json();
+        if (d.success) { window.location.href = redirect || '/'; }
+        else { err.textContent = d.error || 'Ошибка'; err.classList.add('show'); }
+    } catch(e) { err.textContent = 'Ошибка сети'; err.classList.add('show'); }
+    btn.disabled = false; btn.textContent = 'Войти';
+}
+document.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+</script>
+</body></html><?php exit; }
+
+// /register
+if ($path==='/register') {
+    if (getCurrentAccount($pdo)) { header('Location: /'); exit; }
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Регистрация | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--green:#4ade80}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(255,255,255,0.03) 0%,transparent 60%);pointer-events:none}
+.box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:420px;position:relative;z-index:1}
+.logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:2px;color:var(--text2);text-decoration:none;display:block;text-align:center;margin-bottom:28px;opacity:0.85}
+h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+.sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:26px;line-height:1.6}
+.fg{margin-bottom:13px;position:relative}
+label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px}
+input{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
+input:focus{border-color:var(--border2)}
+input.valid{border-color:rgba(74,222,128,.4)}
+input.invalid{border-color:rgba(248,113,113,.4)}
+.hint{font-size:10px;color:var(--muted);margin-top:4px}
+.hint.ok{color:var(--green)}
+.hint.bad{color:#f87171}
+.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .2s;margin-bottom:12px;margin-top:6px}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:14px;display:none}
+.err.show{display:block}
+.link{text-align:center;font-size:13px;color:var(--muted)}
+.link a{color:var(--text2);text-decoration:none;font-weight:500}
+.divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:11px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+</style>
+</head>
+<body>
+<div class="box">
+    <a href="/" class="logo">⚫ BLACKWATCH</a>
+    <h1>Создать аккаунт</h1>
+    <p class="sub">Регистрация даёт доступ ко всей манге<br>Telegram можно привязать позже</p>
+    <div class="err" id="err"></div>
+    <div class="fg"><label>Email</label><input type="email" id="email" placeholder="user@mail.com" oninput="validateEmail()" autocomplete="email"><div class="hint" id="hint-email"></div></div>
+    <div class="fg"><label>Username</label><input type="text" id="username" placeholder="coolreader123" maxlength="30" oninput="validateUsername()" autocomplete="username"><div class="hint" id="hint-user">3-30 символов, только a-z, 0-9, _</div></div>
+    <div class="fg"><label>Пароль</label><input type="password" id="password" placeholder="Минимум 6 символов" oninput="validatePass()" autocomplete="new-password"><div class="hint" id="hint-pass"></div></div>
+    <div class="fg"><label>Подтверждение пароля</label><input type="password" id="confirm" placeholder="Повтори пароль" oninput="validateConfirm()" autocomplete="new-password"><div class="hint" id="hint-confirm"></div></div>
+    <button class="btn" id="btn" onclick="doRegister()">Зарегистрироваться</button>
+    <div class="divider">или</div>
+    <div class="link">Уже есть аккаунт? <a href="/login">Войти</a></div>
+</div>
+<script>
+function validateEmail(){const v=document.getElementById('email').value;const ok=v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);setHint('hint-email',document.getElementById('email'),ok?'✓ Отлично':'','',ok);}
+function validateUsername(){const v=document.getElementById('username').value;const ok=/^[a-zA-Z0-9_]{3,30}$/.test(v);setHint('hint-user',document.getElementById('username'),ok?'✓ Отлично':'3-30 символов, только a-z, 0-9, _','3-30 символов, только a-z, 0-9, _',ok);}
+function validatePass(){const v=document.getElementById('password').value;const ok=v.length>=6;setHint('hint-pass',document.getElementById('password'),ok?'✓ Надёжный':'Минимум 6 символов','Минимум 6 символов',ok);validateConfirm();}
+function validateConfirm(){const v=document.getElementById('confirm').value;const p=document.getElementById('password').value;const ok=v&&v===p;setHint('hint-confirm',document.getElementById('confirm'),ok?'✓ Совпадает':'Пароли не совпадают','',ok&&v.length>0);}
+function setHint(hintId,input,okText,badText,ok){const h=document.getElementById(hintId);if(input.value){input.classList.toggle('valid',ok);input.classList.toggle('invalid',!ok);h.textContent=ok?okText:badText;h.className='hint '+(ok?'ok':'bad');}else{input.classList.remove('valid','invalid');h.textContent=badText||'';h.className='hint';}}
+async function doRegister(){
+    const btn=document.getElementById('btn');const err=document.getElementById('err');
+    err.classList.remove('show');btn.disabled=true;btn.textContent='Создаём аккаунт...';
+    try{
+        const res=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            email:document.getElementById('email').value.trim(),
+            username:document.getElementById('username').value.trim(),
+            password:document.getElementById('password').value,
+            confirm:document.getElementById('confirm').value
+        })});
+        const d=await res.json();
+        if(d.success){window.location.href='/';}
+        else{err.textContent=d.error||'Ошибка';err.classList.add('show');}
+    }catch(e){err.textContent='Ошибка сети';err.classList.add('show');}
+    btn.disabled=false;btn.textContent='Зарегистрироваться';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
+</script>
+</body></html><?php exit; }
+
+// /profile
+if ($path==='/profile') {
+    $account = requireAuth($pdo);
+    $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
+?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Профиль | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--green:#4ade80;--orange:#fb923c}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(255,255,255,0.025) 0%,transparent 55%);pointer-events:none}
+.back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}
+.back:hover{color:var(--text)}
+.wrap{max-width:520px;margin:0 auto;position:relative;z-index:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px;margin-bottom:14px}
+.avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#2e2e4e);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:14px}
+.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px}
+.email{font-size:13px;color:var(--muted);margin-bottom:14px}
+.joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
+.sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:0}
+.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center}
+.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
+.stat-l{font-size:10px;color:var(--muted);margin-top:2px}
+.tg-connected{display:flex;align-items:center;justify-content:space-between;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.18);border-radius:11px;padding:12px 14px;margin-bottom:10px}
+.tg-info{font-size:13px;color:var(--green);font-weight:600}
+.tg-meta{font-size:10px;color:var(--muted);margin-top:2px}
+.unlink-btn{padding:5px 13px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.22);border-radius:7px;color:#f87171;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
+.unlink-btn:hover{background:rgba(248,113,113,.14)}
+.tg-steps{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:14px}
+.step{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start}
+.step:last-child{margin-bottom:0}
+.step-n{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:var(--text2)}
+.step-text{font-size:13px;color:var(--text2);line-height:1.5;padding-top:1px}
+.command-box{background:rgba(0,0,0,.4);border:1px solid var(--border2);border-radius:8px;padding:10px 13px;font-family:monospace;font-size:13px;color:var(--orange);margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;word-break:break-all}
+.copy-cmd{padding:4px 10px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all .2s}
+.copy-cmd:hover{color:var(--text)}
+.gen-btn{width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:11px;transition:all .2s}
+.gen-btn:hover{border-color:var(--border2);color:var(--text)}
+.logout-btn{width:100%;padding:11px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:block;text-align:center}
+.logout-btn:hover{background:rgba(248,113,113,.12)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;pointer-events:none;border:1px solid var(--border2);animation:ti .25s ease;white-space:nowrap}
+@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <a href="/" class="back">← Каталог</a>
+    <div class="card">
+        <div class="avatar">👤</div>
+        <div class="username"><?=htmlspecialchars($account['username'])?></div>
+        <div class="email"><?=htmlspecialchars($account['email'])?></div>
+        <div class="joined">Зарегистрирован: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
+    </div>
+
+    <div class="card">
+        <div class="sec-title">📚 Библиотека</div>
+        <div class="stats-row" id="stats-row">
+            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Всего</div></div>
+            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Читаю</div></div>
+            <div class="stat"><div class="stat-n">—</div><div class="stat-l">Прочитано</div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="sec-title">🤖 Telegram</div>
+        <?php if ($account['tg_user_id']): ?>
+        <div class="tg-connected">
+            <div>
+                <div class="tg-info">✅ Telegram привязан</div>
+                <div class="tg-meta">TG ID: <?=(int)$account['tg_user_id']?></div>
+            </div>
+            <button class="unlink-btn" onclick="unlinkTg()">Отвязать</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);line-height:1.6">Твоя библиотека и прогресс синхронизированы с Telegram-ботом.</p>
+        <?php else: ?>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">Привяжи Telegram чтобы пользоваться ботом с теми же данными что и на сайте.</p>
+        <div class="tg-steps">
+            <div class="step"><div class="step-n">1</div><div class="step-text">Нажми кнопку ниже — сгенерируется одноразовая команда</div></div>
+            <div class="step"><div class="step-n">2</div><div class="step-text">Открой бота <strong>@<?=htmlspecialchars($botUsername)?></strong> и отправь эту команду</div></div>
+            <div class="step"><div class="step-n">3</div><div class="step-text">Готово — аккаунты связаны!</div></div>
+        </div>
+        <div id="link-command" style="display:none">
+            <div class="command-box">
+                <span id="cmd-text"></span>
+                <button class="copy-cmd" onclick="copyCmd()">Копировать</button>
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin-top:7px">Токен действителен 10 минут. После привязки обновите страницу.</p>
+        </div>
+        <button class="gen-btn" id="gen-btn" onclick="genLink()">🔗 Получить команду привязки</button>
+        <?php endif; ?>
+    </div>
+
+    <a href="/logout" class="logout-btn">Выйти из аккаунта</a>
+</div>
+<script>
+function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
+async function genLink(){
+    const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';
+    try{
+        const res=await fetch('/api/auth/tg-link-token',{method:'POST'});
+        const d=await res.json();
+        if(d.success){
+            document.getElementById('cmd-text').textContent=d.command;
+            document.getElementById('link-command').style.display='block';
+            btn.textContent='🔄 Обновить команду';
+        } else { showToast('Ошибка: '+d.error); }
+    }catch(e){showToast('Ошибка сети');}
+    btn.disabled=false;
+}
+function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Команда скопирована!');}
+async function unlinkTg(){
+    if(!confirm('Отвязать Telegram?'))return;
+    const res=await fetch('/api/auth/tg-unlink',{method:'POST'});
+    const d=await res.json();
+    if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}
+}
+async function loadStats(){
+    try{
+        const res=await fetch('/api/auth/profile-stats');const d=await res.json();
+        if(d.success){document.getElementById('stats-row').innerHTML=`<div class="stat"><div class="stat-n">${d.total}</div><div class="stat-l">Всего</div></div><div class="stat"><div class="stat-n">${d.now}</div><div class="stat-l">Читаю</div></div><div class="stat"><div class="stat-n">${d.read}</div><div class="stat-l">Прочитано</div></div>`;}
+    }catch(e){}
+}
+loadStats();
+</script>
+</body></html><?php exit; }
 
 # ========================= VIEWERS =========================
 
@@ -1418,6 +1797,12 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
         <a href="/library" class="hbtn hbtn-lib">📚 <span>Библиотека</span></a>
+        <?php if ($currentAccount): ?>
+        <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?></span></a>
+        <?php else: ?>
+        <a href="/login" class="hbtn">Войти</a>
+        <a href="/register" class="hbtn" style="background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18)">Регистрация</a>
+        <?php endif; ?>
         <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="hbtn hbtn-tg">🤖 Бот</a>
         <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
     </div>

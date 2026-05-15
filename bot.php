@@ -1680,6 +1680,30 @@ if ($text && $text[0] === '/') {
 // /start
 if ($cmd === '/start' || $text === '🏠 Главная') {
     clearState($pdo, $userId);
+
+    // Обработка привязки TG к аккаунту: /start link_TOKEN
+    if (preg_match('/^\/start link_([a-f0-9]{32})$/', $text, $linkMatch)) {
+        $linkToken = $linkMatch[1];
+        try {
+            $accStmt = $pdo->prepare("SELECT id, username, tg_user_id FROM accounts WHERE tg_link_token=?");
+            $accStmt->execute([$linkToken]);
+            $linkAcc = $accStmt->fetch();
+
+            if (!$linkAcc) {
+                sendMsg($chatId, "❌ <b>Токен недействителен или уже использован.</b>\n\nПолучи новую команду в профиле на сайте.");
+            } elseif ($linkAcc['tg_user_id'] && (int)$linkAcc['tg_user_id'] !== $userId) {
+                sendMsg($chatId, "⚠️ Этот аккаунт уже привязан к другому Telegram.");
+            } else {
+                $pdo->prepare("UPDATE accounts SET tg_user_id=?, tg_link_token=NULL WHERE id=?")->execute([$userId, (int)$linkAcc['id']]);
+                $siteUrl = rtrim(getenv('SITE_URL') ?: '', '/');
+                sendMsg($chatId, "✅ <b>Telegram успешно привязан!</b>\n\nАккаунт: <b>{$linkAcc['username']}</b>\n\nТеперь твоя библиотека и прогресс синхронизированы между сайтом и ботом.\n\n🌐 <a href=\"{$siteUrl}/profile\">Открыть профиль</a>");
+            }
+        } catch (Exception $e) {
+            sendMsg($chatId, "❌ Ошибка привязки. Попробуй ещё раз.");
+        }
+        http_response_code(200); echo 'OK'; exit;
+    }
+
     sendMsg($chatId, startText($firstName), $isAdmin ? adminMenuKb() : mainMenuKb());
     http_response_code(200); echo 'OK'; exit;
 }
