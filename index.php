@@ -56,8 +56,30 @@ try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
     foreach ($stmtAdmins as $row) { if (!in_array((int)$row['user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['user_id']; }
 } catch (Exception $e) {}
+// Add TG IDs of account-based admins
+try {
+    $accAdmStmt = $pdo->query("SELECT tg_user_id FROM accounts WHERE is_admin=TRUE AND tg_user_id IS NOT NULL");
+    foreach ($accAdmStmt as $row) { if (!in_array((int)$row['tg_user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['tg_user_id']; }
+} catch (Exception $e) {}
 
 function isAdmin($userId, $admins) { return $userId > 0 && in_array((int)$userId, $admins); }
+
+function isAdminFull($pdo, $userId, $admins) {
+    if (isAdmin($userId, $admins)) return true;
+    // Check account-based admin flag
+    try {
+        $s = $pdo->prepare("SELECT is_admin FROM accounts WHERE tg_user_id=? AND is_admin=TRUE");
+        $s->execute([$userId]); if ($s->fetch()) return true;
+    } catch(Exception $e) {}
+    return false;
+}
+
+function isAccountAdmin($pdo, $accountId) {
+    try {
+        $s = $pdo->prepare("SELECT is_admin FROM accounts WHERE id=? AND is_admin=TRUE");
+        $s->execute([$accountId]); return (bool)$s->fetch();
+    } catch(Exception $e) { return false; }
+}
 
 $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
 
@@ -209,7 +231,17 @@ function extractImgFromContent($nodes){
 
 # ========================= API =========================
 
-if ($path==='/api/check-admin'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);echo json_encode(['is_admin'=>isAdmin($userId,$hardcodedAdmins),'user_id'=>$userId]);exit;}
+if ($path==='/api/check-admin'){
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    $isAdm=isAdmin($userId,$hardcodedAdmins);
+    // Also check account-based admin flag
+    if(!$isAdm){
+        $accChk=getCurrentAccount($pdo);
+        if($accChk&&!empty($accChk['is_admin']))$isAdm=true;
+    }
+    echo json_encode(['is_admin'=>$isAdm,'user_id'=>$userId]);exit;
+}
 
 if ($path==='/api/imgbb-keys'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'keys'=>[]]);exit;}echo json_encode(['success'=>true,'keys'=>$imgbbKeys]);exit;}
 
@@ -951,7 +983,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
 if ($path==='/profile') {
     $account = requireAuth($pdo);
     $botUsername = getenv('BOT_USERNAME') ?: 'blackwatch_manga_bot';
-    $isAccountAdmin = in_array((int)($account['tg_user_id'] ?? 0), $hardcodedAdmins);
+    $isAccountAdmin = in_array((int)($account['tg_user_id'] ?? 0), $hardcodedAdmins)
+        || (!empty($account['is_admin']) && $account['is_admin']);
+    $accountAdminTag = $account['admin_tag'] ?? null;
     // Load profile customization
     $custStmt = $pdo->prepare("SELECT * FROM profile_customizations WHERE account_id=?");
     $custStmt->execute([(int)$account['id']]);
@@ -1108,22 +1142,35 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card">
         <div class="customize-card">
             <div class="sec-title" style="padding:0;margin-bottom:14px">🎨 Кастомизация профиля</div>
-            <div class="cust-grid">
-                <div class="cust-field">
-                    <label>URL аватарки</label>
-                    <input type="text" id="cust-avatar" placeholder="https://..." value="<?=htmlspecialchars($custom['avatar_url']??'')?>">
+            <!-- Avatar upload -->
+            <div style="margin-bottom:14px">
+                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Аватарка</label>
+                <div class="upload-img-zone" id="avatar-zone" onclick="document.getElementById('avatar-file').click()" title="Нажми чтобы выбрать фото">
+                    <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="uploadProfileImage(this,'avatar')">
+                    <?php if(!empty($custom['avatar_url'])): ?>
+                    <img id="avatar-preview" src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
+                    <div class="upload-img-overlay">📷 Изменить</div>
+                    <?php else: ?>
+                    <div class="upload-img-ph" id="avatar-ph">👤<br><span>Загрузить фото</span></div>
+                    <?php endif; ?>
                 </div>
-                <div class="cust-field">
-                    <label>URL шапки (баннер)</label>
-                    <input type="text" id="cust-banner" placeholder="https://..." value="<?=htmlspecialchars($custom['banner_url']??'')?>">
+            </div>
+            <!-- Banner upload -->
+            <div style="margin-bottom:14px">
+                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Шапка профиля (баннер)</label>
+                <div class="upload-img-zone banner-zone" id="banner-zone" onclick="document.getElementById('banner-file').click()" title="Нажми чтобы выбрать фото">
+                    <input type="file" id="banner-file" accept="image/*" style="display:none" onchange="uploadProfileImage(this,'banner')">
+                    <?php if(!empty($custom['banner_url'])): ?>
+                    <img id="banner-preview" src="<?=htmlspecialchars($custom['banner_url'])?>" alt="">
+                    <div class="upload-img-overlay">📷 Изменить</div>
+                    <?php elseif(!empty($custom['banner_color'])&&$custom['banner_color']!=='#1a1a2e'): ?>
+                    <div class="upload-img-ph" id="banner-ph" style="background:<?=htmlspecialchars($custom['banner_color'])?>">🖼<br><span>Загрузить баннер</span></div>
+                    <?php else: ?>
+                    <div class="upload-img-ph" id="banner-ph">🖼<br><span>Загрузить баннер</span></div>
+                    <?php endif; ?>
                 </div>
-                <div class="cust-field full">
-                    <label>О себе (до 300 символов)</label>
-                    <textarea id="cust-bio" rows="2" placeholder="Расскажи о себе..."><?=htmlspecialchars($custom['bio']??'')?></textarea>
-                </div>
-                <div class="cust-field full">
-                    <label>Цвет шапки</label>
-                    <input type="text" id="cust-color" placeholder="#1a1a2e" value="<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+                <div style="margin-top:8px">
+                    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Или выбери цвет шапки</div>
                     <div class="color-presets">
                         <?php foreach(['#1a1a2e','#0f2027','#1a0a2e','#0a1a2e','#0a2e1a','#2e1a0a','#2e0a0a','#0a0a0a','#7c5cff22','#3b82f622'] as $c): ?>
                         <div class="color-preset <?=$custom['banner_color']===$c?'active':''?>" style="background:<?=htmlspecialchars($c)?>" onclick="pickBannerColor('<?=htmlspecialchars($c)?>')"></div>
@@ -1131,7 +1178,14 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
                     </div>
                 </div>
             </div>
-            <button class="save-cust-btn" onclick="saveCustomization()">💾 Сохранить профиль</button>
+            <!-- Bio -->
+            <div style="margin-bottom:14px">
+                <label style="display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">О себе</label>
+                <textarea id="cust-bio" rows="2" placeholder="Расскажи о себе..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;outline:none;resize:none"><?=htmlspecialchars($custom['bio']??'')?></textarea>
+            </div>
+            <input type="hidden" id="cust-color" value="<?=htmlspecialchars($custom['banner_color']??'#1a1a2e')?>">
+            <button class="save-cust-btn" onclick="saveBio()">💾 Сохранить профиль</button>
+            <div id="cust-upload-status" style="margin-top:8px;font-size:12px;color:var(--muted);text-align:center"></div>
         </div>
     </div>
 
