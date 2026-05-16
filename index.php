@@ -1381,13 +1381,54 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
     </div>
 
+    <!-- XP / УРОВЕНЬ -->
+    <?php
+    try {
+        $xpRow = $pdo->prepare("SELECT total_xp, level FROM user_xp WHERE account_id=?");
+        $xpRow->execute([(int)$account['id']]);
+        $xpData = $xpRow->fetch();
+        $totalXp = $xpData ? (int)$xpData['total_xp'] : 0;
+        $curLevel = $xpData ? (int)$xpData['level'] : 1;
+        $xpProgress = function_exists('xpProgressInLevel') ? xpProgressInLevel($totalXp) : ['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];
+        $levelFrame = function_exists('getLevelFrame') ? getLevelFrame($curLevel) : ['color'=>'#6b7280','label'=>'🌑 Новичок','glow'=>false];
+    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок','glow'=>false]; }
+    ?>
+    <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:18px 20px 16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Уровень</span>
+                    <span style="background:<?=htmlspecialchars($levelFrame['color'])?>;color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px"><?=htmlspecialchars($levelFrame['label'])?> <?=$curLevel?></span>
+                </div>
+                <span style="font-size:11px;color:var(--muted)">⭐ <?=number_format($totalXp)?> XP</span>
+            </div>
+            <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+                <div style="background:<?=htmlspecialchars($levelFrame['color'])?>;height:100%;width:<?=$xpProgress['pct']?>%;border-radius:4px;transition:width .6s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px">
+                <span style="font-size:10px;color:var(--muted)"><?=number_format($xpProgress['current'])?> / <?=number_format($xpProgress['needed'])?> XP</span>
+                <span style="font-size:10px;color:var(--muted)">Lv<?=$curLevel?> → Lv<?=$xpProgress['next_lvl']?></span>
+            </div>
+        </div>
+    </div>
+
     <!-- STATS -->
+    <?php
+    try {
+        $aid = (int)$account['id'];
+        $tgIdStmt = $pdo->prepare("SELECT tg_user_id FROM accounts WHERE id=?");
+        $tgIdStmt->execute([$aid]); $tgRow = $tgIdStmt->fetch(); $tgId2 = $tgRow ? (int)$tgRow['tg_user_id'] : 0;
+        $totalLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE account_id={$aid}".($tgId2?" OR user_id={$tgId2}":""))->fetchColumn();
+        $readingLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE status='reading' AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $readLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE status='read' AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+    } catch(Exception $e) { $totalLib=0; $readingLib=0; $readLib=0; }
+    ?>
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row" id="stats-row">
-            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Всего</div></a>
-            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Читаю</div></a>
-            <a class="stat" href="/library"><div class="stat-n">—</div><div class="stat-l">Прочитано</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">Всего</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readingLib?></div><div class="stat-l">Читаю</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">Прочитано</div></a>
         </div>
     </div>
 
@@ -3240,6 +3281,11 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
         <a href="/library" class="hbtn hbtn-lib">📚 <span>Библиотека</span></a>
         <?php if ($currentAccount): ?>
+        <a href="/messages" class="hbtn" style="position:relative" title="Сообщения">💬 <span>Чат</span><?php
+            try { $unreadMsgCount = (int)$pdo->prepare("SELECT COUNT(*) FROM user_messages WHERE to_account_id=? AND is_read=FALSE")->execute([(int)$currentAccount['id']]) ? $pdo->query("SELECT COUNT(*) FROM user_messages WHERE to_account_id=".(int)$currentAccount['id']." AND is_read=FALSE")->fetchColumn() : 0; } catch(Exception $e) { $unreadMsgCount = 0; }
+            if($unreadMsgCount > 0): ?><span style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center"><?=(int)$unreadMsgCount?></span><?php endif; ?></a>
+        <?php endif; ?>
+        <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins); ?>
         <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span></a>
         <?php else: ?>
@@ -3290,6 +3336,45 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <div class="sec-header"><div class="sec-title"><span>▶</span>Продолжить читать</div></div>
         <div class="cont-list" id="cont-list"></div>
     </div>
+
+    <!-- ТОП НЕДЕЛИ -->
+    <?php
+    try {
+        $topWeek = $pdo->query("SELECT a.username, pc.avatar_url,
+            COALESCE(ux.level,1) as level,
+            COALESCE(ux.weekly_pages,0) as weekly_pages,
+            COALESCE(ux.weekly_chapters,0) as weekly_chapters,
+            COALESCE(ux.total_xp,0) as total_xp
+            FROM user_xp ux
+            JOIN accounts a ON a.id=ux.account_id
+            LEFT JOIN profile_customizations pc ON pc.account_id=ux.account_id
+            WHERE ux.weekly_pages > 0 OR ux.weekly_chapters > 0
+            ORDER BY ux.weekly_pages DESC
+            LIMIT 5")->fetchAll();
+    } catch(Exception $e) { $topWeek = []; }
+    if (!empty($topWeek)):
+    ?>
+    <div class="cont-section" style="margin-bottom:16px">
+        <div class="sec-header" style="margin-bottom:12px">
+            <div class="sec-title"><span>🏆</span>Топ недели <a href="/rankings" style="font-size:10px;color:var(--muted);text-decoration:none;font-weight:500;margin-left:8px">Все →</a></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+        <?php foreach($topWeek as $i => $tw): ?>
+        <a href="/u/<?=htmlspecialchars($tw['username'])?>" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:8px 12px;transition:all .18s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="width:22px;font-size:13px;font-weight:800;color:<?=$i===0?'#f59e0b':($i===1?'#9ca3af':($i===2?'#b45309':'var(--muted)'))?>;text-align:center"><?=$i+1?></div>
+            <div style="width:32px;height:32px;border-radius:50%;background:#1a1a2e;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">
+                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?>👤<?php endif; ?>
+            </div>
+            <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:var(--text2)"><?=htmlspecialchars($tw['username'])?></div>
+                <div style="font-size:10px;color:var(--muted)">Ур. <?=(int)$tw['level']?> · <?=(int)$tw['weekly_pages']?> стр. за неделю</div>
+            </div>
+            <div style="font-size:10px;color:var(--muted);text-align:right"><?=(int)$tw['weekly_chapters']?> гл.</div>
+        </a>
+        <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- FILTERS -->
     <div class="filters">
