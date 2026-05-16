@@ -202,7 +202,7 @@ if (preg_match('~^/api/messages(?:/(\d+))?$~', $path, $m)) {
                 $stmt->execute([$currentAccount['id'], $other_id, $other_id, $currentAccount['id']]);
                 $pdo->prepare("UPDATE user_messages SET is_read = TRUE WHERE sender_id = ? AND recipient_id = ? AND is_read = FALSE")->execute([$other_id, $currentAccount['id']]);
             } else {
-                $stmt = $pdo->prepare("SELECT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END as other_id, (SELECT username FROM accounts WHERE id = CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END) as other_username, MAX(created_at) as last_message_time, SUM(CASE WHEN is_read = FALSE AND recipient_id = ? THEN 1 ELSE 0 END) as unread_count FROM user_messages WHERE sender_id = ? OR recipient_id = ? GROUP BY other_id, other_username ORDER BY last_message_time DESC LIMIT 50");
+                $stmt = $pdo->prepare("SELECT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END as other_id, (SELECT username FROM accounts WHERE id = CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END) as other_username, MAX(created_at) as last_message_time, (SELECT text FROM user_messages um2 WHERE (um2.sender_id=um.sender_id AND um2.recipient_id=um.recipient_id) OR (um2.sender_id=um.recipient_id AND um2.recipient_id=um.sender_id) ORDER BY um2.created_at DESC LIMIT 1) as last_text, SUM(CASE WHEN is_read = FALSE AND recipient_id = ? THEN 1 ELSE 0 END) as unread_count FROM user_messages um WHERE sender_id = ? OR recipient_id = ? GROUP BY other_id, other_username ORDER BY last_message_time DESC LIMIT 50");
                 $stmt->execute([$currentAccount['id'], $currentAccount['id'], $currentAccount['id'], $currentAccount['id'], $currentAccount['id']]);
             }
             header('Content-Type: application/json');
@@ -532,6 +532,13 @@ if ($path==='/api/status'&&$_SERVER['REQUEST_METHOD']==='POST'){
     $mangaId=(int)($input['manga_id']??0);$status=$input['status']??'';
     if($mangaId&&$status){
         $pdo->prepare("INSERT INTO user_manga_status (user_id,manga_id,status) VALUES (?,?,?) ON CONFLICT (user_id,manga_id) DO UPDATE SET status=EXCLUDED.status")->execute([$userId,$mangaId,$status]);
+        // Award XP for reading
+        if ($status === 'read' || $status === 'Прочитано') {
+            if ($currentAccount) {
+                $pdo->prepare("UPDATE accounts SET user_xp = user_xp + 50 WHERE id = ?")->execute([$currentAccount['id']]);
+                calculateUserLevel($pdo, $currentAccount['id']);
+            }
+        }
         echo json_encode(['success'=>true,'user_id'=>$userId]);exit;
     }
     echo json_encode(['success'=>false]);exit;
@@ -1416,10 +1423,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);padding:3px 10px;border-radius:6px;display:inline-block}
 .sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px;padding:22px 24px 0}
 .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
-.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:var(--text)}
-.stat:hover{border-color:var(--border2)}
-.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
-.stat-l{font-size:10px;color:var(--muted);margin-top:2px}
 .verify-banner{background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.2);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
 .verify-icon{font-size:22px;flex-shrink:0}
 .verify-info{flex:1}
@@ -1554,14 +1557,26 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <!-- XP / УРОВЕНЬ -->
     <?php
     try {
-        $xpRow = $pdo->prepare("SELECT total_xp, level FROM user_xp WHERE account_id=?");
+        $xpRow = $pdo->prepare("SELECT user_xp, user_level FROM accounts WHERE id=?");
         $xpRow->execute([(int)$account['id']]);
         $xpData = $xpRow->fetch();
-        $totalXp = $xpData ? (int)$xpData['total_xp'] : 0;
-        $curLevel = $xpData ? (int)$xpData['level'] : 1;
-        $xpProgress = function_exists('xpProgressInLevel') ? xpProgressInLevel($totalXp) : ['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];
-        $levelFrame = function_exists('getLevelFrame') ? getLevelFrame($curLevel) : ['color'=>'#6b7280','label'=>'🌑 Новичок','glow'=>false];
-    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок','glow'=>false]; }
+        $totalXp = $xpData ? (int)$xpData['user_xp'] : 0;
+        $curLevel = $xpData ? (int)$xpData['user_level'] : 1;
+        // Recalculate from scratch
+        $xpForLvl = 100 + ($curLevel - 1) * 50;
+        $totalToLevel = 0;
+        for ($i = 1; $i < $curLevel; $i++) $totalToLevel += 100 + ($i-1)*50;
+        $curXpInLevel = max(0, $totalXp - $totalToLevel);
+        $pct = $xpForLvl > 0 ? min(100, round($curXpInLevel / $xpForLvl * 100)) : 0;
+        $xpProgress = ['pct'=>$pct,'current'=>$curXpInLevel,'needed'=>$xpForLvl,'next_lvl'=>$curLevel+1];
+        // Level label
+        if ($curLevel >= 50) $lvlLabel = ['color'=>'#f59e0b','label'=>'👑 Легенда'];
+        elseif ($curLevel >= 30) $lvlLabel = ['color'=>'#8b5cf6','label'=>'💎 Мастер'];
+        elseif ($curLevel >= 15) $lvlLabel = ['color'=>'#3b82f6','label'=>'⚡ Опытный'];
+        elseif ($curLevel >= 5)  $lvlLabel = ['color'=>'#10b981','label'=>'📚 Читатель'];
+        else                     $lvlLabel = ['color'=>'#6b7280','label'=>'🌑 Новичок'];
+        $levelFrame = $lvlLabel;
+    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок']; }
     ?>
     <div class="card" style="padding:0;overflow:hidden">
         <div style="padding:18px 20px 16px">
@@ -1588,17 +1603,23 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         $aid = (int)$account['id'];
         $tgIdStmt = $pdo->prepare("SELECT tg_user_id FROM accounts WHERE id=?");
         $tgIdStmt->execute([$aid]); $tgRow = $tgIdStmt->fetch(); $tgId2 = $tgRow ? (int)$tgRow['tg_user_id'] : 0;
-        $totalLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE account_id={$aid}".($tgId2?" OR user_id={$tgId2}":""))->fetchColumn();
-        $readingLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE status='reading' AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
-        $readLib = (int)$pdo->query("SELECT COUNT(*) FROM user_manga_status WHERE status='read' AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $totalLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE account_id={$aid}".($tgId2?" OR user_id={$tgId2}":""))->fetchColumn();
+        $readingLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $readLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $planLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $dropLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
+        $pauseLib = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND (account_id={$aid}".($tgId2?" OR user_id={$tgId2}":"").")")->fetchColumn();
     } catch(Exception $e) { $totalLib=0; $readingLib=0; $readLib=0; }
     ?>
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row" id="stats-row">
-            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">Всего</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$readingLib?></div><div class="stat-l">Читаю</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">Прочитано</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">📖 Всего</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">✅ Прочитано</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readingLib?></div><div class="stat-l">▶ Читаю</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$planLib?></div><div class="stat-l">📋 В планах</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$dropLib?></div><div class="stat-l">❌ Брошено</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$pauseLib?></div><div class="stat-l">⏸ На паузе</div></a>
         </div>
     </div>
 
@@ -2174,10 +2195,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .btn-accept{background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:var(--green)}
 .btn-friends{background:rgba(74,222,128,0.06);border-color:rgba(74,222,128,0.2);color:var(--green)}
 .sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;padding:22px 24px 0;margin-bottom:13px}
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 24px 22px}
-.stat{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:11px;padding:12px 10px;text-align:center}
-.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text2)}
-.stat-l{font-size:10px;color:var(--muted);margin-top:2px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 24px 22px}
 .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:9px;padding:0 20px 20px}
 .lib-card{text-decoration:none;color:var(--text);transition:all .2s}
 .lib-card:hover{transform:translateY(-2px)}
@@ -2860,7 +2878,7 @@ if ($path==='/library'){
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{background:#0a0a0a;color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s;position:relative}
-body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 110% 50% at 50% 115%, rgba(38,38,38,0.7) 0%, rgba(20,20,20,0.4) 40%, transparent 65%), linear-gradient(180deg,#0a0a0a 0%,#0d0d0d 50%,#121212 100%)}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 60% 40% at 20% 80%,rgba(255,255,255,0.02) 0%,transparent 60%),radial-gradient(ellipse 50% 35% at 80% 10%,rgba(255,255,255,0.015) 0%,transparent 55%),linear-gradient(180deg,#080808 0%,#0c0c0c 40%,#111111 100%)}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 55% 25% at 50% -5%,rgba(255,255,255,0.016) 0%,transparent 55%)}
 .light body{background:#f5f5f5}
 .light body::before{background:radial-gradient(ellipse 110% 50% at 50% 115%,rgba(215,215,220,0.5) 0%,transparent 65%),linear-gradient(180deg,#f7f7f7 0%,#f2f2f2 50%,#ebebeb 100%)}
@@ -3084,7 +3102,7 @@ $msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{background:#0a0a0a;color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s;position:relative}
-body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 110% 50% at 50% 115%, rgba(38,38,38,0.7) 0%, rgba(20,20,20,0.4) 40%, transparent 65%), linear-gradient(180deg,#0a0a0a 0%,#0d0d0d 50%,#121212 100%)}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 60% 40% at 20% 80%,rgba(255,255,255,0.02) 0%,transparent 60%),radial-gradient(ellipse 50% 35% at 80% 10%,rgba(255,255,255,0.015) 0%,transparent 55%),linear-gradient(180deg,#080808 0%,#0c0c0c 40%,#111111 100%)}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 55% 25% at 50% -5%,rgba(255,255,255,0.016) 0%,transparent 55%)}
 .light body{background:#f5f5f5}
 .light body::before{background:radial-gradient(ellipse 110% 50% at 50% 115%,rgba(215,215,220,0.5) 0%,transparent 65%),linear-gradient(180deg,#f7f7f7 0%,#f2f2f2 50%,#ebebeb 100%)}
@@ -3135,7 +3153,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .light .sidebar-icon-btn:hover{background:rgba(0,0,0,0.05)}
 .sidebar-badge{position:absolute;top:-4px;right:-4px;width:11px;height:11px;border-radius:50%;background:#f87171;border:2px solid var(--bg);animation:pulse-red 2s infinite}
 @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0.5)}50%{box-shadow:0 0 0 5px rgba(248,113,113,0)}}
-@media(max-width:600px){.sidebar-icons{display:none}}
+@media(max-width:600px){.sidebar-icons{display:flex;bottom:0;top:auto;right:0;left:0;transform:none;z-index:200}.sidebar-rail{flex-direction:row;border-radius:0;border-right:1px solid var(--border);border-top:1px solid var(--border);border-bottom:none;border-left:none;width:100%;padding:7px 16px;justify-content:space-around;backdrop-filter:blur(20px)}.sidebar-icon-btn{width:40px;height:40px;font-size:18px}}
 
 /* ===== MAIN WRAP ===== */
 .wrap{max-width:1280px;margin:auto;padding:20px 22px 80px;position:relative;z-index:1}
@@ -3186,23 +3204,32 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .stats-label{color:var(--muted);font-size:11px;margin-left:auto;font-weight:400}
 
 /* ===== GRID ===== */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:14px}
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:16px}
+@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:12px}}
 @media(max-width:380px){.grid{grid-template-columns:repeat(2,1fr);gap:8px}}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.22s;position:relative;animation:cardIn 0.28s ease both}
-@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.card:hover{transform:translateY(-4px);border-color:var(--border2);box-shadow:0 8px 28px rgba(0,0,0,0.3)}
-.cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
-.cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:var(--card2);color:var(--muted);font-size:32px}
-.info{padding:9px 10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--text);transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;animation:cardIn 0.28s ease both}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.card:hover{transform:translateY(-6px);border-color:var(--border2);box-shadow:0 16px 40px rgba(0,0,0,0.5)}
+.cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;transition:transform 0.4s ease}
+.card:hover .cover{transform:scale(1.05)}
+.cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--card2),var(--card));color:var(--muted);font-size:32px}
+.info{padding:10px 11px 11px}
 .title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;font-family:'Inter',sans-serif;color:var(--text2)}
-.likes{margin-top:5px;color:var(--muted);font-size:10px;font-weight:400}
-.card-new-badge{position:absolute;top:7px;left:7px;background:rgba(248,113,113,0.9);color:#fff;font-size:8px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:0.5px;backdrop-filter:blur(4px)}
+.likes{margin-top:5px;color:var(--muted);font-size:10px;font-weight:400;display:flex;align-items:center;gap:4px}
+.card-new-badge{position:absolute;top:8px;left:8px;background:rgba(248,113,113,0.92);color:#fff;font-size:8px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,0.3)}
 .card-series-badge{display:inline-block;background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid var(--border);padding:2px 7px;border-radius:5px;font-size:8px;font-weight:600;margin-top:4px;letter-spacing:0.3px}
 /* Rating on card */
 .card-rating{display:flex;align-items:center;gap:3px;margin-top:4px}
 .card-stars{color:#f59e0b;font-size:9px;letter-spacing:0.5px}
 .card-rating-val{font-size:9px;color:var(--muted);font-weight:600}
+/* Card overlay */
+.card::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,0.6) 100%);opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:1}
+.card:hover::before{opacity:1}
+.card:active{transform:scale(0.97)!important}
+
+/* ===== LOAD MORE ===== */
+.load-more{margin:32px auto;display:block;padding:11px 30px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);letter-spacing:0.3px}
+.load-more:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.03);transform:translateY(-2px)}
 /* Button micro-animations */
 .hbtn{transition:all 0.18s cubic-bezier(0.34,1.56,0.64,1)!important}
 .hbtn:hover{transform:translateY(-2px)!important;box-shadow:0 4px 12px rgba(0,0,0,0.3)!important}
@@ -3214,18 +3241,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .sarrow:hover{transform:scale(1.12)!important}
 .sidebar-icon-btn{transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1)!important}
 .sidebar-icon-btn:hover{transform:translateX(-3px) scale(1.08)!important}
-.load-more{transition:all 0.22s cubic-bezier(0.34,1.56,0.64,1)!important}
-.load-more:hover{transform:translateY(-2px)!important}
-/* Manga card hover overlay */
-.card::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0.03);opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:12px}
-.card:hover::after{opacity:1}
-.card:hover .cover{transform:scale(1.03);transition:transform 0.35s ease}
-.cover{transition:transform 0.35s ease}
-.card:active{transform:scale(0.97)!important}
-
-/* ===== LOAD MORE ===== */
-.load-more{margin:32px auto;display:block;padding:11px 30px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;transition:all 0.18s;letter-spacing:0.3px}
-.load-more:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.03)}
+@media(max-width:600px){.sidebar-icon-btn:hover{transform:scale(1.1)!important}}
 .empty{text-align:center;padding:80px 20px;color:var(--muted);font-size:13px}
 
 /* ===== TOAST ===== */
@@ -3449,12 +3465,6 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
     <div class="header-actions">
         <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
-        <a href="/library" class="hbtn hbtn-lib">📚 <span>Библиотека</span></a>
-        <?php if ($currentAccount): ?>
-        <a href="/messages" class="hbtn" style="position:relative" title="Сообщения">💬 <span>Чат</span><?php
-            try { $unreadMsgCount = (int)$pdo->prepare("SELECT COUNT(*) FROM user_messages WHERE to_account_id=? AND is_read=FALSE")->execute([(int)$currentAccount['id']]) ? $pdo->query("SELECT COUNT(*) FROM user_messages WHERE to_account_id=".(int)$currentAccount['id']." AND is_read=FALSE")->fetchColumn() : 0; } catch(Exception $e) { $unreadMsgCount = 0; }
-            if($unreadMsgCount > 0): ?><span style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center"><?=(int)$unreadMsgCount?></span><?php endif; ?></a>
-        <?php endif; ?>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins); ?>
         <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span></a>
@@ -3462,26 +3472,27 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn" style="background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18)">Регистрация</a>
         <?php endif; ?>
-        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="hbtn hbtn-tg">🤖 Бот</a>
         <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
-<button class="hbtn" onclick="openMessagesModal()" id="messages-btn" title="Личные сообщения" style="position:relative">
-    💬 Сообщения
-    <span class="sidebar-badge" id="messages-badge" style="display:none;position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#f87171;border:none"></span>
-</button>
     </div>
 </div>
 </header>
 
-<!-- SIDEBAR ICONS -->
+<!-- SIDEBAR ICONS (правая боковая панель) -->
 <div class="sidebar-icons">
     <div class="sidebar-rail">
-        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения">
+        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
+        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
             💬
-            <?php if($msgCount>0):?><span class="sidebar-badge" id="msg-badge"></span><?php endif;?>
+            <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
+            <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
         </button>
-        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
-            🛟
-        </button>
+        <?php if ($currentAccount): ?>
+        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">👤</a>
+        <?php endif; ?>
+        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">🤖</a>
+        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">🛟</button>
+        <div style="width:100%;height:1px;background:var(--border);margin:2px 0"></div>
+        <button class="sidebar-icon-btn theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn-side">🌙</button>
     </div>
 </div>
 
@@ -3499,13 +3510,19 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
             <div class="sec-title"><span>🔥</span>Новинки<span class="sec-count" id="new-count">0</span></div>
         </div>
 
-<!-- ===== ТОП НЕДЕЛИ ===== -->
-<div id="top-week-section" class="cont-section" style="display:none;border-top:3px solid #fb923c">
-    <div class="sec-header" style="margin-bottom:12px">
-        <div class="sec-title">🏆 Топ недели</div>
-        <div class="sec-count"><span id="top-week-count">0</span></div>
+<!-- ===== ТОП НЕДЕЛИ — отдельный блок с стрелками ===== -->
+<div id="top-week-section" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px 14px;margin-bottom:16px;position:relative;overflow:hidden">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#fb923c,#f59e0b,#fb923c)"></div>
+    <div class="sec-header" style="margin-bottom:14px">
+        <div class="sec-title">🏆 Топ недели<span class="sec-count" style="margin-left:8px"><span id="top-week-count">0</span></span></div>
+        <div style="display:flex;gap:5px">
+            <button id="tw-left" onclick="topWeekSlide(-1)" class="sarrow" style="width:28px;height:28px;font-size:14px">‹</button>
+            <button id="tw-right" onclick="topWeekSlide(1)" class="sarrow" style="width:28px;height:28px;font-size:14px">›</button>
+        </div>
     </div>
-    <div id="top-week-track" class="cont-list" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:0"></div>
+    <div style="position:relative;overflow:hidden">
+        <div id="top-week-track" style="display:flex;gap:10px;transition:transform 0.35s cubic-bezier(0.4,0,0.2,1)"></div>
+    </div>
 </div>
 
         <div class="slider-wrap">
@@ -3790,12 +3807,16 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 (function(){
     const saved=localStorage.getItem('bw_theme')||'dark';
     if(saved==='light')document.body.classList.add('light');
-    document.getElementById('theme-btn').textContent=saved==='light'?'🌙':'☀️';
+    const icon = saved==='light'?'🌙':'☀️';
+    if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
+    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 })();
 function toggleTheme(){
     const isLight=document.body.classList.toggle('light');
     localStorage.setItem('bw_theme',isLight?'light':'dark');
-    document.getElementById('theme-btn').textContent=isLight?'🌙':'☀️';
+    const icon=isLight?'🌙':'☀️';
+    if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
+    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 }
 
 // ===== TG =====
@@ -4164,55 +4185,165 @@ async function submitComment() {
     }
 }
 
-// Функции для сообщений
+// ===== ПОЛНЫЙ ЧАТ =====
+let chatCurrentUserId = null;
+let chatCurrentUsername = null;
+let chatPollInterval = null;
+let chatLastMsgCount = 0;
+
+const EMOJIS = ['😀','😂','😍','🥰','😎','😭','😤','🤔','😮','🥺','❤️','🔥','👍','👎','✨','💯','🎉','😈','🤣','😊','🙄','😅','🫡','💀','🫶','💪','🎮','📖','⭐','🏆'];
+
 function openMessagesModal() {
     const modal = document.getElementById('messages-modal');
-    if (modal) {
-        modal.style.display = 'block';
-        loadMessagesList();
-    }
+    if (!modal) return;
+    modal.style.display = 'block';
+    showChatList();
 }
 
 function closeMessagesModal() {
     const modal = document.getElementById('messages-modal');
     if (modal) modal.style.display = 'none';
+    if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+    chatCurrentUserId = null;
+    chatCurrentUsername = null;
+    const emojiPicker = document.getElementById('emoji-picker');
+    if (emojiPicker) emojiPicker.style.display = 'none';
+}
+
+function showChatList() {
+    chatCurrentUserId = null;
+    chatCurrentUsername = null;
+    if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+    document.getElementById('chat-list-view').style.display = 'flex';
+    document.getElementById('chat-dialog-view').style.display = 'none';
+    document.getElementById('chat-back-btn').style.display = 'none';
+    document.getElementById('chat-header-name').textContent = 'Сообщения';
+    document.getElementById('chat-header-sub').textContent = 'Личные сообщения';
+    document.getElementById('chat-header-avatar').textContent = '💬';
+    loadMessagesList();
 }
 
 async function loadMessagesList() {
     try {
         const res = await fetch('/api/messages');
         const data = await res.json();
-        if (data.success) {
-            const listDiv = document.getElementById('messages-list');
-            if (!data.messages || data.messages.length === 0) {
-                listDiv.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Нет сообщений</div>';
-                return;
-            }
-            
-            const unreadCount = data.messages.reduce((s, m) => s + (m.unread_count || 0), 0);
-            const badge = document.getElementById('messages-badge');
-            if (badge) badge.style.display = unreadCount > 0 ? 'block' : 'none';
-            
-            listDiv.innerHTML = data.messages.map(m => `
-                <div class="message-item" onclick="selectMessageUser(${m.other_id}, '${escapeHtml(m.other_username)}')">
-                    <div class="message-avatar">👤</div>
-                    <div class="message-content">
-                        <div class="message-username">${escapeHtml(m.other_username)}</div>
-                        <div class="message-preview">Ответить...</div>
-                    </div>
-                    ${m.unread_count > 0 ? `<div style="width:6px;height:6px;border-radius:50%;background:#7c5cff"></div>` : ''}
-                </div>
-            `).join('');
+        const listDiv = document.getElementById('messages-list');
+        if (!listDiv) return;
+        if (!data.success || !data.messages || data.messages.length === 0) {
+            listDiv.innerHTML = '<div class="chat-empty">📭<br>Нет диалогов<br><span style="font-size:10px;margin-top:4px;display:block">Найди пользователя выше и напиши первым</span></div>';
+            return;
         }
-    } catch (e) {
-        console.error(e);
-    }
+        const totalUnread = data.messages.reduce((s, m) => s + (m.unread_count || 0), 0);
+        updateChatBadge(totalUnread);
+        listDiv.innerHTML = data.messages.map(m => `
+            <div class="message-item${m.unread_count>0?' unread':''}" onclick="openDialog(${m.other_id}, '${escapeHtml(m.other_username)}')">
+                <div class="message-avatar">👤</div>
+                <div class="message-content">
+                    <div class="message-username">${escapeHtml(m.other_username)}</div>
+                    <div class="message-preview">${m.last_text ? escapeHtml(m.last_text.substring(0,40)) : 'Нет сообщений'}</div>
+                </div>
+                ${m.unread_count>0 ? `<div class="unread-dot"></div>` : ''}
+            </div>
+        `).join('');
+    } catch (e) { console.error(e); }
 }
 
-function selectMessageUser(userId, username) {
-    sessionStorage.setItem('current_dialog_user_id', userId);
-    sessionStorage.setItem('current_dialog_username', username);
-    document.getElementById('message-search').placeholder = `Сообщение для ${username}...`;
+function updateChatBadge(count) {
+    const badges = document.querySelectorAll('#messages-badge,#msg-badge');
+    const chatBtns = document.querySelectorAll('.sidebar-icon-btn[onclick*="openMessagesModal"]');
+    badges.forEach(b => b.style.display = count > 0 ? 'block' : 'none');
+    chatBtns.forEach(b => { if(count>0) b.classList.add('has-unread'); else b.classList.remove('has-unread'); });
+}
+
+async function openDialog(userId, username) {
+    chatCurrentUserId = userId;
+    chatCurrentUsername = username;
+    document.getElementById('chat-list-view').style.display = 'none';
+    const dialogView = document.getElementById('chat-dialog-view');
+    dialogView.style.display = 'flex';
+    dialogView.style.flexDirection = 'column';
+    const backBtn = document.getElementById('chat-back-btn');
+    backBtn.style.display = 'flex';
+    document.getElementById('chat-header-name').textContent = username;
+    document.getElementById('chat-header-sub').textContent = 'В сети · пишет...';
+    document.getElementById('chat-header-avatar').textContent = '👤';
+    document.getElementById('chat-input').value = '';
+    document.getElementById('chat-input').style.height = 'auto';
+    const emojiPicker = document.getElementById('emoji-picker');
+    if (emojiPicker && !document.getElementById('emoji-grid').innerHTML) {
+        document.getElementById('emoji-grid').innerHTML = EMOJIS.map(e => `<button onclick="insertEmoji('${e}')" style="background:none;border:none;font-size:20px;cursor:pointer;padding:2px;border-radius:4px;transition:transform .1s" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${e}</button>`).join('');
+    }
+    await loadDialogMessages();
+    if (chatPollInterval) clearInterval(chatPollInterval);
+    chatPollInterval = setInterval(loadDialogMessages, 3000);
+    setTimeout(() => document.getElementById('chat-input').focus(), 100);
+}
+
+async function loadDialogMessages() {
+    if (!chatCurrentUserId) return;
+    try {
+        const res = await fetch(`/api/messages/${chatCurrentUserId}`);
+        const data = await res.json();
+        if (!data.success) return;
+        const area = document.getElementById('chat-messages-area');
+        const msgs = data.messages || [];
+        const isNew = msgs.length !== chatLastMsgCount;
+        chatLastMsgCount = msgs.length;
+        if (msgs.length === 0) {
+            area.innerHTML = '<div class="chat-empty">👋<br>Начни разговор первым!</div>';
+            return;
+        }
+        const wasAtBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 60;
+        area.innerHTML = msgs.map(m => {
+            const isMine = m.sender_id == m.sender_id && m.sender_username !== chatCurrentUsername;
+            const time = new Date(m.created_at).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
+            return `<div class="chat-bubble-wrap ${isMine?'mine':'theirs'}">
+                <div class="chat-bubble ${isMine?'mine':'theirs'}">${escapeHtml(m.text)}</div>
+                <div class="chat-time">${time}</div>
+            </div>`;
+        }).join('');
+        if (isNew || wasAtBottom) area.scrollTop = area.scrollHeight;
+    } catch(e) { console.error(e); }
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text || !chatCurrentUserId) return;
+    input.value = '';
+    input.style.height = 'auto';
+    try {
+        const res = await fetch('/api/messages', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({recipient_id: chatCurrentUserId, text})
+        });
+        const data = await res.json();
+        if (data.success) {
+            await loadDialogMessages();
+        } else {
+            showToast('❌ Ошибка отправки — войди в аккаунт');
+        }
+    } catch(e) { showToast('❌ Нет соединения'); }
+}
+
+function toggleEmojiPicker() {
+    const picker = document.getElementById('emoji-picker');
+    picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+}
+
+function insertEmoji(emoji) {
+    const input = document.getElementById('chat-input');
+    const pos = input.selectionStart;
+    input.value = input.value.slice(0, pos) + emoji + input.value.slice(input.selectionEnd);
+    input.selectionStart = input.selectionEnd = pos + emoji.length;
+    input.focus();
+    autoResizeChat(input);
+}
+
+function autoResizeChat(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
 function searchUsers(query) {
@@ -4220,26 +4351,40 @@ function searchUsers(query) {
         document.getElementById('user-search-results').innerHTML = '';
         return;
     }
-    
     fetch(`/api/search-users?q=${encodeURIComponent(query)}`)
         .then(r => r.json())
         .then(data => {
             if (data.success && data.users) {
-                const resultsDiv = document.getElementById('user-search-results');
-                resultsDiv.innerHTML = data.users.map(u => `
-                    <div class="user-search-item" onclick="selectMessageUser(${u.id}, '${escapeHtml(u.username)}')">
+                document.getElementById('user-search-results').innerHTML = data.users.map(u => `
+                    <div class="user-search-item" onclick="openDialog(${u.id},'${escapeHtml(u.username)}');document.getElementById('message-search').value='';">
                         <div class="user-search-avatar">👤</div>
-                        <div style="flex:1;min-width:0">
-                            <div style="font-weight:600;color:var(--text)">${escapeHtml(u.username)}</div>
-                        </div>
-                    </div>
-                `).join('');
+                        <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--text);font-size:12px">${escapeHtml(u.username)}</div></div>
+                    </div>`).join('');
             }
-        })
-        .catch(e => console.error(e));
+        }).catch(e => console.error(e));
+}
+
+// Проверка непрочитанных для значков
+async function checkUnreadMessages() {
+    try {
+        const res = await fetch('/api/messages');
+        const data = await res.json();
+        if (data.success && data.messages) {
+            const total = data.messages.reduce((s, m) => s + (m.unread_count||0), 0);
+            updateChatBadge(total);
+        }
+    } catch(e) {}
+}
+
+function selectMessageUser(userId, username) {
+    openDialog(userId, username);
 }
 
 // Функции для топа недели
+let topWeekOffset = 0;
+let topWeekItemCount = 0;
+const TOP_WEEK_VISIBLE = 4; // видимых карточек
+
 async function loadTopWeek() {
     try {
         const res = await fetch('/api/top-week');
@@ -4249,24 +4394,57 @@ async function loadTopWeek() {
             const track = document.getElementById('top-week-track');
             if (!section || !track) return;
             
-            document.getElementById('top-week-count').textContent = data.items.length;
+            topWeekItemCount = data.items.length;
+            document.getElementById('top-week-count').textContent = topWeekItemCount;
             section.style.display = 'block';
             
             track.innerHTML = data.items.map((m, i) => `
-                <a href="/read/${m.id}" class="cont-card" style="position:relative">
-                    <div style="position:absolute;top:6px;left:6px;background:#f59e0b;color:#000;font-weight:800;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.4)">${i+1}</div>
-                    ${m.cover_display ? `<img src="${escapeHtml(m.cover_display)}" style="width:50px;height:67px;object-fit:cover;flex-shrink:0;background:var(--border)" alt="">` : '<div style="width:50px;height:67px;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📖</div>'}
-                    <div style="flex:1;padding:8px;display:flex;flex-direction:column;min-width:0">
-                        <div style="font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:auto;color:var(--text)">${escapeHtml(m.title)}</div>
-                        <div style="font-size:9px;color:var(--muted);margin-top:4px">👁 ${m.weekly_views || 0} · ♥ ${m.likes || 0}</div>
+                <a href="/read/${m.id}" style="flex:0 0 160px;text-decoration:none;color:var(--text);transition:transform 0.2s" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <div style="position:relative;border-radius:10px;overflow:hidden;margin-bottom:7px;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+                        ${i===0?'<div style="position:absolute;top:0;left:0;right:0;bottom:0;border-radius:10px;border:2px solid #f59e0b;z-index:2;pointer-events:none"></div>':''}
+                        <div style="position:absolute;top:7px;left:7px;background:${i===0?'#f59e0b':i===1?'rgba(156,163,175,0.9)':i===2?'rgba(180,83,9,0.9)':'rgba(0,0,0,0.6)'};color:${i<3?'#000':'#fff'};font-weight:800;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.4)">${i+1}</div>
+                        ${m.cover_display ? `<img src="${escapeHtml(m.cover_display)}" style="width:100%;height:213px;object-fit:cover;display:block;background:var(--border)" alt="">` : '<div style="width:100%;height:213px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px">📖</div>'}
                     </div>
+                    <div style="font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;color:var(--text2);margin-bottom:3px">${escapeHtml(m.title)}</div>
+                    <div style="font-size:10px;color:var(--muted)">👁 ${m.weekly_views||0} · ♥ ${m.likes||0}</div>
                 </a>
             `).join('');
+            topWeekOffset = 0;
+            updateTopWeekArrows();
         }
     } catch (e) {
         console.error('Top week error:', e);
     }
 }
+
+function topWeekSlide(dir) {
+    const cardWidth = 170; // 160px + 10px gap
+    const maxOffset = Math.max(0, topWeekItemCount - TOP_WEEK_VISIBLE);
+    topWeekOffset = Math.max(0, Math.min(maxOffset, topWeekOffset + dir));
+    const track = document.getElementById('top-week-track');
+    if (track) track.style.transform = `translateX(-${topWeekOffset * cardWidth}px)`;
+    updateTopWeekArrows();
+}
+
+function updateTopWeekArrows() {
+    const left = document.getElementById('tw-left');
+    const right = document.getElementById('tw-right');
+    if (left) left.style.opacity = topWeekOffset > 0 ? '1' : '0.3';
+    if (right) right.style.opacity = topWeekOffset < Math.max(0, topWeekItemCount - TOP_WEEK_VISIBLE) ? '1' : '0.3';
+}
+
+// Touch swipe for top week
+(function(){
+    let startX = 0;
+    document.addEventListener('touchstart', e => {
+        if (e.target.closest('#top-week-track')) startX = e.touches[0].clientX;
+    }, {passive:true});
+    document.addEventListener('touchend', e => {
+        if (!e.target.closest('#top-week-section')) return;
+        const diff = startX - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) topWeekSlide(diff > 0 ? 1 : -1);
+    }, {passive:true});
+})();
 
 // Функции для уровня пользователя
 async function loadUserLevel(accountId) {
@@ -4317,61 +4495,119 @@ document.addEventListener('DOMContentLoaded', function() {
         loadUserLevel(accountId);
     }
     
-    // Поиск в сообщениях
-    const searchInput = document.getElementById('message-search');
-    if (searchInput) {
-        let searchTimeout;
-        searchInput.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => searchUsers(this.value), 300);
-        });
-    }
+    // Проверка непрочитанных сообщений каждые 15 сек
+    checkUnreadMessages();
+    setInterval(checkUnreadMessages, 15000);
 });
 
 // Закрывать модаль при клике снаружи
 document.addEventListener('click', function(e) {
     const modal = document.getElementById('messages-modal');
-    if (modal && !e.target.closest('#messages-modal') && !e.target.closest('#messages-btn')) {
+    if (modal && modal.style.display !== 'none' && !e.target.closest('#messages-modal') && !e.target.closest('#messages-btn') && !e.target.closest('.sidebar-icon-btn')) {
         closeMessagesModal();
     }
+    // Закрывать emoji picker
+    if (!e.target.closest('#emoji-picker') && !e.target.closest('[onclick*="toggleEmojiPicker"]')) {
+        const picker = document.getElementById('emoji-picker');
+        if (picker) picker.style.display = 'none';
+    }
 });
-
-// Автообновление сообщений каждые 5 сек
-if (document.getElementById('messages-modal')) {
-    setInterval(loadMessagesList, 5000);
-}
 
 </script>
 <?php require_once __DIR__ . '/nsfw_modal.php'; ?>
 
-<!-- ===== СООБЩЕНИЯ МОДАЛЬ ===== -->
-<div id="messages-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;backdrop-filter:blur(4px);animation:fadeIn 0.2s">
-    <div style="position:absolute;right:0;top:0;bottom:0;width:100%;max-width:450px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;animation:slideInRight 0.3s ease">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
-            <div style="font-weight:600;font-size:14px">💬 Сообщения</div>
-            <button onclick="closeMessagesModal()" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center">✕</button>
+<!-- ===== СООБЩЕНИЯ МОДАЛЬ (ПОЛНЫЙ ЧАТ) ===== -->
+<div id="messages-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;backdrop-filter:blur(8px);animation:fadeIn 0.2s">
+    <div style="position:absolute;right:0;top:0;bottom:0;width:100%;max-width:480px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;animation:slideInRight 0.3s cubic-bezier(0.4,0,0.2,1)">
+
+        <!-- ШАПКА ЧАТ-ПАНЕЛИ -->
+        <div id="chat-header" style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(12,12,12,0.6);backdrop-filter:blur(12px)">
+            <div id="chat-back-btn" onclick="showChatList()" style="display:none;width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;display:none;align-items:center;justify-content:center;flex-shrink:0" title="Назад">‹</div>
+            <div id="chat-header-avatar" style="width:32px;height:32px;border-radius:50%;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">💬</div>
+            <div style="flex:1;min-width:0">
+                <div id="chat-header-name" style="font-weight:700;font-size:14px;font-family:'Syne',sans-serif;letter-spacing:0.3px">Сообщения</div>
+                <div id="chat-header-sub" style="font-size:10px;color:var(--muted)">Личные сообщения</div>
+            </div>
+            <button onclick="closeMessagesModal()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;transition:all .18s" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">✕</button>
         </div>
-        <div id="messages-list" style="flex:1;overflow-y:auto;border-bottom:1px solid var(--border)"></div>
-        <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
-            <input id="message-search" type="text" placeholder="Поиск пользователя..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:12px;outline:none;font-family:Inter">
-            <div id="user-search-results" style="margin-top:6px;max-height:120px;overflow-y:auto"></div>
+
+        <!-- СПИСОК ДИАЛОГОВ -->
+        <div id="chat-list-view" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+            <!-- Поиск пользователей -->
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+                <div style="position:relative">
+                    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none">🔍</span>
+                    <input id="message-search" type="text" placeholder="Найти пользователя..." oninput="searchUsers(this.value)"
+                        style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px 8px 30px;color:var(--text);font-size:12px;outline:none;font-family:'Inter',sans-serif;transition:border-color .18s"
+                        onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'">
+                </div>
+                <div id="user-search-results" style="margin-top:6px;max-height:130px;overflow-y:auto;border-radius:8px;overflow:hidden"></div>
+            </div>
+            <!-- Список чатов -->
+            <div id="messages-list" style="flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent"></div>
         </div>
+
+        <!-- ДИАЛОГ (ПЕРЕПИСКА) -->
+        <div id="chat-dialog-view" style="flex:1;display:none;flex-direction:column;overflow:hidden">
+            <!-- Сообщения -->
+            <div id="chat-messages-area" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:6px;scrollbar-width:thin;scrollbar-color:var(--border) transparent"></div>
+
+            <!-- ПАНЕЛЬ ВВОДА -->
+            <div style="padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;background:rgba(12,12,12,0.4)">
+                <!-- Emoji picker -->
+                <div id="emoji-picker" style="display:none;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:8px;max-height:120px;overflow-y:auto">
+                    <div style="display:flex;flex-wrap:wrap;gap:4px" id="emoji-grid"></div>
+                </div>
+                <div style="display:flex;gap:7px;align-items:flex-end">
+                    <button onclick="toggleEmojiPicker()" title="Смайлики"
+                        style="width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center"
+                        onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">😊</button>
+                    <textarea id="chat-input" placeholder="Напиши сообщение..." rows="1"
+                        style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:9px 12px;outline:none;resize:none;min-height:36px;max-height:100px;line-height:1.45;transition:border-color .18s;scrollbar-width:none"
+                        onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'"
+                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}" oninput="autoResizeChat(this)"></textarea>
+                    <button onclick="sendChatMessage()" title="Отправить"
+                        style="width:34px;height:34px;border-radius:8px;border:none;background:var(--text);color:var(--bg);font-size:15px;cursor:pointer;flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center"
+                        onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">➤</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <style>
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
-.message-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.2s; display: flex; gap: 8px; align-items: center; }
-.message-item:hover { background: rgba(255, 255, 255, 0.05) }
-.message-item.unread { background: rgba(124, 92, 255, 0.15) }
-.message-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--card2); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0 }
+.message-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; display: flex; gap: 10px; align-items: center; }
+.message-item:hover { background: rgba(255,255,255,0.04) }
+.message-item.unread { background: rgba(255,255,255,0.03); }
+.message-item.active { background: rgba(255,255,255,0.06); }
+.message-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--card2); border:1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0 }
 .message-content { flex: 1; min-width: 0 }
 .message-username { font-weight: 600; font-size: 12px; color: var(--text); margin-bottom: 2px }
 .message-preview { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.user-search-item { padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; gap: 8px; align-items: center; transition: background 0.2s }
-.user-search-item:hover { background: rgba(255, 255, 255, 0.05) }
-.user-search-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--card2); display: flex; align-items: center; justify-content: center; font-size: 12px }
+.user-search-item { padding: 9px 10px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; gap: 8px; align-items: center; transition: background 0.15s; }
+.user-search-item:hover { background: rgba(255,255,255,0.05) }
+.user-search-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--card2); display: flex; align-items: center; justify-content: center; font-size: 12px; border:1px solid var(--border); }
+/* Пузыри сообщений */
+.chat-bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; font-size: 12px; line-height: 1.5; word-break: break-word; position: relative; }
+.chat-bubble.mine { background: var(--card2); border: 1px solid var(--border2); color: var(--text); border-radius: 12px 12px 3px 12px; align-self: flex-end; }
+.chat-bubble.theirs { background: var(--card); border: 1px solid var(--border); color: var(--text2); border-radius: 12px 12px 12px 3px; align-self: flex-start; }
+.chat-bubble-wrap { display: flex; flex-direction: column; }
+.chat-bubble-wrap.mine { align-items: flex-end; }
+.chat-bubble-wrap.theirs { align-items: flex-start; }
+.chat-time { font-size: 9px; color: var(--muted); margin-top: 3px; padding: 0 2px; }
+/* Unread dot */
+.unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; animation: pulse-red 2s infinite; }
+/* Empty state */
+.chat-empty { text-align:center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
+/* Новое сообщение мигает */
+@keyframes msgPop { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+.chat-bubble { animation: msgPop 0.18s ease; }
+/* Кнопка чата мигает при новом сообщении */
+@keyframes chatGlow { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0.5)} 50%{box-shadow:0 0 0 6px rgba(248,113,113,0)} }
+.sidebar-icon-btn.has-unread { animation: chatGlow 2s infinite; border-color: rgba(248,113,113,0.5); color: var(--red); }
 </style>
 
 
