@@ -46,7 +46,23 @@ try {
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL");
     $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)");
-} catch (Exception $e) {}
+
+    
+    // ===== НОВЫЕ ТАБЛИЦЫ ДЛЯ КОММЕНТАРИЕВ, СООБЩЕНИЙ И СТАТИСТИКИ =====
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comments (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, account_id INT NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_manga ON manga_comments(manga_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_account ON manga_comments(account_id)");
+    
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_messages (id SERIAL PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, text TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_recipient ON user_messages(recipient_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_sender ON user_messages(sender_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_pair ON user_messages(sender_id, recipient_id)");
+    
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_weekly_stats (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, week_start TIMESTAMP NOT NULL, views INT DEFAULT 0, likes INT DEFAULT 0, comments INT DEFAULT 0, score INT DEFAULT 0, UNIQUE(manga_id, week_start))");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_weekly_stats ON manga_weekly_stats(week_start, score)");
+    
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1");} catch (Exception $e) {}
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 session_start();
@@ -84,6 +100,25 @@ function isAdminFull($pdo, $userId, $admins) {
     return false;
 }
 
+
+// ===== РАСЧЕТ УРОВНЯ ПОЛЬЗОВАТЕЛЯ =====
+function calculateUserLevel(&$pdo, $account_id) {
+    try {
+        $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
+        $stmt->execute([$account_id]);
+        $user = $stmt->fetch();
+        if (!$user) return;
+        $xp = $user['user_xp'];
+        $level = 1;
+        $xp_needed = 0;
+        while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
+            $xp_needed += 100 + ($level - 1) * 50;
+            $level++;
+        }
+        $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
+    } catch (Exception $e) {}
+}
+
 function isAccountAdmin($pdo, $accountId) {
     try {
         $s = $pdo->prepare("SELECT is_admin FROM accounts WHERE id=? AND is_admin=TRUE");
@@ -101,6 +136,141 @@ function sendTgNotify($userId, $text) {
     curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode(['chat_id'=>$userId,'text'=>$text,'parse_mode'=>'HTML']),CURLOPT_HTTPHEADER=>['Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>5,CURLOPT_SSL_VERIFYPEER=>false]);
     @curl_exec($ch); curl_close($ch);
 }
+
+
+// ===== НОВЫЕ API ENDPOINTS =====
+
+// Функция для расчета уровня (повторно, на случай если не была добавлена)
+if (!function_exists('calculateUserLevel')) {
+    function calculateUserLevel(&$pdo, $account_id) {
+        try {
+            $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
+            $stmt->execute([$account_id]);
+            $user = $stmt->fetch();
+            if (!$user) return;
+            $xp = $user['user_xp'];
+            $level = 1;
+            $xp_needed = 0;
+            while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
+                $xp_needed += 100 + ($level - 1) * 50;
+                $level++;
+            }
+            $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
+        } catch (Exception $e) {}
+    }
+}
+
+// API: Комментарии под мангой
+if (preg_match('~^/api/comments/(\d+)$~', $path, $m)) {
+    $manga_id = (int)$m[1];
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        try {
+            $stmt = $pdo->prepare("SELECT c.id, c.text, c.created_at, a.username, a.id as account_id, COALESCE(pc.avatar_url, '') as avatar_url FROM manga_comments c JOIN accounts a ON c.account_id = a.id LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE c.manga_id = ? ORDER BY c.created_at DESC LIMIT 100");
+            $stmt->execute([$manga_id]);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'comments' => $stmt->fetchAll()]);
+        } catch (Exception $e) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $text = trim($input['text'] ?? '');
+        if (!$text || strlen($text) > 500) { echo json_encode(['success' => false]); exit; }
+        try {
+            $pdo->prepare("INSERT INTO manga_comments (manga_id, account_id, text) VALUES (?, ?, ?)")->execute([$manga_id, $currentAccount['id'], $text]);
+            $pdo->prepare("UPDATE accounts SET user_xp = user_xp + 5 WHERE id = ?")->execute([$currentAccount['id']]);
+            calculateUserLevel($pdo, $currentAccount['id']);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) { echo json_encode(['success' => false]); }
+        exit;
+    }
+}
+
+// API: Личные сообщения
+if (preg_match('~^/api/messages(?:/(\d+))?$~', $path, $m)) {
+    if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
+    $other_id = isset($m[1]) ? (int)$m[1] : null;
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        try {
+            if ($other_id) {
+                $stmt = $pdo->prepare("SELECT m.*, s.username as sender_username, s.id as sender_id, r.username as recipient_username, r.id as recipient_id FROM user_messages m JOIN accounts s ON m.sender_id = s.id JOIN accounts r ON m.recipient_id = r.id WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?) ORDER BY m.created_at ASC LIMIT 100");
+                $stmt->execute([$currentAccount['id'], $other_id, $other_id, $currentAccount['id']]);
+                $pdo->prepare("UPDATE user_messages SET is_read = TRUE WHERE sender_id = ? AND recipient_id = ? AND is_read = FALSE")->execute([$other_id, $currentAccount['id']]);
+            } else {
+                $stmt = $pdo->prepare("SELECT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END as other_id, (SELECT username FROM accounts WHERE id = CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END) as other_username, MAX(created_at) as last_message_time, SUM(CASE WHEN is_read = FALSE AND recipient_id = ? THEN 1 ELSE 0 END) as unread_count FROM user_messages WHERE sender_id = ? OR recipient_id = ? GROUP BY other_id, other_username ORDER BY last_message_time DESC LIMIT 50");
+                $stmt->execute([$currentAccount['id'], $currentAccount['id'], $currentAccount['id'], $currentAccount['id'], $currentAccount['id']]);
+            }
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'messages' => $stmt->fetchAll()]);
+        } catch (Exception $e) { echo json_encode(['success' => false]); }
+        exit;
+    }
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $recipient_id = (int)($input['recipient_id'] ?? 0);
+        $text = trim($input['text'] ?? '');
+        if (!$recipient_id || !$text || strlen($text) > 1000) { echo json_encode(['success' => false]); exit; }
+        try {
+            $pdo->prepare("INSERT INTO user_messages (sender_id, recipient_id, text) VALUES (?, ?, ?)")->execute([$currentAccount['id'], $recipient_id, $text]);
+            $pdo->prepare("UPDATE accounts SET user_xp = user_xp + 2 WHERE id = ?")->execute([$currentAccount['id']]);
+            calculateUserLevel($pdo, $currentAccount['id']);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) { echo json_encode(['success' => false]); }
+        exit;
+    }
+}
+
+// API: Топ недели
+if ($path === '/api/top-week') {
+    try {
+        $week_start = date('Y-m-d H:i:s', strtotime('monday this week'));
+        $stmt = $pdo->prepare("SELECT m.id, m.title, m.cover_imgbb_url as cover_display, COUNT(DISTINCT rp.user_id) as weekly_views, COALESCE(m.likes, 0) as likes, COUNT(DISTINCT mc.id) as comment_count FROM manga m LEFT JOIN reading_progress rp ON m.id = rp.manga_id AND rp.updated_at >= ? LEFT JOIN manga_comments mc ON m.id = mc.manga_id AND mc.created_at >= ? WHERE m.id IS NOT NULL GROUP BY m.id ORDER BY weekly_views DESC, m.likes DESC, comment_count DESC LIMIT 15");
+        $stmt->execute([$week_start, $week_start]);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'items' => $stmt->fetchAll()]);
+    } catch (Exception $e) { echo json_encode(['success' => false]); }
+    exit;
+}
+
+// API: Уровень пользователя
+if (preg_match('~^/api/user-level/(\d+)$~', $path, $m)) {
+    try {
+        $account_id = (int)$m[1];
+        $stmt = $pdo->prepare("SELECT user_xp, user_level FROM accounts WHERE id = ?");
+        $stmt->execute([$account_id]);
+        $user = $stmt->fetch();
+        if (!$user) { echo json_encode(['success' => false]); exit; }
+        $xp_for_level = 100 + ($user['user_level'] - 1) * 50;
+        $total_xp_to_level = 0;
+        for ($i = 1; $i < $user['user_level']; $i++) { $total_xp_to_level += 100 + ($i - 1) * 50; }
+        $current_xp = $user['user_xp'] - $total_xp_to_level;
+        $progress = round(($current_xp / $xp_for_level) * 100);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'level' => (int)$user['user_level'], 'xp' => (int)$user['user_xp'], 'xp_for_level' => (int)$xp_for_level, 'current_xp' => (int)$current_xp, 'progress' => min(100, max(0, (int)$progress))]);
+    } catch (Exception $e) { echo json_encode(['success' => false]); }
+    exit;
+}
+
+// API: Поиск пользователей для чата
+if ($path === '/api/search-users' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
+    try {
+        $q = trim($_GET['q'] ?? '');
+        if (strlen($q) < 2) { echo json_encode(['success' => true, 'users' => []]); exit; }
+        $stmt = $pdo->prepare("SELECT id, username, COALESCE(avatar_url, '') as avatar_url FROM accounts a LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE a.id != ? AND a.username ILIKE ? LIMIT 10");
+        $stmt->execute([$currentAccount['id'], '%' . $q . '%']);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'users' => $stmt->fetchAll()]);
+    } catch (Exception $e) { echo json_encode(['success' => false]); }
+    exit;
+}
+
 
 // ===== BREVO EMAIL =====
 function sendBrevoEmail(string $toEmail, string $toName, string $subject, string $htmlContent): bool {
@@ -3294,6 +3464,10 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <?php endif; ?>
         <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="hbtn hbtn-tg">🤖 Бот</a>
         <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
+<button class="hbtn" onclick="openMessagesModal()" id="messages-btn" title="Личные сообщения" style="position:relative">
+    💬 Сообщения
+    <span class="sidebar-badge" id="messages-badge" style="display:none;position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#f87171;border:none"></span>
+</button>
     </div>
 </div>
 </header>
@@ -3324,6 +3498,16 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
         <div class="sec-header">
             <div class="sec-title"><span>🔥</span>Новинки<span class="sec-count" id="new-count">0</span></div>
         </div>
+
+<!-- ===== ТОП НЕДЕЛИ ===== -->
+<div id="top-week-section" class="cont-section" style="display:none;border-top:3px solid #fb923c">
+    <div class="sec-header" style="margin-bottom:12px">
+        <div class="sec-title">🏆 Топ недели</div>
+        <div class="sec-count"><span id="top-week-count">0</span></div>
+    </div>
+    <div id="top-week-track" class="cont-list" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:0"></div>
+</div>
+
         <div class="slider-wrap">
             <div class="sarrow left hidden" id="sl-left" onclick="slideLeft()">‹</div>
             <div class="slider-outer"><div class="slider-track" id="slider-track"></div></div>
@@ -3910,7 +4094,301 @@ async function submitChapter(){
 // Hide page loader
 window.addEventListener('load',()=>{const l=document.getElementById('page-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 load();loadNew();loadContinue();checkAdmin();
+
+
+// ===== НОВЫЕ JS ФУНКЦИИ =====
+
+// Функции для комментариев
+async function loadComments(mangaId) {
+    if (!mangaId) return;
+    const section = document.getElementById('comments-section');
+    if (!section) return;
+    
+    try {
+        const res = await fetch(`/api/comments/${mangaId}`);
+        const data = await res.json();
+        if (data.success && data.comments) {
+            const listDiv = document.getElementById('comments-list');
+            const emptyDiv = document.getElementById('comments-empty');
+            const count = document.getElementById('comments-count');
+            
+            count.textContent = `(${data.comments.length})`;
+            
+            if (data.comments.length === 0) {
+                emptyDiv.style.display = 'block';
+                listDiv.innerHTML = '';
+            } else {
+                emptyDiv.style.display = 'none';
+                listDiv.innerHTML = data.comments.map(c => `
+                    <div style="padding:10px;background:var(--card2);border:1px solid var(--border);border-radius:8px">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                            <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#5a4ca0);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0">${c.username[0].toUpperCase()}</div>
+                            <div>
+                                <div style="font-weight:600;font-size:12px;color:var(--text)">${escapeHtml(c.username)}</div>
+                                <div style="font-size:10px;color:var(--muted)">${new Date(c.created_at).toLocaleDateString('ru-RU')}</div>
+                            </div>
+                        </div>
+                        <div style="font-size:13px;color:var(--text2);line-height:1.4;padding-left:36px;margin-top:-24px;padding-top:24px">${escapeHtml(c.text)}</div>
+                    </div>
+                `).join('');
+            }
+            section.style.display = 'block';
+        }
+    } catch (e) { console.error(e); }
+}
+
+async function submitComment() {
+    const input = document.getElementById('comment-input');
+    const text = input.value.trim();
+    if (!text || text.length > 500) {
+        showToast('Комментарий должен быть 1-500 символов');
+        return;
+    }
+    
+    const mangaId = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
+    
+    try {
+        const res = await fetch(`/api/comments/${mangaId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        if (data.success) {
+            input.value = '';
+            loadComments(mangaId);
+            showToast('✓ Комментарий добавлен!');
+        }
+    } catch (e) {
+        showToast('Ошибка отправки комментария');
+    }
+}
+
+// Функции для сообщений
+function openMessagesModal() {
+    const modal = document.getElementById('messages-modal');
+    if (modal) {
+        modal.style.display = 'block';
+        loadMessagesList();
+    }
+}
+
+function closeMessagesModal() {
+    const modal = document.getElementById('messages-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function loadMessagesList() {
+    try {
+        const res = await fetch('/api/messages');
+        const data = await res.json();
+        if (data.success) {
+            const listDiv = document.getElementById('messages-list');
+            if (!data.messages || data.messages.length === 0) {
+                listDiv.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Нет сообщений</div>';
+                return;
+            }
+            
+            const unreadCount = data.messages.reduce((s, m) => s + (m.unread_count || 0), 0);
+            const badge = document.getElementById('messages-badge');
+            if (badge) badge.style.display = unreadCount > 0 ? 'block' : 'none';
+            
+            listDiv.innerHTML = data.messages.map(m => `
+                <div class="message-item" onclick="selectMessageUser(${m.other_id}, '${escapeHtml(m.other_username)}')">
+                    <div class="message-avatar">👤</div>
+                    <div class="message-content">
+                        <div class="message-username">${escapeHtml(m.other_username)}</div>
+                        <div class="message-preview">Ответить...</div>
+                    </div>
+                    ${m.unread_count > 0 ? `<div style="width:6px;height:6px;border-radius:50%;background:#7c5cff"></div>` : ''}
+                </div>
+            `).join('');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function selectMessageUser(userId, username) {
+    sessionStorage.setItem('current_dialog_user_id', userId);
+    sessionStorage.setItem('current_dialog_username', username);
+    document.getElementById('message-search').placeholder = `Сообщение для ${username}...`;
+}
+
+function searchUsers(query) {
+    if (!query || query.length < 2) {
+        document.getElementById('user-search-results').innerHTML = '';
+        return;
+    }
+    
+    fetch(`/api/search-users?q=${encodeURIComponent(query)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.users) {
+                const resultsDiv = document.getElementById('user-search-results');
+                resultsDiv.innerHTML = data.users.map(u => `
+                    <div class="user-search-item" onclick="selectMessageUser(${u.id}, '${escapeHtml(u.username)}')">
+                        <div class="user-search-avatar">👤</div>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-weight:600;color:var(--text)">${escapeHtml(u.username)}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        })
+        .catch(e => console.error(e));
+}
+
+// Функции для топа недели
+async function loadTopWeek() {
+    try {
+        const res = await fetch('/api/top-week');
+        const data = await res.json();
+        if (data.success && data.items && data.items.length > 0) {
+            const section = document.getElementById('top-week-section');
+            const track = document.getElementById('top-week-track');
+            if (!section || !track) return;
+            
+            document.getElementById('top-week-count').textContent = data.items.length;
+            section.style.display = 'block';
+            
+            track.innerHTML = data.items.map((m, i) => `
+                <a href="/read/${m.id}" class="cont-card" style="position:relative">
+                    <div style="position:absolute;top:6px;left:6px;background:#f59e0b;color:#000;font-weight:800;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.4)">${i+1}</div>
+                    ${m.cover_display ? `<img src="${escapeHtml(m.cover_display)}" style="width:50px;height:67px;object-fit:cover;flex-shrink:0;background:var(--border)" alt="">` : '<div style="width:50px;height:67px;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📖</div>'}
+                    <div style="flex:1;padding:8px;display:flex;flex-direction:column;min-width:0">
+                        <div style="font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:auto;color:var(--text)">${escapeHtml(m.title)}</div>
+                        <div style="font-size:9px;color:var(--muted);margin-top:4px">👁 ${m.weekly_views || 0} · ♥ ${m.likes || 0}</div>
+                    </div>
+                </a>
+            `).join('');
+        }
+    } catch (e) {
+        console.error('Top week error:', e);
+    }
+}
+
+// Функции для уровня пользователя
+async function loadUserLevel(accountId) {
+    try {
+        const res = await fetch(`/api/user-level/${accountId}`);
+        const data = await res.json();
+        if (data.success) {
+            const container = document.querySelector('[data-level-container]');
+            if (container) {
+                container.innerHTML = `
+                    <div style="background:linear-gradient(135deg,#7c5cff 0%,#5a4ca0 100%);border-radius:10px;padding:12px;color:#fff;margin:12px 0">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <div style="font-size:24px;font-weight:800">⭐ ${data.level}</div>
+                            <div style="flex:1">
+                                <div style="font-size:11px;opacity:0.9;margin-bottom:4px">Уровень пользователя</div>
+                                <div style="height:4px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden">
+                                    <div style="height:100%;background:rgba(255,255,255,0.8);width:${data.progress}%;transition:width 0.3s"></div>
+                                </div>
+                                <div style="font-size:9px;margin-top:3px;opacity:0.85">${data.current_xp}/${data.xp_for_level} XP</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// Event слушатели
+document.addEventListener('DOMContentLoaded', function() {
+    // Топ недели на главной
+    if (document.getElementById('top-week-section')) {
+        loadTopWeek();
+        setInterval(loadTopWeek, 30 * 60 * 1000);
+    }
+    
+    // Комментарии на странице чтения
+    if (document.getElementById('comments-section')) {
+        const mangaId = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
+        loadComments(mangaId);
+    }
+    
+    // Уровень в профиле
+    const accountId = new URLSearchParams(location.search).get('id');
+    if (accountId && document.querySelector('[data-level-container]')) {
+        loadUserLevel(accountId);
+    }
+    
+    // Поиск в сообщениях
+    const searchInput = document.getElementById('message-search');
+    if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => searchUsers(this.value), 300);
+        });
+    }
+});
+
+// Закрывать модаль при клике снаружи
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('messages-modal');
+    if (modal && !e.target.closest('#messages-modal') && !e.target.closest('#messages-btn')) {
+        closeMessagesModal();
+    }
+});
+
+// Автообновление сообщений каждые 5 сек
+if (document.getElementById('messages-modal')) {
+    setInterval(loadMessagesList, 5000);
+}
+
 </script>
 <?php require_once __DIR__ . '/nsfw_modal.php'; ?>
+
+<!-- ===== СООБЩЕНИЯ МОДАЛЬ ===== -->
+<div id="messages-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;backdrop-filter:blur(4px);animation:fadeIn 0.2s">
+    <div style="position:absolute;right:0;top:0;bottom:0;width:100%;max-width:450px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;animation:slideInRight 0.3s ease">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+            <div style="font-weight:600;font-size:14px">💬 Сообщения</div>
+            <button onclick="closeMessagesModal()" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>
+        <div id="messages-list" style="flex:1;overflow-y:auto;border-bottom:1px solid var(--border)"></div>
+        <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
+            <input id="message-search" type="text" placeholder="Поиск пользователя..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:12px;outline:none;font-family:Inter">
+            <div id="user-search-results" style="margin-top:6px;max-height:120px;overflow-y:auto"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+.message-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.2s; display: flex; gap: 8px; align-items: center; }
+.message-item:hover { background: rgba(255, 255, 255, 0.05) }
+.message-item.unread { background: rgba(124, 92, 255, 0.15) }
+.message-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--card2); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0 }
+.message-content { flex: 1; min-width: 0 }
+.message-username { font-weight: 600; font-size: 12px; color: var(--text); margin-bottom: 2px }
+.message-preview { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.user-search-item { padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; gap: 8px; align-items: center; transition: background 0.2s }
+.user-search-item:hover { background: rgba(255, 255, 255, 0.05) }
+.user-search-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--card2); display: flex; align-items: center; justify-content: center; font-size: 12px }
+</style>
+
+
+<!-- ===== КОММЕНТАРИИ ===== -->
+<div id="comments-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:20px 0;display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px">
+        💬 Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
+    </div>
+    <div id="comments-form" style="margin-bottom:16px;display:none">
+        <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:Inter,sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
+        <button onclick="submitComment()" style="margin-top:8px;padding:8px 16px;background:linear-gradient(135deg,#7c5cff 0%,#5a4ca0 100%);border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:500;font-size:13px;transition:all 0.2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            📤 Отправить комментарий
+        </button>
+    </div>
+    <div id="comments-list" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div id="comments-empty" style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">Комментариев еще нет. Будьте первым!</div>
+</div>
+
 </body>
 </html>
