@@ -564,7 +564,7 @@ if ($path==='/api/library'){
     // If logged in via account, also fetch by account_id to merge old+new entries
     if ($currentAccount) {
         $aid = (int)$currentAccount['id'];
-        $stmt=$pdo->prepare("SELECT DISTINCT ON (m.id) m.id,m.title,m.cover_imgbb_url,m.file_id,s.status, COALESCE((SELECT AVG(r.rating) FROM manga_ratings r WHERE r.manga_id=m.id),0) as avg_rating FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=? OR s.account_id=? ORDER BY m.id, s.updated_at DESC NULLS LAST");
+        $stmt=$pdo->prepare("SELECT DISTINCT ON (m.id) m.id,m.title,m.cover_imgbb_url,m.file_id,s.status, COALESCE((SELECT AVG(r.rating) FROM manga_ratings r WHERE r.manga_id=m.id),0) as avg_rating FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=? OR s.account_id=? ORDER BY m.id");
         $stmt->execute([$userId,$aid]);
     } else {
         $stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,s.status, COALESCE((SELECT AVG(r.rating) FROM manga_ratings r WHERE r.manga_id=m.id),0) as avg_rating FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.user_id=?");
@@ -653,6 +653,26 @@ if ($path==='/api/admin/archive'){header('Content-Type: application/json');$user
 
 if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$limit=10;$offset=$page*$limit;if($q){$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute(["%$q%"]);$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");$cStmt->execute(["%$q%"]);}else{$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute();$cStmt=$pdo->query("SELECT COUNT(*) FROM manga");}echo json_encode(['items'=>$stmt->fetchAll(),'total'=>(int)$cStmt->fetchColumn()]);exit;}
 
+
+// API: Get genres and tags lists
+if ($path==='/api/genres'){header('Content-Type: application/json');
+    try{$genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll();
+    $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll();
+    echo json_encode(['genres'=>$genres,'tags'=>$tags]);}catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[]]);}exit;}
+
+// API: Update manga genres/tags (admin)
+if (preg_match('#^/api/admin/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHOD']='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$genreIds=$input['genre_ids']??[];$tagIds=$input['tag_ids']??[];
+    try{$pdo->prepare("DELETE FROM manga_genres WHERE manga_id=?")->execute([$mId]);
+    $pdo->prepare("DELETE FROM manga_tags WHERE manga_id=?")->execute([$mId]);
+    foreach($genreIds as $gid){try{$pdo->prepare("INSERT INTO manga_genres(manga_id,genre_id)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$mId,(int)$gid]);}catch(Exception $e){}}
+    foreach($tagIds as $tid){try{$pdo->prepare("INSERT INTO manga_tags(manga_id,tag_id)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$mId,(int)$tid]);}catch(Exception $e){}}
+    echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;}
+
+// API: Get manga genres/tags
+if (preg_match('#^/api/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHOD']='GET'){header('Content-Type: application/json');$mId=(int)$m[1];
+    try{$genres=$pdo->prepare("SELECT g.id,g.name,g.slug FROM genres g JOIN manga_genres mg ON g.id=mg.genre_id WHERE mg.manga_id=? ORDER BY g.name");$genres->execute([$mId]);
+    $tags=$pdo->prepare("SELECT t.id,t.name,t.slug,t.is_nsfw FROM tags t JOIN manga_tags mt ON t.id=mt.tag_id WHERE mt.manga_id=? ORDER BY t.name");$tags->execute([$mId]);
+    echo json_encode(['genres'=>$genres->fetchAll(),'tags'=>$tags->fetchAll()]);}catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[]]);}exit;}
 if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='GET'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$stmt=$pdo->prepare("SELECT * FROM manga WHERE id=?");$stmt->execute([$mId]);$manga=$stmt->fetch();if(!$manga){echo json_encode(['error'=>'Не найдено']);exit;}$chapters=[];if($manga['is_series']){$chStmt=$pdo->prepare("SELECT id,chapter_num,title,created_at FROM manga_chapters WHERE manga_id=? ORDER BY chapter_num ASC");$chStmt->execute([$mId]);$chapters=$chStmt->fetchAll();}$manga['chapters']=$chapters;echo json_encode($manga);exit;}
 
 if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$allowed=['title','description','telegraph_url','cover_imgbb_url'];$updates=[];$values=[];foreach($allowed as $field){if(isset($input[$field])){$updates[]="$field=?";$values[]=$input[$field];}}if(empty($updates)){echo json_encode(['success'=>false,'error'=>'Нечего обновлять']);exit;}$values[]=$mId;$pdo->prepare("UPDATE manga SET ".implode(', ',$updates)." WHERE id=?")->execute($values);logArchiveEntry($pdo,'edit_manga',"Отредактирована манга ID: $mId (через сайт)",$userId);echo json_encode(['success'=>true]);exit;}
@@ -2581,6 +2601,9 @@ p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}
     $myRatingStmt=$pdo->prepare("SELECT rating FROM manga_ratings WHERE manga_id=? AND user_id=?");$myRatingStmt->execute([$id,$userId]);$myRating=$myRatingStmt->fetchColumn();
     // Similar manga
     $similarStmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,likes FROM manga WHERE id!=? ORDER BY likes DESC, RANDOM() LIMIT 10");$similarStmt->execute([$id]);$similarManga=$similarStmt->fetchAll();
+    // Genres and tags for manga
+    $genresStmt=$pdo->prepare("SELECT g.name,g.slug FROM genres g JOIN manga_genres mg ON g.id=mg.genre_id WHERE mg.manga_id=? ORDER BY g.name");$genresStmt->execute([$id]);$mangaGenres=$genresStmt->fetchAll();
+    $tagsStmt=$pdo->prepare("SELECT t.name,t.slug,t.is_nsfw FROM tags t JOIN manga_tags mt ON t.id=mt.tag_id WHERE mt.manga_id=? ORDER BY t.name");$tagsStmt->execute([$id]);$mangaTags=$tagsStmt->fetchAll();
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($manga['title'])?> | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2752,6 +2775,12 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
             <div class="manga-title"><?=htmlspecialchars($manga['title'])?></div>
             <?php if($manga['is_series']):?><div><span class="badge-series">📚 Серия глав</span></div><?php endif;?>
             <?php if($manga['description']):?><div class="manga-desc"><?=nl2br(htmlspecialchars($manga['description']))?></div><?php endif;?>
+            <?php if(!empty($mangaGenres)||!empty($mangaTags)):?>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                <?php foreach($mangaGenres as $g):?><a href="/?genre=<?=htmlspecialchars($g['slug'])?>" style="font-size:10px;padding:3px 9px;border:1px solid var(--border);border-radius:20px;color:var(--text2);text-decoration:none;transition:all .15s;white-space:nowrap" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'"><?=htmlspecialchars($g['name'])?></a><?php endforeach;?>
+                <?php foreach($mangaTags as $t):?><a href="/?tag=<?=htmlspecialchars($t['slug'])?>" style="font-size:10px;padding:3px 9px;border:1px solid var(--border);border-radius:20px;color:var(--muted);text-decoration:none;transition:all .15s;white-space:nowrap<?=$t['is_nsfw']?' border-color:rgba(239,68,68,0.3)':''?>" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'"><?=htmlspecialchars($t['name'])?><?=$t['is_nsfw']?' 🔞':''?></a><?php endforeach;?>
+            </div>
+            <?php endif;?>
             <div class="vote-row">
                 <button class="vote-btn like" onclick="vote('like')">👍 <span id="likes"><?=(int)$manga['likes']?></span></button>
                 <button class="vote-btn dislike" onclick="vote('dislike')">👎 <span id="dislikes"><?=(int)$manga['dislikes']?></span></button>
@@ -3676,11 +3705,11 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
 </div>
 </div>
 
-<!-- MODAL: MESSAGES -->
-<div class="modal-overlay" id="messages-modal" onclick="if(event.target===this)closeMessagesModal()">
+<!-- MODAL: ADMIN NOTIFICATIONS -->
+<div class="modal-overlay" id="admin-messages-modal" onclick="if(event.target===this)closeAdminMessagesModal()">
 <div class="modal messages-modal">
-    <button class="modal-x" onclick="closeMessagesModal()">✕</button>
-    <div class="modal-head">💬 Сообщения</div>
+    <button class="modal-x" onclick="closeAdminMessagesModal()">✕</button>
+    <div class="modal-head">📢 Уведомления</div>
     <div class="modal-sub">Сообщения от администрации</div>
     <div class="msg-list" id="msg-list"><div style="color:var(--muted);text-align:center;padding:20px;font-size:13px">Загрузка...</div></div>
 </div>
@@ -3964,9 +3993,9 @@ async function loadContinue(){
 }
 
 // ===== MESSAGES MODAL =====
-function openMessagesModal(){document.getElementById('messages-modal').classList.add('open');loadUserMessages();}
-function closeMessagesModal(){document.getElementById('messages-modal').classList.remove('open');}
-async function loadUserMessages(){
+function openAdminMessagesModal(){document.getElementById('admin-messages-modal').classList.add('open');loadAdminNotifications();}
+function closeAdminMessagesModal(){document.getElementById('admin-messages-modal').classList.remove('open');}
+async function loadAdminNotifications(){
     try{const res=await fetch('/api/admin/messages');const data=await res.json();const list=document.getElementById('msg-list');
     if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px;font-size:13px">📭 Сообщений нет</div>';return;}
     list.innerHTML=data.items.map(m=>`<div class="msg-item"><div class="msg-text">${escapeHtml(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('');}catch(e){}
@@ -4096,12 +4125,20 @@ async function openEditManga(mangaId){
     const fw=document.getElementById('edit-manga-form-wrap');fw.style.display='block';
     let chaptersHtml='';
     if(manga.is_series&&manga.chapters?.length){chaptersHtml=`<div style="margin-top:12px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Главы</div><div class="ch-admin-list">${manga.chapters.map(ch=>`<div class="ch-admin-item"><span style="font-size:11px;font-weight:600">Гл. ${ch.chapter_num}${ch.title?' — '+escapeHtml(ch.title):''}</span><button class="del-ch-btn" onclick="deleteChapter(${ch.id},this)">🗑</button></div>`).join('')}</div></div>`;}
+    // Load genres/tags for the form
+    let allGenres=[], allTags=[], mangaGenreIds=new Set(), mangaTagIds=new Set();
+    try{const gr=await fetch('/api/genres');const gd=await gr.json();allGenres=gd.genres||[];allTags=gd.tags||[];}catch(e){}
+    try{const mgr=await fetch(`/api/manga/${mangaId}/genres`);const mgd=await mgr.json();
+    mgd.genres?.forEach(g=>mangaGenreIds.add(g.id));mgd.tags?.forEach(t=>mangaTagIds.add(t.id));}catch(e){}
+    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'var(--card2)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'var(--card2)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
     document.getElementById('edit-manga-form').innerHTML=`
         <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
         <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
         <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
         <div class="ef"><label>URL обложки</label><input type="text" id="ef-cover" value="${escapeHtml(manga.cover_imgbb_url||'')}"></div>
         ${manga.cover_imgbb_url?`<img src="${escapeHtml(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-bottom:9px">`:''}
+        ${genresHtml}${tagsHtml}
         ${chaptersHtml}
         <div class="edit-actions">
             <button class="save-btn" onclick="saveMangaEdit(${mangaId})">💾 Сохранить</button>
@@ -4110,7 +4147,16 @@ async function openEditManga(mangaId){
         <div class="result-banner" id="ef-result"></div>`;}catch(e){showToast('❌ Ошибка загрузки');}
 }
 function backToMangaList(){document.getElementById('edit-manga-form-wrap').style.display='none';document.getElementById('manga-edit-list').style.display='flex';document.getElementById('edit-pagination').style.display='flex';document.querySelector('#panel-edit .esearch-row').style.display='flex';}
-async function saveMangaEdit(mangaId){try{const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('ef-title').value.trim(),description:document.getElementById('ef-desc').value.trim(),telegraph_url:document.getElementById('ef-link').value.trim(),cover_imgbb_url:document.getElementById('ef-cover').value.trim()})});const data=await res.json();const b=document.getElementById('ef-result');if(data.success){b.className='result-banner success open';b.innerHTML='✅ Сохранено!';load(true);}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){showToast('❌ Ошибка');}}
+async function saveMangaEdit(mangaId){try{
+    const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('ef-title').value.trim(),description:document.getElementById('ef-desc').value.trim(),telegraph_url:document.getElementById('ef-link').value.trim(),cover_imgbb_url:document.getElementById('ef-cover').value.trim()})});
+    const data=await res.json();
+    const b=document.getElementById('ef-result');
+    // Save genres/tags
+    const genreIds=[...document.querySelectorAll('#ef-genres input[type=checkbox]:checked')].map(el=>parseInt(el.dataset.gid));
+    const tagIds=[...document.querySelectorAll('#ef-tags input[type=checkbox]:checked')].map(el=>parseInt(el.dataset.tid));
+    if(genreIds.length>=0||tagIds.length>=0){try{await fetch(`/api/admin/manga/${mangaId}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:genreIds,tag_ids:tagIds})});}catch(e){}}
+    if(data.success){b.className='result-banner success open';b.innerHTML='✅ Сохранено!';load(true);}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}
+}catch(e){showToast('❌ Ошибка');}}
 async function deleteManga(mangaId){if(!confirm('Удалить эту мангу?'))return;try{const res=await fetch(`/api/admin/manga/${mangaId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){showToast('🗑 Удалено');backToMangaList();loadMangaEditList(editQuery,editPage);load(true);}}catch(e){}}
 async function deleteChapter(chapterId,btn){if(!confirm('Удалить главу?'))return;try{const res=await fetch(`/api/admin/chapter/${chapterId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){btn.closest('.ch-admin-item').remove();showToast('🗑 Глава удалена');}}catch(e){}}
 
@@ -4650,7 +4696,7 @@ document.addEventListener('click', function(e) {
     <div style="font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px">
         💬 Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
     </div>
-    <div id="comments-form" style="margin-bottom:16px;display:none">
+    <div id="comments-form" style="margin-bottom:16px;display:<?php echo isset($currentAccount) && $currentAccount ? 'block' : 'none'; ?>">
         <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:Inter,sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
         <button onclick="submitComment()" style="margin-top:8px;padding:8px 16px;background:linear-gradient(135deg,#7c5cff 0%,#5a4ca0 100%);border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:500;font-size:13px;transition:all 0.2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             📤 Отправить комментарий
