@@ -56,6 +56,11 @@ if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999
 require_once __DIR__ . '/auth.php';
 $currentAccount = getCurrentAccount($pdo); // null если не залогинен
 
+// ===== НОВЫЕ МОДУЛИ =====
+require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/profile_page.php';
+require_once __DIR__ . '/new_api_endpoints.php';
+
 $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
@@ -3821,5 +3826,6 @@ async function submitChapter(){
 window.addEventListener('load',()=>{const l=document.getElementById('page-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 load();loadNew();loadContinue();checkAdmin();
 </script>
+<?php require_once __DIR__ . '/nsfw_modal.php'; ?>
 </body>
 </html>
