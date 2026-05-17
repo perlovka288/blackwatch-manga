@@ -824,7 +824,7 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
         $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name, is_nsfw=EXCLUDED.is_nsfw");
         foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
-        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name");
+        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
         foreach($genresData as $g)$gIns->execute($g);
         $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
         $gc=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
@@ -856,16 +856,16 @@ if ($path==='/api/genres'){
     try{
         $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        // Правильный каст is_nsfw в bool (PostgreSQL возвращает 't'/'f')
+        // Правильный каст is_nsfw в bool (PostgreSQL возвращает 't'/'f' или '1'/'0')
         $tags=array_map(function($t){
             $t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);
             return $t;
         },$tagsRaw);
         // Авто-сид если пусто
         if(empty($tags)){
-            $tagsData=[['Реинкарнация','reincarnation',0],['Перерождение','rebirth',0],['Система','system',0],['Подземелья','dungeons',0],['Некромант','necromancer',0],['Культивация','cultivation',0],['Монстродевушки','monster-girls',0],['Цундере','tsundere',0],['Яндере','yandere',0],['Путешествие во времени','time-travel',0],['Боги','gods',0],['Зомби','zombies',0],['Школьная жизнь','school-life',0],['Ассасины','assassins',0],['Мафия','mafia',0],['Виртуальная реальность','vr',0],['Игровой мир','game-world',0],['Постапокалипсис','apocalypse',0],['Игра на выживание','survival-game',0],['Кулинария','cooking',0],['Драконы','dragons',0],['Зверолюди','beast-people',0],['Эльфы','elves',0],['Тёмное фэнтези','dark-fantasy',0],['Герой','hero',0],['Злодейка','villainess',0],['Строительство королевства','kingdom-building',0],['Регрессия','regression',0],['Охотники','hunters',0],['Гениальный ГГ','genius-mc',0],['Антигерой','antihero',0],['Ниндзя','ninja',0],['Пираты','pirates',0],['Космос','space',0],['Месть','revenge',0],['Турнир','tournament',0],['Сильный ГГ','op-mc',0],['Слабый в Сильный','weak-to-strong',0],['Магическая академия','magic-academy',0],['РПГ','rpg',0],['MMORPG','mmorpg',0],['Гильдии','guilds',0],['Любовный треугольник','love-triangle',0],['Холодный ГГ','cold-mc',0],['Легендарное оружие','legendary-weapon',0],['Проклятия','curses',0],['Короли','kings',0],['Академия','academy',0],['Гендер-бендер','gender-bender',0],['Суперсилы','superpowers',0],['Телепортация','teleportation',0],['Взрослый контент','adult',1],['18+','18plus',1],['NSFW','nsfw',1]];
+            $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
             $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING");
-            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]]);
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
             $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
             $tags=array_map(function($t){$t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);return $t;},$tagsRaw);
         }
@@ -877,7 +877,6 @@ if ($path==='/api/genres'){
         }
         echo json_encode(['genres'=>$genres,'tags'=>$tags]);
     }catch(Exception $e){
-        // Вернуть ошибку в ответе для диагностики
         echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);
     }
     exit;
