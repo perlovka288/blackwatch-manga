@@ -321,13 +321,18 @@ if (preg_match('#^/api/message/(\d+)/delete$#', $path, $m) && $_SERVER['REQUEST_
 
 // GET /api/genres
 if ($path==='/api/genres' && $_SERVER['REQUEST_METHOD']==='GET') {
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     try {
-        $stmt = $pdo->query("SELECT g.*, COUNT(mg.manga_id) as manga_count
-            FROM genres g LEFT JOIN manga_genres mg ON mg.genre_id=g.id
-            GROUP BY g.id ORDER BY manga_count DESC");
-        echo json_encode(['success'=>true,'genres'=>$stmt->fetchAll()]);
-    } catch (Exception $e) { echo json_encode(['success'=>true,'genres'=>[]]); }
+        $genres = $pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $tagsRaw = $pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $tags = array_map(function($t){
+            $t['is_nsfw'] = ($t['is_nsfw']==='t' || $t['is_nsfw']===true || $t['is_nsfw']==='1' || $t['is_nsfw']===1);
+            return $t;
+        }, $tagsRaw);
+        echo json_encode(['genres'=>$genres,'tags'=>$tags]);
+    } catch (Exception $e) {
+        echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);
+    }
     exit;
 }
 
