@@ -103,6 +103,13 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Отдаём style.css
+if ($path === '/style.css') {
+    header('Content-Type: text/css');
+    header('Cache-Control: public, max-age=86400');
+    readfile(__DIR__ . '/style.css');
+    exit;
+}
 
 // ===== DEBUG: проверка таблиц тегов/жанров =====
 if ($path === '/api/debug-tags') {
@@ -1646,6 +1653,7 @@ if ($path==='/register') {
     if (getCurrentAccount($pdo)) { header('Location: /'); exit; }
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Регистрация | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--green:#4ade80}
 *{margin:0;padding:0;box-sizing:border-box}
