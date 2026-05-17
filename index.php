@@ -471,6 +471,11 @@ if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
         if(!$newMangaId)$newMangaId=(int)$pdo->lastInsertId();
         if(!$newMangaId){echo json_encode(['success'=>false,'error'=>'Не удалось получить ID']);exit;}
         if(!empty($pageUrls)&&!$isSeries)saveMangaPages($pdo,$newMangaId,$pageUrls);
+        // Save genres and tags if provided
+        $genreIds=array_filter(array_map('intval',$input['genre_ids']??[]));
+        $tagIds=array_filter(array_map('intval',$input['tag_ids']??[]));
+        if(!empty($genreIds)){$gIns=$pdo->prepare("INSERT INTO manga_genres(manga_id,genre_id)VALUES(?,?) ON CONFLICT DO NOTHING");foreach($genreIds as $gid)$gIns->execute([$newMangaId,$gid]);}
+        if(!empty($tagIds)){$tIns=$pdo->prepare("INSERT INTO manga_tags(manga_id,tag_id)VALUES(?,?) ON CONFLICT DO NOTHING");foreach($tagIds as $tid)$tIns->execute([$newMangaId,$tid]);}
         logArchiveEntry($pdo,'add_manga',"Добавлена манга: ♥ $title",$userId);
         $siteUrl=rtrim(getenv('SITE_URL')?:'','/');
         echo json_encode(['success'=>true,'manga_id'=>$newMangaId,'telegraph'=>$telegraphLink,'pages'=>count($pageUrls),'site_url'=>"{$siteUrl}/read/{$newMangaId}"]);
@@ -501,16 +506,23 @@ if ($path==='/api/save-chapter'&&$_SERVER['REQUEST_METHOD']==='POST'){
 if ($path==='/api/manga'){
     header('Content-Type: application/json');
     $page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$sort=$_GET['sort']??'new';$limit=24;$offset=$page*$limit;
-    $orderBy='id DESC';if($sort==='popular')$orderBy='likes DESC, id DESC';if($sort==='alpha')$orderBy='title ASC';
-    if($q){$stmt=$pdo->prepare("SELECT id,title,likes,dislikes,cover_imgbb_url,file_id,created_at,is_series FROM manga WHERE LOWER(title) LIKE LOWER(?) ORDER BY $orderBy LIMIT ? OFFSET ?");$stmt->execute(["%{$q}%",$limit,$offset]);$count=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE LOWER(title) LIKE LOWER(?)");$count->execute(["%{$q}%"]);}
-    else{$stmt=$pdo->prepare("SELECT id,title,likes,dislikes,cover_imgbb_url,file_id,created_at,is_series FROM manga ORDER BY $orderBy LIMIT ? OFFSET ?");$stmt->execute([$limit,$offset]);$count=$pdo->query("SELECT COUNT(*) FROM manga");}
+    $genreSlug=trim($_GET['genre']??'');$tagSlug=trim($_GET['tag']??'');
+    $orderBy='m.id DESC';if($sort==='popular')$orderBy='m.likes DESC, m.id DESC';if($sort==='alpha')$orderBy='m.title ASC';
+    $conditions=[];$params=[];
+    if($q){$conditions[]="LOWER(m.title) LIKE LOWER(?)";$params[]="%{$q}%";}
+    if($genreSlug){$conditions[]="m.id IN (SELECT mg.manga_id FROM manga_genres mg JOIN genres g ON g.id=mg.genre_id WHERE g.slug=?)";$params[]=$genreSlug;}
+    if($tagSlug){$conditions[]="m.id IN (SELECT mt.manga_id FROM manga_tags mt JOIN tags t ON t.id=mt.tag_id WHERE t.slug=?)";$params[]=$tagSlug;}
+    $where=$conditions?'WHERE '.implode(' AND ',$conditions):'';
+    $stmt=$pdo->prepare("SELECT m.id,m.title,m.likes,m.dislikes,m.cover_imgbb_url,m.file_id,m.created_at,m.is_series FROM manga m $where ORDER BY $orderBy LIMIT ? OFFSET ?");
+    $stmt->execute(array_merge($params,[$limit,$offset]));
+    $countStmt=$pdo->prepare("SELECT COUNT(*) FROM manga m $where");$countStmt->execute($params);
     $now=date('Y-m-d H:i:s',time()-86400);$items=[];
     foreach($stmt as $m){
         $chapCount=0;if($m['is_series']){$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga_chapters WHERE manga_id=?");$cStmt->execute([$m['id']]);$chapCount=(int)$cStmt->fetchColumn();}
         $rStmt=$pdo->prepare("SELECT AVG(rating) as avg FROM manga_ratings WHERE manga_id=?");$rStmt->execute([$m['id']]);$rRow=$rStmt->fetch();$avgRating=$rRow['avg']?round((float)$rRow['avg'],1):0;
         $items[]=['id'=>(int)$m['id'],'title'=>$m['title'],'likes'=>(int)$m['likes'],'dislikes'=>(int)$m['dislikes'],'cover_display'=>!empty($m['cover_imgbb_url'])?$m['cover_imgbb_url']:(!empty($m['file_id'])?'tg://'.$m['file_id']:null),'is_new'=>($m['created_at']>=$now),'is_series'=>(bool)$m['is_series'],'chapter_count'=>$chapCount,'avg_rating'=>$avgRating];
     }
-    echo json_encode(['items'=>$items,'total'=>(int)$count->fetchColumn(),'limit'=>$limit]);exit;
+    echo json_encode(['items'=>$items,'total'=>(int)$countStmt->fetchColumn(),'limit'=>$limit]);exit;
 }
 
 if ($path==='/api/new-manga'){
@@ -3382,6 +3394,11 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
 .filter-btn:hover{border-color:var(--border2);color:var(--text2)}
 .filter-btn.active{background:var(--card);border-color:var(--border2);color:var(--text);font-weight:600}
 .stats-label{color:var(--muted);font-size:11px;margin-left:auto;font-weight:400}
+.filter-tag-btn{padding:4px 11px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif;white-space:nowrap}
+.filter-tag-btn:hover{border-color:var(--border2);color:var(--text2)}
+.filter-tag-btn.active-tag{background:rgba(124,92,255,0.12);border-color:rgba(124,92,255,0.4);color:#a78bfa;font-weight:600}
+.filter-tag-btn.nsfw-tag{border-color:rgba(239,68,68,0.3);color:var(--red)}
+.filter-tag-btn.nsfw-tag.active-tag{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.5)}
 
 /* ===== GRID ===== */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
@@ -3759,7 +3776,16 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
         <button class="filter-btn active" id="f-new" onclick="setFilter('new')">🕒 Новые</button>
         <button class="filter-btn" id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
         <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">🔤 А-Я</button>
+        <button class="filter-btn" id="f-genre-tag" onclick="toggleGenreFilter()" style="gap:5px">🏷 Жанр/Тег</button>
         <span class="stats-label" id="stats">Манг: <strong><?=(int)$total?></strong></span>
+    </div>
+    <!-- GENRE/TAG FILTER PANEL -->
+    <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Жанры</div>
+        <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px"></div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Теги</div>
+        <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"></div>
+        <button onclick="clearGenreFilter()" style="padding:5px 13px;background:transparent;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">✕ Сбросить</button>
     </div>
     <div class="grid" id="grid"></div>
     <button class="load-more" id="more" onclick="load()" style="display:none">Загрузить ещё</button>
@@ -3779,6 +3805,14 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
     </div>
     <div class="fg"><label class="fl">Название</label><input class="fi" type="text" id="manga-title" placeholder="Название манги..."></div>
     <div class="fg"><label class="fl">Описание</label><textarea class="fta" id="manga-desc" placeholder="Краткое описание..."></textarea></div>
+    <div class="fg" id="add-genres-wrap" style="display:none">
+        <label class="fl">Жанры</label>
+        <div id="add-genres-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+    </div>
+    <div class="fg" id="add-tags-wrap" style="display:none">
+        <label class="fl">Теги</label>
+        <div id="add-tags-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+    </div>
     <div class="fg">
         <label class="fl">Обложка</label>
         <div class="upload-zone" id="cover-zone">
@@ -4008,9 +4042,56 @@ async function checkAdmin(){
 }
 
 // ===== CATALOG =====
-let page=0,q='',loading=false,hasMore=true,currentSort='new';
+let page=0,q='',loading=false,hasMore=true,currentSort='new',activeGenre='',activeTag='';
 const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
 function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
+
+// ===== GENRE/TAG FILTER =====
+let _genreTagsData=null;
+async function toggleGenreFilter(){
+    const panel=document.getElementById('genre-filter-panel');
+    const isOpen=panel.style.display!=='none';
+    panel.style.display=isOpen?'none':'block';
+    if(!isOpen&&!_genreTagsData){
+        try{const res=await fetch('/api/genres');_genreTagsData=await res.json();}catch(e){}
+        renderGenreFilterPanel();
+    }
+}
+function renderGenreFilterPanel(){
+    if(!_genreTagsData)return;
+    const genresEl=document.getElementById('gfp-genres');
+    const tagsEl=document.getElementById('gfp-tags');
+    genresEl.innerHTML=(_genreTagsData.genres||[]).map(g=>`<button onclick="selectGenre('${g.slug}')" id="gf-g-${g.slug}" class="filter-tag-btn${activeGenre===g.slug?' active-tag':''}">${escapeHtml(g.name)}</button>`).join('');
+    tagsEl.innerHTML=(_genreTagsData.tags||[]).map(t=>`<button onclick="selectTag('${t.slug}')" id="gf-t-${t.slug}" class="filter-tag-btn${activeTag===t.slug?' active-tag':''}${t.is_nsfw?' nsfw-tag':''}">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</button>`).join('');
+}
+function selectGenre(slug){
+    activeGenre=activeGenre===slug?'':slug;
+    activeTag='';
+    document.getElementById('f-genre-tag').classList.toggle('active',!!(activeGenre||activeTag));
+    renderGenreFilterPanel();
+    load(true);
+}
+function selectTag(slug){
+    activeTag=activeTag===slug?'':slug;
+    activeGenre='';
+    document.getElementById('f-genre-tag').classList.toggle('active',!!(activeGenre||activeTag));
+    renderGenreFilterPanel();
+    load(true);
+}
+function clearGenreFilter(){activeGenre='';activeTag='';document.getElementById('f-genre-tag').classList.remove('active');renderGenreFilterPanel();load(true);}
+
+// Load genres for add form
+async function loadGenresForAddForm(){
+    if(_genreTagsData){renderAddForm(_genreTagsData);return;}
+    try{const res=await fetch('/api/genres');_genreTagsData=await res.json();renderAddForm(_genreTagsData);}catch(e){}
+}
+function renderAddForm(data){
+    const gw=document.getElementById('add-genres-wrap'),tw=document.getElementById('add-tags-wrap');
+    const gl=document.getElementById('add-genres-list'),tl=document.getElementById('add-tags-list');
+    if(!gl||!tl)return;
+    if(data.genres?.length){gw.style.display='block';gl.innerHTML=data.genres.map(g=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid var(--border);border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s"><input type="checkbox" data-add-gid="${g.id}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('');}
+    if(data.tags?.length){tw.style.display='block';tl.innerHTML=data.tags.map(t=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid ${t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s"><input type="checkbox" data-add-tid="${t.id}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':this.dataset.nsfw?'rgba(239,68,68,0.3)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('');}
+}
 
 // ===== SEARCH DROPDOWN =====
 let searchTimeout;
@@ -4043,7 +4124,8 @@ async function load(reset=false){
     if(reset){page=0;grid.innerHTML='';hasMore=true;moreBtn.style.display='none';}
     if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">📖 Загрузка...</div>';
     try{
-        const res=await fetch(`/api/manga?page=${page}&q=${encodeURIComponent(q)}&sort=${currentSort}`);
+        const _gp=activeGenre?'&genre='+encodeURIComponent(activeGenre):activeTag?'&tag='+encodeURIComponent(activeTag):'';
+        const res=await fetch('/api/manga?page='+page+'&q='+encodeURIComponent(q)+'&sort='+currentSort+_gp);
         const data=await res.json();
         if(page===0){grid.innerHTML='';statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
         if(!data.items.length&&page===0){grid.innerHTML='<div class="empty">😔 Ничего не найдено</div>';loading=false;return;}
@@ -4123,7 +4205,7 @@ try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':
 
 // ===== ADD MANGA MODAL =====
 let coverFile=null,photoFiles=[],currentMangaType='single';
-function openAddModal(){document.getElementById('add-modal').classList.add('open');}
+function openAddModal(){document.getElementById('add-modal').classList.add('open');loadGenresForAddForm();}
 function closeAddModal(){document.getElementById('add-modal').classList.remove('open');}
 function setMangaType(t){currentMangaType=t;document.getElementById('type-single').classList.toggle('active',t==='single');document.getElementById('type-series').classList.toggle('active',t==='series');document.getElementById('pages-section').style.display=t==='single'?'block':'none';}
 function switchTab(tab){['zip','photos'].forEach(t=>{document.getElementById('tab-'+t).classList.toggle('active',t===tab);document.getElementById('panel-'+t).classList.toggle('active',t===tab);});}
@@ -4148,7 +4230,9 @@ async function submitManga(){
         const pageUrls=[];
         if(!isSeries&&photoFiles.length){const total=photoFiles.length;for(let i=0;i<total;i++){pf.style.width=(5+Math.round((i/total)*88))+'%';const t=btn.querySelector('.btn-text');if(t)t.textContent=`⬆️ ${i+1}/${total}`;const url=await uploadOneToImgbb(photoFiles[i],keys);if(url)pageUrls.push(url);}}
         pf.style.width='95%';
-        const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries})});
+        const addGenreIds=[...document.querySelectorAll('#add-genres-list input[type=checkbox][data-add-gid]:checked')].map(el=>parseInt(el.dataset.addGid));
+        const addTagIds=[...document.querySelectorAll('#add-tags-list input[type=checkbox][data-add-tid]:checked')].map(el=>parseInt(el.dataset.addTid));
+        const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:addGenreIds,tag_ids:addTagIds})});
         const data=await res.json();pf.style.width='100%';
         if(data.success){showResult('success',`✅ <strong>Манга добавлена!</strong><br>${isSeries?'📚 Серия создана<br>':''}${data.pages>0?`📄 ${data.pages} страниц<br>`:''}${data.telegraph?`🔗 <a href="${escapeHtml(data.telegraph)}" target="_blank">Telegraph</a><br>`:''}<a href="${escapeHtml(data.site_url)}" target="_blank">🌐 Открыть →</a>`);setTimeout(()=>{load(true);loadNew();},1500);}
         else{showResult('error','❌ '+(data.error||'Неизвестная ошибка'));}
