@@ -9,6 +9,11 @@
  * @return array|null
  */
 function getCurrentAccount(PDO $pdo): ?array {
+    // Убедимся что сессия стартовала
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
     $sessionId = $_COOKIE['bw_session'] ?? '';
     if (!$sessionId || strlen($sessionId) < 32) return null;
 
@@ -52,7 +57,7 @@ function requireAuth(PDO $pdo): array {
  * Возвращает ['type' => 'account'|'tg', 'account_id' => int|null, 'tg_id' => int|null]
  */
 function getEffectiveAccountId(PDO $pdo): array {
-    // 1. Приоритет — веб-сессия
+    // 1. Приоритет — веб-сессия (ВСЕГДА выигрывает, даже если есть tg_user_id в GET)
     $account = getCurrentAccount($pdo);
     if ($account) {
         return [
@@ -111,12 +116,17 @@ function createSession(PDO $pdo, int $accountId, bool $remember = true): void {
         substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
     ]);
 
+    // Определяем secure динамически — работает и на HTTP (Render internal), и на HTTPS
+    $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+
     $cookieOptions = [
         'expires'  => time() + 86400 * $days,
         'path'     => '/',
         'httponly' => true,
         'samesite' => 'Lax',
-        'secure' => true,
+        'secure'   => $isSecure,
     ];
     setcookie('bw_session', $sessionId, $cookieOptions);
 }

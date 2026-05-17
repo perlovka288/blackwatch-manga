@@ -96,9 +96,13 @@ try {
     } catch(Exception $e) {}
 } catch (Exception $e) {}
 
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-session_start();
+// Стартуем сессию СРАЗУ — до любых функций авторизации
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
+
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 // ===== DEBUG: проверка таблиц тегов/жанров =====
 if ($path === '/api/debug-tags') {
