@@ -138,6 +138,29 @@ if ($path === '/api/debug-tags') {
 require_once __DIR__ . '/auth.php';
 $currentAccount = getCurrentAccount($pdo); // null если не залогинен
 
+// ===== DEBUG SESSION ENDPOINT (временный) =====
+if ($path === '/api/debug-session') {
+    header('Content-Type: application/json');
+    $sid = $_COOKIE['bw_session'] ?? '';
+    $account = getCurrentAccount($pdo);
+    $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $sc = 0;
+    try { $sc = (int)$pdo->query("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")->fetchColumn(); } catch(Exception $e) {}
+    echo json_encode([
+        'cookie' => $sid ? substr($sid,0,8).'...' : 'NONE',
+        'cookie_len' => strlen($sid),
+        'account' => $account ? $account['username'] : null,
+        'is_secure' => $isSecure,
+        'https' => $_SERVER['HTTPS'] ?? 'not set',
+        'forwarded_proto' => $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'not set',
+        'active_sessions_db' => $sc,
+        'cookies_present' => array_keys($_COOKIE),
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
+
+
 // ===== НОВЫЕ МОДУЛИ =====
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/profile_page.php';
@@ -1579,7 +1602,7 @@ async function doLogin() {
     err.classList.remove('show');
     btn.disabled = true; btn.textContent = 'Входим...';
     try {
-        const res = await fetch('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'},
+        const res = await fetch('/api/auth/login', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
                 login: document.getElementById('login').value.trim(),
                 password: document.getElementById('password').value,
@@ -1654,7 +1677,7 @@ async function doRegister(){
     const btn=document.getElementById('btn');const err=document.getElementById('err');
     err.classList.remove('show');btn.disabled=true;btn.textContent='Создаём аккаунт...';
     try{
-        const res=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        const res=await fetch('/api/auth/register',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({
             email:document.getElementById('email').value.trim(),
             username:document.getElementById('username').value.trim(),
             password:document.getElementById('password').value,
