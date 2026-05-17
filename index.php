@@ -1651,6 +1651,140 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
 </script>
 </body></html><?php exit; }
 
+// /messages — страница с историей чатов
+if ($path === '/messages' || preg_match('~^/messages\?with=(\d+)~', $path, $m)) {
+    if (!$currentAccount) {
+        $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '/');
+        header("Location: /login?redirect={$redirect}");
+        exit;
+    }
+    
+    $other_id = isset($m[1]) ? (int)$m[1] : (isset($_GET['with']) ? (int)$_GET['with'] : null);
+    
+    // Проверка существования пользователя
+    if ($other_id) {
+        $checkStmt = $pdo->prepare("SELECT id, username FROM accounts WHERE id=?");
+        $checkStmt->execute([$other_id]);
+        $otherUser = $checkStmt->fetch();
+        if (!$otherUser) $other_id = null;
+    }
+    
+?><!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Сообщения | BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+.page-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;background:rgba(12,12,12,.92);backdrop-filter:blur(12px)}
+.back-btn{color:var(--muted);text-decoration:none;font-size:13px;transition:color .2s}.back-btn:hover{color:var(--text)}
+.page-title{font-family:'Syne',sans-serif;font-weight:800;font-size:17px}
+.messages-container{display:flex;height:calc(100vh - 53px)}
+.msg-list{width:280px;border-right:1px solid var(--border);overflow-y:auto;background:rgba(0,0,0,.5)}
+.msg-list-empty{padding:24px 16px;text-align:center;color:var(--muted);font-size:13px}
+.msg-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.msg-item:hover{background:rgba(124,92,255,.08)}
+.msg-item.active{background:rgba(124,92,255,.15);border-left:3px solid var(--accent)}
+.msg-item-name{font-weight:600;color:var(--text);font-size:13px;margin-bottom:4px}
+.msg-item-text{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-item-time{font-size:10px;color:var(--muted);margin-top:3px}
+.msg-chat{flex:1;display:flex;flex-direction:column}
+.msg-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:24px}
+.msg-scroll{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.msg-row{display:flex;gap:8px;margin-bottom:12px;animation:msg-in .2s ease}
+@keyframes msg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-bubble{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px;max-width:70%;word-wrap:break-word;font-size:13px;line-height:1.4}
+.msg-bubble.own{background:var(--accent);color:#000;border-color:var(--accent)}
+.msg-row.own{justify-content:flex-end}
+.msg-footer{padding:16px;border-top:1px solid var(--border);display:flex;gap:8px}
+.msg-input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 12px;font-family:inherit;font-size:13px;outline:none}
+.msg-input:focus{border-color:var(--border2)}
+.msg-send{padding:9px 16px;background:var(--accent);color:#000;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.msg-send:hover{opacity:.9}
+.msg-send:disabled{opacity:.4;cursor:not-allowed}
+@media(max-width:768px){.messages-container{flex-direction:column}.msg-list{width:100%;height:auto;max-height:120px;border-right:none;border-bottom:1px solid var(--border)}.msg-bubble{max-width:90%}}
+</style>
+</head>
+<body>
+<div class="page-header">
+    <a href="/" class="back-btn">← Назад</a>
+    <h1 class="page-title">💬 Сообщения</h1>
+</div>
+<div class="messages-container">
+    <div class="msg-list" id="msg-list"></div>
+    <div class="msg-chat">
+        <div class="msg-empty" id="msg-empty">Выберите чат или начните новую переписку</div>
+        <div class="msg-scroll" id="msg-scroll" style="display:none"></div>
+        <div class="msg-footer" id="msg-footer" style="display:none">
+            <input type="text" class="msg-input" id="msg-input" placeholder="Напиши сообщение...">
+            <button class="msg-send" id="msg-send">Отправить</button>
+        </div>
+    </div>
+</div>
+<script>
+const currentUserId = <?=(int)$currentAccount['id']?>;
+const otherId = <?=($other_id ?? 'null')?>;
+
+async function loadConversations(){
+    try{const res=await fetch('/api/messages');const d=await res.json();
+    if(!d.success||!d.messages)return;
+    const list=document.getElementById('msg-list');
+    if(d.messages.length===0){list.innerHTML='<div class="msg-list-empty">Нет сообщений</div>';return;}
+    list.innerHTML=d.messages.map(m=>`
+        <div class="msg-item ${otherId===m.other_id?'active':''}" onclick="selectChat(${m.other_id})">
+            <div class="msg-item-name">${escapeHtml(m.other_username)}</div>
+            <div class="msg-item-text">${escapeHtml(m.last_text||'...')}</div>
+            <div class="msg-item-time">${new Date(m.last_message_time).toLocaleDateString()}</div>
+        </div>`).join('');
+    }catch(e){}
+}
+
+function selectChat(uid){window.location.href='/messages?with='+uid;}
+
+async function loadMessages(){
+    if(!otherId)return;
+    try{const res=await fetch('/api/messages/'+otherId);const d=await res.json();
+    if(!d.success||!d.messages)return;
+    const scroll=document.getElementById('msg-scroll');
+    scroll.innerHTML=d.messages.map(m=>`
+        <div class="msg-row ${m.sender_id===currentUserId?'own':''}">
+            <div class="msg-bubble ${m.sender_id===currentUserId?'own':''}">${escapeHtml(m.text)}</div>
+        </div>`).join('');
+    scroll.scrollTop=scroll.scrollHeight;
+    }catch(e){}
+}
+
+async function sendMessage(){
+    const input=document.getElementById('msg-input');const text=input.value.trim();
+    if(!text||!otherId)return;
+    input.value='';document.getElementById('msg-send').disabled=true;
+    try{const res=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient_id:otherId,text})});
+    const d=await res.json();
+    if(d.success){loadMessages();loadConversations();}
+    }catch(e){}
+    document.getElementById('msg-send').disabled=false;
+}
+
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+if(otherId){
+    document.getElementById('msg-empty').style.display='none';
+    document.getElementById('msg-scroll').style.display='flex';
+    document.getElementById('msg-footer').style.display='flex';
+    loadMessages();
+}
+document.getElementById('msg-send').addEventListener('click',sendMessage);
+document.getElementById('msg-input').addEventListener('keypress',e=>{if(e.key==='Enter')sendMessage();});
+loadConversations();
+setInterval(()=>{if(otherId)loadMessages();},2000);
+</script>
+</body>
+</html><?php exit; }
+
 // /profile
 
 // /profile
@@ -2262,6 +2396,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             </div>
             <div class="ok-box" id="bio-ok"></div>
             <div class="err-box" id="bio-err"></div>
+            <!-- Скрытые поля для хранения URL фото перед сохранением -->
+            <input type="hidden" id="avatar-pending-url" value="">
+            <input type="hidden" id="banner-pending-url" value="">
             <button class="save-btn" onclick="saveBio()">💾 Сохранить изменения</button>
         </div>
     </div>
@@ -2323,7 +2460,6 @@ function switchTab(tab){
 async function uploadImage(input, type){
     const file = input.files[0];
     if(!file) return;
-    // statusEl может пропасть после innerHTML, ищем заново или создаём
     let statusEl = document.getElementById(type+'-status');
     if(!statusEl){
         statusEl = document.createElement('div');
@@ -2339,17 +2475,18 @@ async function uploadImage(input, type){
         const res = await fetch('/api/profile/upload-image?type='+type, {method:'POST', body:formData});
         const d = await res.json();
         if(d.success){
-            statusEl.textContent = '✅ Загружено!';
+            statusEl.textContent = '✅ Загружено! Нажми "Сохранить" чтобы применить';
+            // Сохраняем URL в скрытое поле для последующего сохранения
+            document.getElementById(type+'-pending-url').value = d.url;
             if(type==='avatar'){
                 const zone = document.getElementById('avatar-zone');
-                zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'avatar')"><img class="avatar-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить</div>`;
+                zone.innerHTML = `<input type="file" accept="image/*" id="avatar-input" onchange="uploadImage(this,'avatar')"><img class="avatar-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить</div>`;
             } else {
                 const zone = document.getElementById('banner-zone');
                 zone.style.padding='0';
-                zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'banner')"><img class="img-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить баннер</div>`;
+                zone.innerHTML = `<input type="file" accept="image/*" id="banner-input" onchange="uploadImage(this,'banner')"><img class="img-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить баннер</div>`;
             }
-            showToast('✅ Изображение обновлено!');
-            setTimeout(()=>{statusEl.textContent='';},3000);
+            setTimeout(()=>{statusEl.textContent='';},5000);
         } else {
             statusEl.textContent = '❌ '+(d.error||'Ошибка загрузки');
         }
@@ -2369,11 +2506,23 @@ function pickBannerColor(c){
 async function saveBio(){
     const bio=document.getElementById('cust-bio').value.trim();
     const color=document.getElementById('cust-color').value||'#1a1a2e';
+    const avatarUrl=document.getElementById('avatar-pending-url').value;
+    const bannerUrl=document.getElementById('banner-pending-url').value;
     const ok=document.getElementById('bio-ok');const err=document.getElementById('bio-err');
     ok.classList.remove('show');err.classList.remove('show');
-    const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bio,banner_color:color})});
+    
+    const body={bio,banner_color:color};
+    if(avatarUrl)body.avatar_url=avatarUrl;
+    if(bannerUrl)body.banner_url=bannerUrl;
+    
+    const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
-    if(d.success){ok.textContent='✅ Сохранено!';ok.classList.add('show');showToast('✅ Профиль обновлён!');}
+    if(d.success){
+        ok.textContent='✅ Сохранено!';ok.classList.add('show');
+        document.getElementById('avatar-pending-url').value='';
+        document.getElementById('banner-pending-url').value='';
+        showToast('✅ Профиль обновлён!');
+    }
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 
