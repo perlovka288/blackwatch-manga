@@ -138,25 +138,31 @@ if ($path === '/api/debug-tags') {
 require_once __DIR__ . '/auth.php';
 $currentAccount = getCurrentAccount($pdo); // null если не залогинен
 
-// ===== DEBUG SESSION ENDPOINT (временный) =====
+// ===== DEBUG SESSION ENDPOINT =====
 if ($path === '/api/debug-session') {
     header('Content-Type: application/json');
     $sid = $_COOKIE['bw_session'] ?? '';
     $account = getCurrentAccount($pdo);
     $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-    $sc = 0;
-    $sessionRow = null;
-    $dbNow = null;
+    $sc = 0; $sessionRow = null; $dbNow = null; $joinTest = null;
     try {
         $sc = (int)$pdo->query("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")->fetchColumn();
-        // Ищем именно эту куку в БД
         if ($sid) {
             $sStmt = $pdo->prepare("SELECT s.id, s.account_id, s.expires_at, s.created_at, (s.expires_at > NOW()) as is_valid FROM sessions s WHERE s.id = ?");
             $sStmt->execute([$sid]);
             $sessionRow = $sStmt->fetch();
         }
         $dbNow = $pdo->query("SELECT NOW() as now")->fetchColumn();
+        // Test JOIN directly
+        if ($sid) {
+            try {
+                $jStmt = $pdo->prepare("SELECT a.id, a.username FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.id = ? AND s.expires_at > NOW()");
+                $jStmt->execute([$sid]);
+                $jRow = $jStmt->fetch();
+                $joinTest = $jRow ? ['ok' => true, 'username' => $jRow['username']] : 'JOIN_EMPTY';
+            } catch(Exception $je) { $joinTest = 'JOIN_ERROR: '.$je->getMessage(); }
+        }
     } catch(Exception $e) {}
     echo json_encode([
         'cookie' => $sid ? substr($sid,0,8).'...' : 'NONE',
@@ -167,14 +173,9 @@ if ($path === '/api/debug-session') {
         'forwarded_proto' => $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'not set',
         'active_sessions_db' => $sc,
         'cookies_present' => array_keys($_COOKIE),
-        'this_session_in_db' => $sessionRow ? [
-            'found' => true,
-            'account_id' => $sessionRow['account_id'],
-            'expires_at' => $sessionRow['expires_at'],
-            'created_at' => $sessionRow['created_at'],
-            'is_valid' => $sessionRow['is_valid'],
-        ] : ['found' => false],
+        'this_session_in_db' => $sessionRow ? ['found'=>true,'account_id'=>$sessionRow['account_id'],'expires_at'=>$sessionRow['expires_at'],'is_valid'=>$sessionRow['is_valid']] : ['found'=>false],
         'db_now' => $dbNow,
+        'join_test' => $joinTest,
     ], JSON_PRETTY_PRINT);
     exit;
 }
@@ -1010,7 +1011,7 @@ if ($path==='/api/auth/register' && $_SERVER['REQUEST_METHOD']==='POST') {
 
 // API: Вход
 if ($path==='/api/auth/login' && $_SERVER['REQUEST_METHOD']==='POST') {
-    while (ob_get_level()) ob_end_clean(); // Очищаем буфер чтобы Set-Cookie заголовки прошли
+    while (ob_get_level()) ob_end_clean();
     header('Content-Type: application/json');
     $input    = json_decode(file_get_contents('php://input'), true);
     $login    = strtolower(trim($input['login'] ?? '')); // email или username
@@ -1029,12 +1030,9 @@ if ($path==='/api/auth/login' && $_SERVER['REQUEST_METHOD']==='POST') {
             exit;
         }
         createSession($pdo, (int)$account['id'], $remember);
-        // Дополнительно дублируем куку через header() на случай если setcookie не срабатывает
-        $sid2 = $_COOKIE['bw_session'] ?? '';
-        // setcookie уже вызван внутри createSession, просто убеждаемся что заголовки не отправлены
         echo json_encode(['success'=>true,'username'=>$account['username']]);
     } catch (Exception $e) {
-        echo json_encode(['success'=>false,'error'=>'Ошибка сервера: '.$e->getMessage()]);
+        echo json_encode(['success'=>false,'error'=>'Ошибка сервера']);
     }
     exit;
 }

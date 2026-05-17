@@ -26,15 +26,39 @@ function getCurrentAccount(PDO $pdo): ?array {
         ");
         $stmt->execute([$sessionId]);
         $account = $stmt->fetch();
+        if (!$account) {
+            // Попробуем без JOIN чтобы понять в чём проблема
+            try {
+                $s2 = $pdo->prepare("SELECT account_id FROM sessions WHERE id=? AND expires_at > NOW()");
+                $s2->execute([$sessionId]);
+                $row = $s2->fetch();
+                if ($row) {
+                    $a2 = $pdo->prepare("SELECT * FROM accounts WHERE id=?");
+                    $a2->execute([$row['account_id']]);
+                    $account = $a2->fetch();
+                }
+            } catch(Exception $e2) {}
+        }
         if (!$account) return null;
 
         // Обновляем last_login раз в час чтобы не писать на каждый запрос
         $lastLogin = $account['last_login'] ?? null;
         if (!$lastLogin || (time() - strtotime($lastLogin)) > 3600) {
-            $pdo->prepare("UPDATE accounts SET last_login=NOW() WHERE id=?")->execute([$account['id']]);
+            try { $pdo->prepare("UPDATE accounts SET last_login=NOW() WHERE id=?")->execute([$account['id']]); } catch(Exception $e) {}
         }
         return $account;
     } catch (Exception $e) {
+        // JOIN упал — пробуем fallback без JOIN
+        try {
+            $s2 = $pdo->prepare("SELECT account_id FROM sessions WHERE id=? AND expires_at > NOW()");
+            $s2->execute([$sessionId]);
+            $row = $s2->fetch();
+            if ($row) {
+                $a2 = $pdo->prepare("SELECT * FROM accounts WHERE id=?");
+                $a2->execute([$row['account_id']]);
+                return $a2->fetch() ?: null;
+            }
+        } catch(Exception $e2) {}
         return null;
     }
 }
