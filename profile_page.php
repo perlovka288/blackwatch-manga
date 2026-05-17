@@ -20,7 +20,7 @@ if (preg_match('#^/u(?:ser)?/([a-zA-Z0-9_]{1,50})$#', $path, $m)) {
     $isSelf = $currentAccount && (int)$currentAccount['id'] === $uid;
     $isAdm = $currentAccount && isAccountAdmin($pdo, (int)$currentAccount['id']);
     $privacy = $profile['user']['profile_privacy'] ?? 'public';
-    $canView = ($privacy === 'public');
+    $canView = ($privacy === 'public') || $isSelf || $isAdm;
 
     if ($currentAccount && !$isSelf && $privacy === 'friends') {
         $fStmt = $pdo->prepare("SELECT id FROM friendships WHERE ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)) AND status='accepted'");
@@ -206,6 +206,20 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
                 <a href="/settings" class="btn btn-outline">⚙️ Настройки</a>
             <?php elseif ($currentAccount): ?>
                 <button class="btn btn-msg" onclick="openMessages(<?=$uid?>, '<?=$username?>')">💬 Написать</button>
+                <?php
+                $fsId     = $friendship ? (int)$friendship['id'] : 0;
+                $fsStatus = $friendship['status'] ?? '';
+                $fsIsMine = $friendship && (int)$friendship['requester_id'] === (int)$currentAccount['id'];
+                ?>
+                <?php if (!$friendship): ?>
+                    <button class="btn btn-accent" id="friend-btn" onclick="friendRequest(<?=$uid?>)">+ В друзья</button>
+                <?php elseif ($fsStatus === 'accepted'): ?>
+                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=$fsId?>,'remove')">👥 Удалить</button>
+                <?php elseif ($fsStatus === 'pending' && $fsIsMine): ?>
+                    <button class="btn btn-outline" id="friend-btn" style="color:var(--muted)" onclick="friendAction(<?=$fsId?>,'reject')">⏳ Отменить</button>
+                <?php elseif ($fsStatus === 'pending' && !$fsIsMine): ?>
+                    <button class="btn btn-green" id="friend-btn" onclick="friendAction(<?=$fsId?>,'accept')">✓ Принять</button>
+                <?php endif; ?>
                 <button class="btn <?=$isSubscribed?'btn-green':'btn-accent'?>" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>)">
                     <?=$isSubscribed?'✓ Подписан':'+ Подписаться'?>
                 </button>
@@ -343,6 +357,28 @@ function showToast(msg, dur=2500){const t=document.createElement('div');t.classN
 
 function openMessages(uid, username) {
     window.location.href = '/messages?with=' + uid;
+}
+
+async function friendRequest(targetId) {
+    try {
+        const res = await fetch('/api/friends/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target_id: targetId})
+        });
+        const d = await res.json();
+        if (d.success) { showToast('✅ Запрос отправлен!'); const btn = document.getElementById('friend-btn'); if(btn){btn.textContent='⏳ Отменить';btn.className='btn btn-outline';} }
+        else showToast('❌ ' + (d.error || 'Ошибка'));
+    } catch(e) { showToast('Ошибка'); }
+}
+
+async function friendAction(id, action) {
+    try {
+        await fetch(`/api/friends/${id}/${action}`, {method: 'POST'});
+        const msgs = {accept: '✅ Добавлен в друзья!', reject: 'Отклонено', remove: 'Удалён из друзей'};
+        showToast(msgs[action] || 'OK');
+        setTimeout(() => location.reload(), 800);
+    } catch(e) { showToast('Ошибка'); }
 }
 
 async function toggleSubscribe(targetId) {

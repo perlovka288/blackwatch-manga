@@ -251,9 +251,11 @@ try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS reply_to I
 
 if (preg_match('~^/api/comments/(\d+)$~', $path, $m)) {
     $manga_id = (int)$m[1];
+    // Ensure is_deleted column exists
+    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         try {
-            $stmt = $pdo->prepare("SELECT c.id, c.text, c.created_at, c.reply_to, a.username, a.id as account_id, COALESCE(pc.avatar_url, '') as avatar_url FROM manga_comments c JOIN accounts a ON c.account_id = a.id LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE c.manga_id = ? ORDER BY c.created_at ASC LIMIT 200");
+            $stmt = $pdo->prepare("SELECT c.id, c.text, c.created_at, c.reply_to, a.username, a.id as account_id, COALESCE(pc.avatar_url, '') as avatar_url FROM manga_comments c JOIN accounts a ON c.account_id = a.id LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE c.manga_id = ? AND c.is_deleted = FALSE ORDER BY c.created_at ASC LIMIT 200");
             $stmt->execute([$manga_id]);
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'comments' => $stmt->fetchAll()]);
@@ -285,16 +287,24 @@ if (preg_match('~^/api/comment/(\d+)/delete$~', $path, $m) && $_SERVER['REQUEST_
     header('Content-Type: application/json');
     if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
     $comment_id = (int)$m[1];
+    // Ensure is_deleted column exists
+    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
     try {
-        // Allow delete by comment owner or admin
+        // Allow delete by comment owner or admin (soft delete)
         $isAdmin = isAccountAdmin($pdo, (int)$currentAccount['id']);
         if ($isAdmin) {
-            $pdo->prepare("DELETE FROM manga_comments WHERE id=?")->execute([$comment_id]);
+            $stmt = $pdo->prepare("UPDATE manga_comments SET is_deleted=TRUE WHERE id=? AND is_deleted=FALSE");
+            $stmt->execute([$comment_id]);
         } else {
-            $pdo->prepare("DELETE FROM manga_comments WHERE id=? AND account_id=?")->execute([$comment_id, (int)$currentAccount['id']]);
+            $stmt = $pdo->prepare("UPDATE manga_comments SET is_deleted=TRUE WHERE id=? AND account_id=? AND is_deleted=FALSE");
+            $stmt->execute([$comment_id, (int)$currentAccount['id']]);
         }
-        echo json_encode(['success' => true]);
-    } catch(Exception $e) { echo json_encode(['success' => false]); }
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Нет прав или уже удалён']);
+        }
+    } catch(Exception $e) { echo json_encode(['success' => false, 'error' => $e->getMessage()]); }
     exit;
 }
 
@@ -1470,7 +1480,12 @@ if ($path==='/api/friends/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     if (!$account) { echo json_encode(['success'=>false,'error'=>'Не авторизован']); exit; }
     $input = json_decode(file_get_contents('php://input'), true);
     $username = trim($input['username'] ?? '');
-    $target = $pdo->prepare("SELECT id FROM accounts WHERE username=?"); $target->execute([$username]); $row = $target->fetch();
+    $targetId = (int)($input['target_id'] ?? 0);
+    if ($targetId) {
+        $target = $pdo->prepare("SELECT id FROM accounts WHERE id=?"); $target->execute([$targetId]); $row = $target->fetch();
+    } else {
+        $target = $pdo->prepare("SELECT id FROM accounts WHERE username=?"); $target->execute([$username]); $row = $target->fetch();
+    }
     if (!$row) { echo json_encode(['success'=>false,'error'=>'Пользователь не найден']); exit; }
     $tid = (int)$row['id']; $aid = (int)$account['id'];
     if ($tid === $aid) { echo json_encode(['success'=>false,'error'=>'Нельзя добавить себя']); exit; }
