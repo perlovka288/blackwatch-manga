@@ -100,7 +100,37 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 session_start();
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
 
-// ===== АВТОРИЗАЦИЯ =====
+// ===== DEBUG: проверка таблиц тегов/жанров =====
+if ($path === '/api/debug-tags') {
+    header('Content-Type: application/json');
+    try {
+        $tagCount = (int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
+        $genreCount = (int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
+        $tags = $pdo->query("SELECT * FROM tags ORDER BY id LIMIT 5")->fetchAll();
+        $genres = $pdo->query("SELECT * FROM genres ORDER BY id LIMIT 5")->fetchAll();
+        // Попробуем вставить если пусто
+        $seeded = false;
+        if ($tagCount === 0) {
+            $pdo->exec("INSERT INTO tags (name, slug, is_nsfw) VALUES ('Реинкарнация','reincarnation',false),('Система','system',false),('Экшен','action',false) ON CONFLICT DO NOTHING");
+            $seeded = true;
+        }
+        if ($genreCount === 0) {
+            $pdo->exec("INSERT INTO genres (name, slug) VALUES ('Экшен','action'),('Романтика','romance'),('Фэнтези','fantasy') ON CONFLICT DO NOTHING");
+            $seeded = true;
+        }
+        echo json_encode([
+            'tag_count' => $tagCount,
+            'genre_count' => $genreCount,
+            'tags_sample' => $tags,
+            'genres_sample' => $genres,
+            'auto_seeded' => $seeded,
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 require_once __DIR__ . '/auth.php';
 $currentAccount = getCurrentAccount($pdo); // null если не залогинен
 
@@ -720,11 +750,28 @@ if ($path==='/api/admin/archive'){header('Content-Type: application/json');$user
 if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$limit=10;$offset=$page*$limit;if($q){$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute(["%$q%"]);$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");$cStmt->execute(["%$q%"]);}else{$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute();$cStmt=$pdo->query("SELECT COUNT(*) FROM manga");}echo json_encode(['items'=>$stmt->fetchAll(),'total'=>(int)$cStmt->fetchColumn()]);exit;}
 
 
-// API: Get genres and tags lists
+// API: Get genres and tags lists — с авто-сидом если пусто
 if ($path==='/api/genres'){header('Content-Type: application/json');
-    try{$genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll();
-    $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll();
-    echo json_encode(['genres'=>$genres,'tags'=>$tags]);}catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[]]);}exit;}
+    try{
+        $tagCount=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
+        $genreCount=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
+        // Авто-сид если таблицы пустые
+        if($tagCount===0){
+            $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
+            $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT DO NOTHING");
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
+        }
+        if($genreCount===0){
+            $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
+            $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
+            foreach($genresData as $g)$gIns->execute($g);
+        }
+        $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll();
+        $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll();
+        echo json_encode(['genres'=>$genres,'tags'=>$tags]);
+    }catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);}exit;
+}
+
 
 // API: Update manga genres/tags (admin)
 if (preg_match('#^/api/admin/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$genreIds=$input['genre_ids']??[];$tagIds=$input['tag_ids']??[];
