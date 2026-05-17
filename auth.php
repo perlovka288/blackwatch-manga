@@ -116,7 +116,7 @@ function createSession(PDO $pdo, int $accountId, bool $remember = true): void {
         'path'     => '/',
         'httponly' => true,
         'samesite' => 'Lax',
-        // 'secure' => true,  // раскомментить если HTTPS
+        'secure' => true,
     ];
     setcookie('bw_session', $sessionId, $cookieOptions);
 }
