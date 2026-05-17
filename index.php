@@ -1235,13 +1235,19 @@ if (preg_match('#^/api/profile/view/([a-zA-Z0-9_]+)$#',$path,$m) && $_SERVER['RE
         'custom'=>$custom
     ];
     if ($canView) {
-        // Stats
+        // Stats — всегда публичные
         $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
         $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
         $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
         // Library items
         $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
         $libStmt->execute([$tid]);$data['library']=$libStmt->fetchAll();
+    } else {
+        // Даже для приватных профилей — показываем базовую статистику
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
+        $data['library'] = []; // библиотека скрыта
     }
     // Friends list (only if can_view or public)
     $fListStmt=$pdo->prepare("SELECT a.username,pc.avatar_url,f.status FROM friendships f JOIN accounts a ON (CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END)=a.id LEFT JOIN profile_customizations pc ON pc.account_id=a.id WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted' LIMIT 20");
@@ -2317,7 +2323,15 @@ function switchTab(tab){
 async function uploadImage(input, type){
     const file = input.files[0];
     if(!file) return;
-    const statusEl = document.getElementById(type+'-status');
+    // statusEl может пропасть после innerHTML, ищем заново или создаём
+    let statusEl = document.getElementById(type+'-status');
+    if(!statusEl){
+        statusEl = document.createElement('div');
+        statusEl.id = type+'-status';
+        statusEl.className = 'upload-status';
+        const zone = document.getElementById(type+'-zone');
+        if(zone && zone.parentNode) zone.parentNode.insertBefore(statusEl, zone.nextSibling);
+    }
     statusEl.textContent = '⏳ Загружаю...';
     const formData = new FormData();
     formData.append('image', file);
@@ -2335,8 +2349,9 @@ async function uploadImage(input, type){
                 zone.innerHTML = `<input type="file" accept="image/*" onchange="uploadImage(this,'banner')"><img class="img-preview" src="${d.url}" alt=""><div class="upload-overlay">📷 Изменить баннер</div>`;
             }
             showToast('✅ Изображение обновлено!');
+            setTimeout(()=>{statusEl.textContent='';},3000);
         } else {
-            statusEl.textContent = '❌ '+d.error;
+            statusEl.textContent = '❌ '+(d.error||'Ошибка загрузки');
         }
     } catch(e){statusEl.textContent = '❌ Ошибка загрузки';}
 }
@@ -2625,10 +2640,8 @@ async function removeFriend(id){
 
 // Открыть новый чат с пользователем
 function openMsgToUser(userId, username) {
-    // Redirect to main page and open chat with this user
-    // Store pending chat in sessionStorage
-    sessionStorage.setItem('openChatWith', JSON.stringify({id: userId, username: username}));
-    window.location.href = '/';
+    openMessagesModal();
+    setTimeout(() => openDialog(userId, username), 150);
 }
 
 </script>
@@ -4631,10 +4644,10 @@ async function openEditManga(mangaId){
     document.getElementById('edit-manga-form').innerHTML=`
         <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
         <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
-        ${genresHtml}${tagsHtml}
         <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
         <div class="ef"><label>URL обложки</label><input type="text" id="ef-cover" value="${escapeHtml(manga.cover_imgbb_url||'')}"></div>
         ${manga.cover_imgbb_url?`<img src="${escapeHtml(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-bottom:9px">`:''}
+        ${genresHtml}${tagsHtml}
         ${chaptersHtml}
         <div class="edit-actions">
             <button class="save-btn" onclick="saveMangaEdit(${mangaId})">💾 Сохранить</button>
