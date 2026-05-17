@@ -121,14 +121,17 @@ function createSession(PDO $pdo, int $accountId, bool $remember = true): void {
         || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
         || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
 
-    $cookieOptions = [
-        'expires'  => time() + 86400 * $days,
+    $expires = time() + 86400 * $days;
+    $secureFlag = $isSecure ? '; Secure' : '';
+    // header() напрямую — единственный надёжный способ на Render с ob_start()
+    header('Set-Cookie: bw_session=' . $sessionId . '; Path=/; HttpOnly; SameSite=Lax; Expires=' . gmdate('D, d M Y H:i:s T', $expires) . $secureFlag, false);
+    setcookie('bw_session', $sessionId, [
+        'expires'  => $expires,
         'path'     => '/',
         'httponly' => true,
         'samesite' => 'Lax',
         'secure'   => $isSecure,
-    ];
-    setcookie('bw_session', $sessionId, $cookieOptions);
+    ]);
 }
 
 /**

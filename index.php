@@ -951,6 +951,7 @@ if ($path==='/api/admin/admins'){header('Content-Type: application/json');if(!is
 
 // API: Регистрация
 if ($path==='/api/auth/register' && $_SERVER['REQUEST_METHOD']==='POST') {
+    while (ob_get_level()) ob_end_clean();
     header('Content-Type: application/json');
     $input = json_decode(file_get_contents('php://input'), true);
     $email    = strtolower(trim($input['email'] ?? ''));
@@ -990,6 +991,7 @@ if ($path==='/api/auth/register' && $_SERVER['REQUEST_METHOD']==='POST') {
 
 // API: Вход
 if ($path==='/api/auth/login' && $_SERVER['REQUEST_METHOD']==='POST') {
+    while (ob_get_level()) ob_end_clean(); // Очищаем буфер чтобы Set-Cookie заголовки прошли
     header('Content-Type: application/json');
     $input    = json_decode(file_get_contents('php://input'), true);
     $login    = strtolower(trim($input['login'] ?? '')); // email или username
@@ -1008,9 +1010,12 @@ if ($path==='/api/auth/login' && $_SERVER['REQUEST_METHOD']==='POST') {
             exit;
         }
         createSession($pdo, (int)$account['id'], $remember);
+        // Дополнительно дублируем куку через header() на случай если setcookie не срабатывает
+        $sid2 = $_COOKIE['bw_session'] ?? '';
+        // setcookie уже вызван внутри createSession, просто убеждаемся что заголовки не отправлены
         echo json_encode(['success'=>true,'username'=>$account['username']]);
     } catch (Exception $e) {
-        echo json_encode(['success'=>false,'error'=>'Ошибка сервера']);
+        echo json_encode(['success'=>false,'error'=>'Ошибка сервера: '.$e->getMessage()]);
     }
     exit;
 }
