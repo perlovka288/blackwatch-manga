@@ -3878,10 +3878,10 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
     </div>
     <!-- GENRE/TAG FILTER PANEL -->
     <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Жанры</div>
-        <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px"></div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Теги</div>
-        <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"></div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🎭 Жанры</div>
+        <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;max-height:100px;overflow-y:auto"></div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🏷 Теги</div>
+        <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
         <button onclick="clearGenreFilter()" style="padding:5px 13px;background:transparent;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">✕ Сбросить</button>
     </div>
     <div class="grid" id="grid"></div>
@@ -4149,8 +4149,10 @@ async function toggleGenreFilter(){
     const panel=document.getElementById('genre-filter-panel');
     const isOpen=panel.style.display!=='none';
     panel.style.display=isOpen?'none':'block';
-    if(!isOpen&&!_genreTagsData){
-        try{const res=await fetch('/api/genres');_genreTagsData=await res.json();}catch(e){}
+    if(!isOpen){
+        if(!_genreTagsData){
+            try{const res=await fetch('/api/genres');_genreTagsData=await res.json();}catch(e){}
+        }
         renderGenreFilterPanel();
     }
 }
@@ -4425,8 +4427,8 @@ async function openEditManga(mangaId){
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allGenres=gd.genres||[];allTags=gd.tags||[];}catch(e){}
     try{const mgr=await fetch(`/api/manga/${mangaId}/genres`);const mgd=await mgr.json();
     mgd.genres?.forEach(g=>mangaGenreIds.add(g.id));mgd.tags?.forEach(t=>mangaTagIds.add(t.id));}catch(e){}
-    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'var(--card2)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'var(--card2)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--card2)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:140px;overflow-y:auto;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
     document.getElementById('edit-manga-form').innerHTML=`
         <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
         <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
