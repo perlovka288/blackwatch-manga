@@ -802,7 +802,7 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $slug=trim($input['slug']??'');
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?)")->execute([$name,$slug]);
+    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$name,$slug]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
