@@ -146,7 +146,18 @@ if ($path === '/api/debug-session') {
     $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
     $sc = 0;
-    try { $sc = (int)$pdo->query("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")->fetchColumn(); } catch(Exception $e) {}
+    $sessionRow = null;
+    $dbNow = null;
+    try {
+        $sc = (int)$pdo->query("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")->fetchColumn();
+        // Ищем именно эту куку в БД
+        if ($sid) {
+            $sStmt = $pdo->prepare("SELECT s.id, s.account_id, s.expires_at, s.created_at, (s.expires_at > NOW()) as is_valid FROM sessions s WHERE s.id = ?");
+            $sStmt->execute([$sid]);
+            $sessionRow = $sStmt->fetch();
+        }
+        $dbNow = $pdo->query("SELECT NOW() as now")->fetchColumn();
+    } catch(Exception $e) {}
     echo json_encode([
         'cookie' => $sid ? substr($sid,0,8).'...' : 'NONE',
         'cookie_len' => strlen($sid),
@@ -156,6 +167,14 @@ if ($path === '/api/debug-session') {
         'forwarded_proto' => $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'not set',
         'active_sessions_db' => $sc,
         'cookies_present' => array_keys($_COOKIE),
+        'this_session_in_db' => $sessionRow ? [
+            'found' => true,
+            'account_id' => $sessionRow['account_id'],
+            'expires_at' => $sessionRow['expires_at'],
+            'created_at' => $sessionRow['created_at'],
+            'is_valid' => $sessionRow['is_valid'],
+        ] : ['found' => false],
+        'db_now' => $dbNow,
     ], JSON_PRETTY_PRINT);
     exit;
 }
