@@ -819,8 +819,29 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
     }catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
+// API: Удаление дублей жанров (оставляет первый по id)
+if ($path==='/api/admin/dedup-genres' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    try{
+        // Удалить дубли жанров — оставить минимальный id по каждому slug
+        $pdo->exec("DELETE FROM manga_genres WHERE genre_id NOT IN (SELECT MIN(id) FROM genres GROUP BY slug)");
+        $pdo->exec("DELETE FROM genres WHERE id NOT IN (SELECT MIN(id) FROM genres GROUP BY slug)");
+        // То же для тегов
+        $pdo->exec("DELETE FROM manga_tags WHERE tag_id NOT IN (SELECT MIN(id) FROM tags GROUP BY slug)");
+        $pdo->exec("DELETE FROM tags WHERE id NOT IN (SELECT MIN(id) FROM tags GROUP BY slug)");
+        $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
+        $gc=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
+        echo json_encode(['success'=>true,'tags'=>$tc,'genres'=>$gc]);
+    }catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
+
 // API: Get genres and tags lists — с авто-сидом если пусто
-if ($path==='/api/genres'){header('Content-Type: application/json');
+if ($path==='/api/genres'){
+    ob_clean(); // сбросить всё что могло попасть в буфер
+    header('Content-Type: application/json; charset=utf-8');
     try{
         $tagCount=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
         $genreCount=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
@@ -837,7 +858,7 @@ if ($path==='/api/genres'){header('Content-Type: application/json');
         }
         $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll();
         $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll();
-        echo json_encode(['genres'=>$genres,'tags'=>$tags]);
+        echo json_encode(['genres'=>$genres,'tags'=>$tags,'tag_count'=>count($tags),'genre_count'=>count($genres)]);
     }catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);}exit;
 }
 
@@ -4256,10 +4277,11 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
             </div>
 
         </div>
-        <!-- Кнопка сида всех дефолтных тегов -->
+        <!-- Кнопки внизу -->
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
-            <span style="font-size:11px;color:var(--muted)">Добавит стандартные теги/жанры если их нет (ON CONFLICT DO NOTHING)</span>
+            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.2)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
+            <button onclick="dedupTagsGenres()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🧹 Удалить дубли</button>
+            <span style="font-size:11px;color:var(--muted)">Если жанров больше 15 или тегов больше 54 — нажми «Удалить дубли»</span>
         </div>
     </div>
 
@@ -4648,13 +4670,14 @@ async function submitChapter(){
 // ===== TAGS & GENRES ADMIN PANEL =====
 async function loadTagsPanel(){
     try{
-        const res=await fetch('/api/genres');
+        const res=await fetch('/api/genres?_='+Date.now()); // cache bust
         const data=await res.json();
+        console.log('[TagsPanel] genres:', data.genres?.length, 'tags:', data.tags?.length, data);
         renderGenreManageList(data.genres||[]);
         renderTagManageList(data.tags||[]);
         document.getElementById('genre-count-badge').textContent=data.genres?.length||0;
         document.getElementById('tag-count-badge').textContent=data.tags?.length||0;
-    }catch(e){showToast('❌ Ошибка загрузки');}
+    }catch(e){showToast('❌ Ошибка загрузки: '+e.message);console.error('[TagsPanel]',e);}
 }
 function renderGenreManageList(genres){
     const el=document.getElementById('genres-manage-list');
@@ -4719,12 +4742,29 @@ async function deleteTag(id,btn){
         else showToast('❌ '+(data.error||'Ошибка'));
     }catch(e){showToast('❌ Ошибка');btn.disabled=false;}
 }
+async function dedupTagsGenres(){
+    if(!confirm('Удалить дубли жанров и тегов? Оставит первый вариант каждого.'))return;
+    try{
+        const res=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){
+            _genreTagsData=null;
+            showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);
+            setTimeout(()=>loadTagsPanel(), 300);
+        } else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
 async function reseedAllTags(){
     if(!confirm('Загрузить все стандартные теги и жанры? Дубли не добавятся.'))return;
     try{
         const res=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});
         const data=await res.json();
-        if(data.success){showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);_genreTagsData=null;loadTagsPanel();}
+        if(data.success){
+            _genreTagsData=null; // сбросить кеш
+            showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);
+            // Подождать и перезагрузить
+            setTimeout(()=>loadTagsPanel(), 300);
+        }
         else showToast('❌ '+(data.error||'Ошибка'));
     }catch(e){showToast('❌ Ошибка');}
 }
