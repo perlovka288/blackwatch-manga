@@ -780,7 +780,7 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $isNsfw=!empty($input['is_nsfw']);
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?)")->execute([$name,$slug,$isNsfw?'true':'false']);
+    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?true:false]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
@@ -822,9 +822,9 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
     try{
         $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
-        $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT DO NOTHING");
-        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
-        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
+        $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name, is_nsfw=EXCLUDED.is_nsfw");
+        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?true:false]);
+        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name");
         foreach($genresData as $g)$gIns->execute($g);
         $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
         $gc=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
@@ -855,17 +855,23 @@ if ($path==='/api/genres'){
     header('Content-Type: application/json; charset=utf-8');
     try{
         $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        // Правильный каст is_nsfw в bool (PostgreSQL возвращает 't'/'f' или '1'/'0')
+        $tags=array_map(function($t){
+            $t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);
+            return $t;
+        },$tagsRaw);
         // Авто-сид если пусто
         if(empty($tags)){
             $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
-            $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT DO NOTHING");
-            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
-            $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING");
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?true:false]);
+            $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            $tags=array_map(function($t){$t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);return $t;},$tagsRaw);
         }
         if(empty($genres)){
             $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
-            $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
+            $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO NOTHING");
             foreach($genresData as $g)$gIns->execute($g);
             $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
         }
@@ -4684,9 +4690,9 @@ async function submitChapter(){
 // ===== TAGS & GENRES ADMIN PANEL =====
 async function loadTagsPanel(){
     try{
-        const res=await fetch('/api/genres?_='+Date.now()); // cache bust
+        const res=await fetch('/api/genres?_='+Date.now());
         const data=await res.json();
-        console.log('[TagsPanel] genres:', data.genres?.length, 'tags:', data.tags?.length, data);
+        if(data.error){showToast('❌ Ошибка API: '+data.error);console.error('[TagsPanel] error:',data.error);}
         renderGenreManageList(data.genres||[]);
         renderTagManageList(data.tags||[]);
         document.getElementById('genre-count-badge').textContent=data.genres?.length||0;
