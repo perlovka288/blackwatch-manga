@@ -188,6 +188,29 @@ function isAccountAdmin($pdo, $accountId) {
     } catch(Exception $e) { return false; }
 }
 
+/**
+ * Универсальная проверка прав админа — проверяет ВСЕ способы авторизации:
+ * 1) Веб-аккаунт с is_admin=TRUE
+ * 2) TG ID веб-аккаунта в hardcodedAdmins
+ * 3) TG ID из куки/GET-параметра в hardcodedAdmins
+ */
+function isAdminCombined(PDO $pdo, array $hardcodedAdmins): bool {
+    // 1. Веб-сессия (аккаунт)
+    $acc = getCurrentAccount($pdo);
+    if ($acc) {
+        if (!empty($acc['is_admin'])) return true;
+        if (!empty($acc['tg_user_id']) && in_array((int)$acc['tg_user_id'], $hardcodedAdmins)) return true;
+    }
+    // 2. TG из куки / сессии
+    $userId = getEffectiveUserId($pdo);
+    if ($userId && in_array((int)$userId, $hardcodedAdmins)) return true;
+    // 3. Прямой GET-параметр tg_user_id (совместимость с JS ?tg_user_id=...)
+    if (!empty($_GET['tg_user_id']) && is_numeric($_GET['tg_user_id'])) {
+        if (in_array((int)$_GET['tg_user_id'], $hardcodedAdmins)) return true;
+    }
+    return false;
+}
+
 $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
 
 // getEffectiveUserId теперь из auth.php — совместимая обёртка
@@ -497,22 +520,17 @@ function extractImgFromContent($nodes){
 
 if ($path==='/api/check-admin'){
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    $isAdm=isAdmin($userId,$hardcodedAdmins);
-    // Also check account-based admin flag
-    if(!$isAdm){
-        $accChk=getCurrentAccount($pdo);
-        if($accChk&&!empty($accChk['is_admin']))$isAdm=true;
-    }
+    $isAdm = isAdminCombined($pdo, $hardcodedAdmins);
+    $userId = getEffectiveUserId($pdo);
     echo json_encode(['is_admin'=>$isAdm,'user_id'=>$userId]);exit;
 }
 
-if ($path==='/api/imgbb-keys'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'keys'=>[]]);exit;}echo json_encode(['success'=>true,'keys'=>$imgbbKeys]);exit;}
+if ($path==='/api/imgbb-keys'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'keys'=>[]]);exit;}echo json_encode(['success'=>true,'keys'=>$imgbbKeys]);exit;}
 
 if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
     header('Content-Type: application/json');
     try{
-        $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+        if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);
         $input=json_decode(file_get_contents('php://input'),true);
         $title=trim($input['title']??'');$description=trim($input['description']??'');$coverUrl=trim($input['cover_url']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));$isSeries=!empty($input['is_series']);
         if(!$title){echo json_encode(['success'=>false,'error'=>'Название обязательно']);exit;}
@@ -538,7 +556,7 @@ if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
 if ($path==='/api/save-chapter'&&$_SERVER['REQUEST_METHOD']==='POST'){
     header('Content-Type: application/json');
     try{
-        $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+        if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);
         $input=json_decode(file_get_contents('php://input'),true);$mangaId=(int)($input['manga_id']??0);$chapterNum=(float)($input['chapter_num']??1);$chTitle=trim($input['chapter_title']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));
         if(!$mangaId){echo json_encode(['success'=>false,'error'=>'Не указан manga_id']);exit;}
         $mangaStmt=$pdo->prepare("SELECT title FROM manga WHERE id=?");$mangaStmt->execute([$mangaId]);$manga=$mangaStmt->fetch();
@@ -729,7 +747,7 @@ if ($path==='/api/admin/messages'&&$_SERVER['REQUEST_METHOD']==='GET'){
 
 if ($path==='/api/admin/messages/send'&&$_SERVER['REQUEST_METHOD']==='POST'){
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);
     $input=json_decode(file_get_contents('php://input'),true);$text=trim($input['text']??'');
     if(!$text){echo json_encode(['success'=>false,'error'=>'Пустое сообщение']);exit;}
     $pdo->prepare("INSERT INTO admin_messages (text,sent_by) VALUES (?,?)")->execute([$text,$userId]);
@@ -738,16 +756,16 @@ if ($path==='/api/admin/messages/send'&&$_SERVER['REQUEST_METHOD']==='POST'){
 
 if (preg_match('#^/api/admin/messages/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}
     $pdo->prepare("UPDATE admin_messages SET is_deleted=TRUE WHERE id=?")->execute([(int)$m[1]]);
     echo json_encode(['success'=>true]);exit;
 }
 
-if ($path==='/api/admin/stats'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mangaCount=(int)$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();$usersCount=(int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();$votesCount=(int)$pdo->query("SELECT COUNT(*) FROM votes")->fetchColumn();$pagesCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_pages")->fetchColumn();$chaptersCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_chapters")->fetchColumn();$newToday=(int)$pdo->query("SELECT COUNT(*) FROM manga WHERE created_at>=NOW()-INTERVAL '24 hours'")->fetchColumn();$topManga=$pdo->query("SELECT title,likes FROM manga ORDER BY likes DESC LIMIT 5")->fetchAll();$suggestCount=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='new'")->fetchColumn();$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();echo json_encode(['manga_count'=>$mangaCount,'users_count'=>$usersCount,'votes_count'=>$votesCount,'pages_count'=>$pagesCount,'chapters_count'=>$chaptersCount,'new_today'=>$newToday,'top_manga'=>$topManga,'suggest_count'=>$suggestCount,'msg_count'=>$msgCount]);exit;}
+if ($path==='/api/admin/stats'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mangaCount=(int)$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();$usersCount=(int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();$votesCount=(int)$pdo->query("SELECT COUNT(*) FROM votes")->fetchColumn();$pagesCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_pages")->fetchColumn();$chaptersCount=(int)$pdo->query("SELECT COUNT(*) FROM manga_chapters")->fetchColumn();$newToday=(int)$pdo->query("SELECT COUNT(*) FROM manga WHERE created_at>=NOW()-INTERVAL '24 hours'")->fetchColumn();$topManga=$pdo->query("SELECT title,likes FROM manga ORDER BY likes DESC LIMIT 5")->fetchAll();$suggestCount=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='new'")->fetchColumn();$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();echo json_encode(['manga_count'=>$mangaCount,'users_count'=>$usersCount,'votes_count'=>$votesCount,'pages_count'=>$pagesCount,'chapters_count'=>$chaptersCount,'new_today'=>$newToday,'top_manga'=>$topManga,'suggest_count'=>$suggestCount,'msg_count'=>$msgCount]);exit;}
 
-if ($path==='/api/admin/archive'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$limit=20;$offset=$page*$limit;$total=(int)$pdo->query("SELECT COUNT(*) FROM bot_archive")->fetchColumn();$stmt=$pdo->prepare("SELECT * FROM bot_archive ORDER BY created_at DESC LIMIT $limit OFFSET $offset");$stmt->execute();echo json_encode(['items'=>$stmt->fetchAll(),'total'=>$total,'page'=>$page]);exit;}
+if ($path==='/api/admin/archive'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$limit=20;$offset=$page*$limit;$total=(int)$pdo->query("SELECT COUNT(*) FROM bot_archive")->fetchColumn();$stmt=$pdo->prepare("SELECT * FROM bot_archive ORDER BY created_at DESC LIMIT $limit OFFSET $offset");$stmt->execute();echo json_encode(['items'=>$stmt->fetchAll(),'total'=>$total,'page'=>$page]);exit;}
 
-if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$limit=10;$offset=$page*$limit;if($q){$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute(["%$q%"]);$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");$cStmt->execute(["%$q%"]);}else{$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute();$cStmt=$pdo->query("SELECT COUNT(*) FROM manga");}echo json_encode(['items'=>$stmt->fetchAll(),'total'=>(int)$cStmt->fetchColumn()]);exit;}
+if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$limit=10;$offset=$page*$limit;if($q){$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute(["%$q%"]);$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");$cStmt->execute(["%$q%"]);}else{$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute();$cStmt=$pdo->query("SELECT COUNT(*) FROM manga");}echo json_encode(['items'=>$stmt->fetchAll(),'total'=>(int)$cStmt->fetchColumn()]);exit;}
 
 
 // ===== API: ADMIN TAGS/GENRES CRUD =====
@@ -755,9 +773,7 @@ if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$u
 // Добавить тег
 if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав','uid'=>$userId,'admins'=>$hardcodedAdmins]);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
@@ -771,9 +787,7 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
 // Удалить тег
 if (preg_match('#^/api/admin/tags/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{$pdo->prepare("DELETE FROM manga_tags WHERE tag_id=?")->execute([(int)$m[1]]);
     $pdo->prepare("DELETE FROM tags WHERE id=?")->execute([(int)$m[1]]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
@@ -782,9 +796,7 @@ if (preg_match('#^/api/admin/tags/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST
 // Добавить жанр
 if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
@@ -797,9 +809,7 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
 // Удалить жанр
 if (preg_match('#^/api/admin/genres/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{$pdo->prepare("DELETE FROM manga_genres WHERE genre_id=?")->execute([(int)$m[1]]);
     $pdo->prepare("DELETE FROM genres WHERE id=?")->execute([(int)$m[1]]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
@@ -808,8 +818,7 @@ if (preg_match('#^/api/admin/genres/(\d+)/delete$#',$path,$m) && $_SERVER['REQUE
 // Сид всех тегов и жанров (принудительный)
 if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{
         $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
@@ -826,8 +835,7 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
 // API: Удаление дублей жанров (оставляет первый по id)
 if ($path==='/api/admin/dedup-genres' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
-    $userId=getEffectiveUserId($pdo);
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{
         // Удалить дубли жанров — оставить минимальный id по каждому slug
         $pdo->exec("DELETE FROM manga_genres WHERE genre_id NOT IN (SELECT MIN(id) FROM genres GROUP BY slug)");
@@ -870,7 +878,7 @@ if ($path==='/api/genres'){
 
 
 // API: Update manga genres/tags (admin)
-if (preg_match('#^/api/admin/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$genreIds=$input['genre_ids']??[];$tagIds=$input['tag_ids']??[];
+if (preg_match('#^/api/admin/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$genreIds=$input['genre_ids']??[];$tagIds=$input['tag_ids']??[];
     try{$pdo->prepare("DELETE FROM manga_genres WHERE manga_id=?")->execute([$mId]);
     $pdo->prepare("DELETE FROM manga_tags WHERE manga_id=?")->execute([$mId]);
     foreach($genreIds as $gid){try{$pdo->prepare("INSERT INTO manga_genres(manga_id,genre_id)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$mId,(int)$gid]);}catch(Exception $e){}}
@@ -882,19 +890,19 @@ if (preg_match('#^/api/manga/(\\d+)/genres$#',$path,$m)&&$_SERVER['REQUEST_METHO
     try{$genres=$pdo->prepare("SELECT g.id,g.name,g.slug FROM genres g JOIN manga_genres mg ON g.id=mg.genre_id WHERE mg.manga_id=? ORDER BY g.name");$genres->execute([$mId]);
     $tags=$pdo->prepare("SELECT t.id,t.name,t.slug,t.is_nsfw FROM tags t JOIN manga_tags mt ON t.id=mt.tag_id WHERE mt.manga_id=? ORDER BY t.name");$tags->execute([$mId]);
     echo json_encode(['genres'=>$genres->fetchAll(),'tags'=>$tags->fetchAll()]);}catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[]]);}exit;}
-if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='GET'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$stmt=$pdo->prepare("SELECT * FROM manga WHERE id=?");$stmt->execute([$mId]);$manga=$stmt->fetch();if(!$manga){echo json_encode(['error'=>'Не найдено']);exit;}$chapters=[];if($manga['is_series']){$chStmt=$pdo->prepare("SELECT id,chapter_num,title,created_at FROM manga_chapters WHERE manga_id=? ORDER BY chapter_num ASC");$chStmt->execute([$mId]);$chapters=$chStmt->fetchAll();}$manga['chapters']=$chapters;echo json_encode($manga);exit;}
+if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='GET'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$stmt=$pdo->prepare("SELECT * FROM manga WHERE id=?");$stmt->execute([$mId]);$manga=$stmt->fetch();if(!$manga){echo json_encode(['error'=>'Не найдено']);exit;}$chapters=[];if($manga['is_series']){$chStmt=$pdo->prepare("SELECT id,chapter_num,title,created_at FROM manga_chapters WHERE manga_id=? ORDER BY chapter_num ASC");$chStmt->execute([$mId]);$chapters=$chStmt->fetchAll();}$manga['chapters']=$chapters;echo json_encode($manga);exit;}
 
-if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$allowed=['title','description','telegraph_url','cover_imgbb_url'];$updates=[];$values=[];foreach($allowed as $field){if(isset($input[$field])){$updates[]="$field=?";$values[]=$input[$field];}}if(empty($updates)){echo json_encode(['success'=>false,'error'=>'Нечего обновлять']);exit;}$values[]=$mId;$pdo->prepare("UPDATE manga SET ".implode(', ',$updates)." WHERE id=?")->execute($values);logArchiveEntry($pdo,'edit_manga',"Отредактирована манга ID: $mId (через сайт)",$userId);echo json_encode(['success'=>true]);exit;}
+if (preg_match('#^/api/admin/manga/(\d+)$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);$mId=(int)$m[1];$input=json_decode(file_get_contents('php://input'),true);$allowed=['title','description','telegraph_url','cover_imgbb_url'];$updates=[];$values=[];foreach($allowed as $field){if(isset($input[$field])){$updates[]="$field=?";$values[]=$input[$field];}}if(empty($updates)){echo json_encode(['success'=>false,'error'=>'Нечего обновлять']);exit;}$values[]=$mId;$pdo->prepare("UPDATE manga SET ".implode(', ',$updates)." WHERE id=?")->execute($values);logArchiveEntry($pdo,'edit_manga',"Отредактирована манга ID: $mId (через сайт)",$userId);echo json_encode(['success'=>true]);exit;}
 
-if (preg_match('#^/api/admin/manga/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$mId=(int)$m[1];$titleStmt=$pdo->prepare("SELECT title FROM manga WHERE id=?");$titleStmt->execute([$mId]);$row=$titleStmt->fetch();$pdo->prepare("DELETE FROM manga WHERE id=?")->execute([$mId]);$pdo->prepare("DELETE FROM manga_pages WHERE manga_id=?")->execute([$mId]);$pdo->prepare("DELETE FROM manga_chapters WHERE manga_id=?")->execute([$mId]);logArchiveEntry($pdo,'delete_manga',"Удалена манга: ".($row['title']??"ID $mId"),$userId);echo json_encode(['success'=>true]);exit;}
+if (preg_match('#^/api/admin/manga/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);$mId=(int)$m[1];$titleStmt=$pdo->prepare("SELECT title FROM manga WHERE id=?");$titleStmt->execute([$mId]);$row=$titleStmt->fetch();$pdo->prepare("DELETE FROM manga WHERE id=?")->execute([$mId]);$pdo->prepare("DELETE FROM manga_pages WHERE manga_id=?")->execute([$mId]);$pdo->prepare("DELETE FROM manga_chapters WHERE manga_id=?")->execute([$mId]);logArchiveEntry($pdo,'delete_manga',"Удалена манга: ".($row['title']??"ID $mId"),$userId);echo json_encode(['success'=>true]);exit;}
 
-if (preg_match('#^/api/admin/chapter/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$chId=(int)$m[1];$pdo->prepare("DELETE FROM manga_chapters WHERE id=?")->execute([$chId]);$pdo->prepare("DELETE FROM manga_chapter_pages WHERE chapter_id=?")->execute([$chId]);logArchiveEntry($pdo,'delete_chapter',"Удалена глава ID: $chId",$userId);echo json_encode(['success'=>true]);exit;}
+if (preg_match('#^/api/admin/chapter/(\d+)/delete$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);$chId=(int)$m[1];$pdo->prepare("DELETE FROM manga_chapters WHERE id=?")->execute([$chId]);$pdo->prepare("DELETE FROM manga_chapter_pages WHERE chapter_id=?")->execute([$chId]);logArchiveEntry($pdo,'delete_chapter',"Удалена глава ID: $chId",$userId);echo json_encode(['success'=>true]);exit;}
 
-if ($path==='/api/admin/suggestions'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$status=$_GET['status']??'new';$page=max(0,(int)($_GET['page']??0));$limit=15;$offset=$page*$limit;$total=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='".addslashes($status)."'")->fetchColumn();$stmt=$pdo->prepare("SELECT * FROM suggestions WHERE status=? ORDER BY created_at DESC LIMIT $limit OFFSET $offset");$stmt->execute([$status]);echo json_encode(['items'=>$stmt->fetchAll(),'total'=>$total]);exit;}
+if ($path==='/api/admin/suggestions'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$status=$_GET['status']??'new';$page=max(0,(int)($_GET['page']??0));$limit=15;$offset=$page*$limit;$total=(int)$pdo->query("SELECT COUNT(*) FROM suggestions WHERE status='".addslashes($status)."'")->fetchColumn();$stmt=$pdo->prepare("SELECT * FROM suggestions WHERE status=? ORDER BY created_at DESC LIMIT $limit OFFSET $offset");$stmt->execute([$status]);echo json_encode(['items'=>$stmt->fetchAll(),'total'=>$total]);exit;}
 
-if (preg_match('#^/api/admin/suggestions/(\d+)/status$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$input=json_decode(file_get_contents('php://input'),true);$newStatus=$input['status']??'read';$pdo->prepare("UPDATE suggestions SET status=? WHERE id=?")->execute([$newStatus,(int)$m[1]]);echo json_encode(['success'=>true]);exit;}
+if (preg_match('#^/api/admin/suggestions/(\d+)/status$#',$path,$m)&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$input=json_decode(file_get_contents('php://input'),true);$newStatus=$input['status']??'read';$pdo->prepare("UPDATE suggestions SET status=? WHERE id=?")->execute([$newStatus,(int)$m[1]]);echo json_encode(['success'=>true]);exit;}
 
-if ($path==='/api/admin/admins'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$admins=[];foreach($hardcodedAdmins as $id){$tag=null;try{$s=$pdo->prepare("SELECT tag_name FROM admin_tags WHERE user_id=?");$s->execute([$id]);$tag=$s->fetchColumn();}catch(Exception $e){}$admins[]=['user_id'=>$id,'tag'=>$tag?:"ID: $id"];}echo json_encode(['admins'=>$admins]);exit;}
+if ($path==='/api/admin/admins'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$admins=[];foreach($hardcodedAdmins as $id){$tag=null;try{$s=$pdo->prepare("SELECT tag_name FROM admin_tags WHERE user_id=?");$s->execute([$id]);$tag=$s->fetchColumn();}catch(Exception $e){}$admins[]=['user_id'=>$id,'tag'=>$tag?:"ID: $id"];}echo json_encode(['admins'=>$admins]);exit;}
 
 # ========================= AUTH API =========================
 
@@ -3901,7 +3909,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
         <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
         <?php if ($currentAccount): ?>
-        <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins); ?>
+        <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
         <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span></a>
         <?php else: ?>
         <a href="/login" class="hbtn">Войти</a>
