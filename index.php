@@ -193,11 +193,14 @@ if (!function_exists('calculateUserLevel')) {
 }
 
 // API: Комментарии под мангой
+// Add reply_to column to manga_comments if not exists
+try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS reply_to INT DEFAULT NULL"); } catch(Exception $e) {}
+
 if (preg_match('~^/api/comments/(\d+)$~', $path, $m)) {
     $manga_id = (int)$m[1];
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         try {
-            $stmt = $pdo->prepare("SELECT c.id, c.text, c.created_at, a.username, a.id as account_id, COALESCE(pc.avatar_url, '') as avatar_url FROM manga_comments c JOIN accounts a ON c.account_id = a.id LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE c.manga_id = ? ORDER BY c.created_at DESC LIMIT 100");
+            $stmt = $pdo->prepare("SELECT c.id, c.text, c.created_at, c.reply_to, a.username, a.id as account_id, COALESCE(pc.avatar_url, '') as avatar_url FROM manga_comments c JOIN accounts a ON c.account_id = a.id LEFT JOIN profile_customizations pc ON pc.account_id = a.id WHERE c.manga_id = ? ORDER BY c.created_at ASC LIMIT 200");
             $stmt->execute([$manga_id]);
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'comments' => $stmt->fetchAll()]);
@@ -211,9 +214,10 @@ if (preg_match('~^/api/comments/(\d+)$~', $path, $m)) {
         if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
         $input = json_decode(file_get_contents('php://input'), true);
         $text = trim($input['text'] ?? '');
+        $reply_to = isset($input['reply_to']) ? (int)$input['reply_to'] : null;
         if (!$text || strlen($text) > 500) { echo json_encode(['success' => false]); exit; }
         try {
-            $pdo->prepare("INSERT INTO manga_comments (manga_id, account_id, text) VALUES (?, ?, ?)")->execute([$manga_id, $currentAccount['id'], $text]);
+            $pdo->prepare("INSERT INTO manga_comments (manga_id, account_id, text, reply_to) VALUES (?, ?, ?, ?)")->execute([$manga_id, $currentAccount['id'], $text, $reply_to]);
             $pdo->prepare("UPDATE accounts SET user_xp = user_xp + 5 WHERE id = ?")->execute([$currentAccount['id']]);
             calculateUserLevel($pdo, $currentAccount['id']);
             header('Content-Type: application/json');
@@ -221,6 +225,24 @@ if (preg_match('~^/api/comments/(\d+)$~', $path, $m)) {
         } catch (Exception $e) { echo json_encode(['success' => false]); }
         exit;
     }
+}
+
+// API: Delete comment
+if (preg_match('~^/api/comment/(\d+)/delete$~', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!$currentAccount) { http_response_code(401); echo json_encode(['success' => false]); exit; }
+    $comment_id = (int)$m[1];
+    try {
+        // Allow delete by comment owner or admin
+        $isAdmin = isAccountAdmin($pdo, (int)$currentAccount['id']);
+        if ($isAdmin) {
+            $pdo->prepare("DELETE FROM manga_comments WHERE id=?")->execute([$comment_id]);
+        } else {
+            $pdo->prepare("DELETE FROM manga_comments WHERE id=? AND account_id=?")->execute([$comment_id, (int)$currentAccount['id']]);
+        }
+        echo json_encode(['success' => true]);
+    } catch(Exception $e) { echo json_encode(['success' => false]); }
+    exit;
 }
 
 // API: Личные сообщения
@@ -2267,6 +2289,14 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     }
     $fListStmt=$pdo->prepare("SELECT a.username,pc.avatar_url FROM friendships f JOIN accounts a ON (CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END)=a.id LEFT JOIN profile_customizations pc ON pc.account_id=a.id WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted' LIMIT 12");
     $fListStmt->execute([$tid,$tid,$tid]);$friendsList=$fListStmt->fetchAll();
+    // Fetch XP/Level for public display
+    $targetXp = (int)($target['user_xp'] ?? 0);
+    $targetLevel = (int)($target['user_level'] ?? 1);
+    $xpForLevel = 100 + ($targetLevel - 1) * 50;
+    $totalXpToLevel = 0;
+    for ($i = 1; $i < $targetLevel; $i++) { $totalXpToLevel += 100 + ($i - 1) * 50; }
+    $currentXp = $targetXp - $totalXpToLevel;
+    $xpProgress = $xpForLevel > 0 ? min(100, max(0, round(($currentXp / $xpForLevel) * 100))) : 0;
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($target['username'])?> | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2343,7 +2373,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
                 <div class="joined">На сайте с: <?=date('d.m.Y', strtotime($target['created_at']))?></div>
             </div>
             <?php if ($viewer): ?>
-            <div>
+            <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-end">
                 <?php if ($friendshipStatus === 'accepted'): ?>
                 <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">👥 Друзья</button>
                 <?php elseif ($friendshipStatus === 'pending' && $friendshipIsMine): ?>
@@ -2353,6 +2383,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
                 <?php else: ?>
                 <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">+ В друзья</button>
                 <?php endif; ?>
+                <button class="friend-action-btn" style="background:rgba(255,255,255,0.05);border-color:var(--border2);color:var(--text2);font-size:11px;padding:6px 12px" onclick="openMsgToUser(<?=$tid?>,'<?=htmlspecialchars($target['username'])?>')">✉️ Написать</button>
             </div>
             <?php else: ?>
             <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">+ В друзья</a>
@@ -2360,6 +2391,14 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
     </div>
 
+    <!-- XP/Level block -->
+    <div class="card" style="padding:18px 20px">
+        <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#5a4ca0);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;flex-shrink:0"><?=$targetLevel?></div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px">⭐ Уровень <?=$targetLevel?></div><div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:linear-gradient(90deg,#7c5cff,#a78bfa);width:<?=$xpProgress?>%;border-radius:3px"></div></div><div style="font-size:10px;color:var(--muted)"><?=$currentXp?>/<?=$xpForLevel?> XP до следующего уровня</div></div>
+            <div style="text-align:right;flex-shrink:0"><div style="font-size:18px;font-weight:800;color:var(--text2)"><?=$targetXp?></div><div style="font-size:9px;color:var(--muted)">Всего XP</div></div>
+        </div>
+    </div>
     <?php if ($canView): ?>
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
@@ -2426,6 +2465,15 @@ async function removeFriend(id){
     const d=await res.json();
     if(d.success){showToast('Удалено из друзей');setTimeout(()=>location.reload(),800);}
 }
+
+// Открыть новый чат с пользователем
+function openMsgToUser(userId, username) {
+    // Redirect to main page and open chat with this user
+    // Store pending chat in sessionStorage
+    sessionStorage.setItem('openChatWith', JSON.stringify({id: userId, username: username}));
+    window.location.href = '/';
+}
+
 </script>
 </body></html><?php exit; }
 
@@ -2980,6 +3028,11 @@ loadChapters();
 <?php endif;?>
 
 // ===== MANGA PAGE COMMENTS =====
+let _mangaReplyTo = null;
+const _mangaCurrentUser = <?=json_encode($currentAccount ? $currentAccount['username'] : null)?>;
+const _mangaCurrentAccId = <?=json_encode($currentAccount ? (int)$currentAccount['id'] : null)?>;
+const _mangaIsAdmin = <?=json_encode($currentAccount && isAccountAdmin($pdo, (int)$currentAccount['id']))?>;
+
 async function loadMangaComments(mangaId) {
     try {
         const res = await fetch(`/api/comments/${mangaId}`);
@@ -2993,21 +3046,62 @@ async function loadMangaComments(mangaId) {
             return;
         }
         if (countEl) countEl.textContent = `(${data.comments.length})`;
-        list.innerHTML = data.comments.map(c => `
-            <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px">
+        const commentMap = {};
+        data.comments.forEach(c => { commentMap[c.id] = c; });
+        list.innerHTML = data.comments.map(c => {
+            const canDel = _mangaCurrentAccId && (c.account_id == _mangaCurrentAccId || _mangaIsAdmin);
+            const replyRef = c.reply_to && commentMap[c.reply_to]
+                ? `<div style="background:rgba(255,255,255,0.03);border-left:2px solid var(--border2);border-radius:0 6px 6px 0;padding:4px 9px;margin-bottom:7px;font-size:11px;color:var(--muted)"><span style="font-weight:600;color:var(--text2)">@${escapeHtml(commentMap[c.reply_to].username)}</span>: ${escapeHtml(commentMap[c.reply_to].text.substring(0,60))}${commentMap[c.reply_to].text.length>60?'...':''}</div>`
+                : '';
+            return `<div id="cmt-${c.id}" style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px">
                 <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
                     <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--border2),var(--border));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;overflow:hidden">
                         ${c.avatar_url ? `<img src="${escapeHtml(c.avatar_url)}" style="width:100%;height:100%;object-fit:cover">` : escapeHtml(c.username[0].toUpperCase())}
                     </div>
-                    <div>
+                    <div style="flex:1">
                         <a href="/u/${escapeHtml(c.username)}" style="font-weight:600;font-size:12px;color:var(--text2);text-decoration:none">${escapeHtml(c.username)}</a>
-                        <div style="font-size:10px;color:var(--muted)">${new Date(c.created_at).toLocaleDateString('ru-RU', {day:'2-digit',month:'short',year:'numeric'})}</div>
+                        <div style="font-size:10px;color:var(--muted)">${new Date(c.created_at).toLocaleDateString('ru-RU',{day:'2-digit',month:'short',year:'numeric'})}</div>
+                    </div>
+                    <div style="display:flex;gap:5px;flex-shrink:0">
+                        ${_mangaCurrentAccId ? `<button onclick="setMangaReply(${c.id},'${escapeHtml(c.username).replace(/'/g,"\\'")}')" style="padding:3px 9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.color='var(--text2)';this.style.borderColor='var(--border2)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Ответить</button>` : ''}
+                        ${canDel ? `<button onclick="deleteMangaComment(${c.id},${mangaId})" style="padding:3px 9px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:#f87171;font-size:10px;cursor:pointer;font-family:inherit" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">🗑 Удалить</button>` : ''}
                     </div>
                 </div>
-                <div style="font-size:13px;color:var(--text2);line-height:1.55;padding-left:39px;margin-top:-30px;padding-top:30px">${escapeHtml(c.text)}</div>
-            </div>
-        `).join('');
+                <div style="font-size:13px;color:var(--text2);line-height:1.55;padding-left:39px;margin-top:-30px;padding-top:30px">${replyRef}${escapeHtml(c.text)}</div>
+            </div>`;
+        }).join('');
     } catch(e) { console.error(e); }
+}
+
+function setMangaReply(commentId, username) {
+    _mangaReplyTo = commentId;
+    const input = document.getElementById('manga-comment-input');
+    if (!input) return;
+    input.placeholder = `Ответ для @${username}... (Esc — отмена)`;
+    input.focus();
+    let hint = document.getElementById('reply-hint');
+    if (!hint) { hint = document.createElement('div'); hint.id = 'reply-hint'; hint.style.cssText = 'font-size:10px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:6px'; input.parentNode.insertBefore(hint, input); }
+    hint.innerHTML = `<span>↩ Ответ для <strong style="color:var(--text2)">@${username}</strong></span><button onclick="cancelMangaReply()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;text-decoration:underline;font-family:inherit;padding:0">Отмена</button>`;
+}
+
+function cancelMangaReply() {
+    _mangaReplyTo = null;
+    const input = document.getElementById('manga-comment-input');
+    if (input) input.placeholder = 'Напиши комментарий...';
+    const hint = document.getElementById('reply-hint');
+    if (hint) hint.remove();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mangaReplyTo) cancelMangaReply(); });
+
+async function deleteMangaComment(commentId, mangaId) {
+    if (!confirm('Удалить комментарий?')) return;
+    try {
+        const res = await fetch(`/api/comment/${commentId}/delete`, {method:'POST'});
+        const d = await res.json();
+        if (d.success) { const el = document.getElementById('cmt-'+commentId); if(el) el.remove(); showToast('🗑 Удалён'); const cnt = document.getElementById('manga-comments-count'); if(cnt) cnt.textContent='('+document.querySelectorAll('[id^=cmt-]').length+')'; }
+        else showToast('❌ Нет прав');
+    } catch(e) { showToast('❌ Ошибка'); }
 }
 
 async function submitMangaComment(mangaId) {
@@ -3016,14 +3110,17 @@ async function submitMangaComment(mangaId) {
     const text = input.value.trim();
     if (!text || text.length > 500) { showToast('Комментарий: 1-500 символов'); return; }
     try {
+        const body = {text};
+        if (_mangaReplyTo) body.reply_to = _mangaReplyTo;
         const res = await fetch(`/api/comments/${mangaId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text})
+            body: JSON.stringify(body)
         });
         const data = await res.json();
         if (data.success) {
             input.value = '';
+            cancelMangaReply();
             showToast('✅ Комментарий добавлен!');
             loadMangaComments(mangaId);
         } else {
@@ -4777,6 +4874,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Проверка непрочитанных сообщений каждые 15 сек
     checkUnreadMessages();
     setInterval(checkUnreadMessages, 15000);
+    
+    // Auto-open chat if redirected from profile page "Write message"
+    const pendingChat = sessionStorage.getItem('openChatWith');
+    if (pendingChat) {
+        try {
+            const chatData = JSON.parse(pendingChat);
+            sessionStorage.removeItem('openChatWith');
+            setTimeout(() => {
+                openMessagesModal();
+                setTimeout(() => openDialog(chatData.id, chatData.username), 200);
+            }, 300);
+        } catch(e) {}
+    }
 });
 
 // Закрывать модаль при клике снаружи
