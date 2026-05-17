@@ -750,6 +750,75 @@ if ($path==='/api/admin/archive'){header('Content-Type: application/json');$user
 if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}$page=max(0,(int)($_GET['page']??0));$q=trim($_GET['q']??'');$limit=10;$offset=$page*$limit;if($q){$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga WHERE title ILIKE ? ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute(["%$q%"]);$cStmt=$pdo->prepare("SELECT COUNT(*) FROM manga WHERE title ILIKE ?");$cStmt->execute(["%$q%"]);}else{$stmt=$pdo->prepare("SELECT id,title,cover_imgbb_url,created_at,likes,is_series FROM manga ORDER BY id DESC LIMIT $limit OFFSET $offset");$stmt->execute();$cStmt=$pdo->query("SELECT COUNT(*) FROM manga");}echo json_encode(['items'=>$stmt->fetchAll(),'total'=>(int)$cStmt->fetchColumn()]);exit;}
 
 
+// ===== API: ADMIN TAGS/GENRES CRUD =====
+
+// Добавить тег
+if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    $input=json_decode(file_get_contents('php://input'),true);
+    $name=trim($input['name']??'');
+    $slug=trim($input['slug']??'');
+    $isNsfw=!empty($input['is_nsfw']);
+    if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
+    $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
+    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?)")->execute([$name,$slug,$isNsfw?'true':'false']);
+    echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
+// Удалить тег
+if (preg_match('#^/api/admin/tags/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    try{$pdo->prepare("DELETE FROM manga_tags WHERE tag_id=?")->execute([(int)$m[1]]);
+    $pdo->prepare("DELETE FROM tags WHERE id=?")->execute([(int)$m[1]]);
+    echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
+// Добавить жанр
+if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    $input=json_decode(file_get_contents('php://input'),true);
+    $name=trim($input['name']??'');
+    $slug=trim($input['slug']??'');
+    if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
+    $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
+    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?)")->execute([$name,$slug]);
+    echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
+// Удалить жанр
+if (preg_match('#^/api/admin/genres/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    try{$pdo->prepare("DELETE FROM manga_genres WHERE genre_id=?")->execute([(int)$m[1]]);
+    $pdo->prepare("DELETE FROM genres WHERE id=?")->execute([(int)$m[1]]);
+    echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
+// Сид всех тегов и жанров (принудительный)
+if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
+    header('Content-Type: application/json');
+    $userId=getEffectiveUserId($pdo);
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    try{
+        $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
+        $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
+        $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT DO NOTHING");
+        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
+        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
+        foreach($genresData as $g)$gIns->execute($g);
+        $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
+        $gc=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
+        echo json_encode(['success'=>true,'tags'=>$tc,'genres'=>$gc]);
+    }catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
+}
+
 // API: Get genres and tags lists — с авто-сидом если пусто
 if ($path==='/api/genres'){header('Content-Type: application/json');
     try{
@@ -4029,6 +4098,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
         <button class="atab" onclick="switchAdminTab('messages')">📨 Сообщения</button>
         <button class="atab" onclick="switchAdminTab('edit')">✏️ Редактирование</button>
         <button class="atab" onclick="switchAdminTab('add-chapter')">📚 Добавить главу</button>
+        <button class="atab" onclick="switchAdminTab('tags')">🏷 Теги/Жанры</button>
     </div>
 
     <!-- STATS -->
@@ -4112,8 +4182,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
     </div>
 
     <!-- ADD CHAPTER -->
-    <div class="apanel" id="panel-add-chapter">
-        <div class="fg">
+    <div class="apanel" id="panel-add-chapter">        <div class="fg">
             <label class="fl">Манга / Серия</label>
             <div class="esearch-row">
                 <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
@@ -4154,6 +4223,46 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(32px);-webkit-back
             </div>
         </div>
     </div>
+
+    <!-- PANEL: TAGS & GENRES -->
+    <div class="apanel" id="panel-tags">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+            <!-- ЖАНРЫ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🎭 Жанры <span id="genre-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить жанр -->
+                <div style="display:flex;gap:6px;margin-bottom:10px">
+                    <input id="new-genre-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+            <!-- ТЕГИ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🏷 Теги <span id="tag-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить тег -->
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                    <input id="new-tag-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-tag-slug" placeholder="slug (isekai)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
+                    <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+        </div>
+        <!-- Кнопка сида всех дефолтных тегов -->
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
+            <span style="font-size:11px;color:var(--muted)">Добавит стандартные теги/жанры если их нет (ON CONFLICT DO NOTHING)</span>
+        </div>
+    </div>
+
 </div>
 </div>
 
@@ -4391,13 +4500,14 @@ async function submitManga(){
 function openAdminPanel(){document.getElementById('admin-modal').classList.add('open');loadAdminStats();loadAdmins();}
 function closeAdminPanel(){document.getElementById('admin-modal').classList.remove('open');}
 function switchAdminTab(tab){
-    const tabs=['stats','messages','edit','add-chapter'];
+    const tabs=['stats','messages','edit','add-chapter','tags'];
     document.querySelectorAll('.atab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
     document.querySelectorAll('.apanel').forEach(p=>p.classList.remove('active'));
     document.getElementById('panel-'+tab).classList.add('active');
     if(tab==='stats')loadAdminStats();
     if(tab==='messages')loadAdminMessages();
     if(tab==='edit')loadMangaEditList('',0);
+    if(tab==='tags')loadTagsPanel();
 }
 function showStatsView(view){
     document.getElementById('stats-grid-view').style.display=view==='grid'?'block':'none';
@@ -4534,6 +4644,100 @@ async function submitChapter(){
     }catch(e){rb.className='result-banner error open';rb.innerHTML='❌ '+e.message;}
     const t=btn.querySelector('.btn-text');if(t)t.textContent='📤 Загрузить главу';btn.disabled=false;btn.classList.remove('loading');
 }
+
+// ===== TAGS & GENRES ADMIN PANEL =====
+async function loadTagsPanel(){
+    try{
+        const res=await fetch('/api/genres');
+        const data=await res.json();
+        renderGenreManageList(data.genres||[]);
+        renderTagManageList(data.tags||[]);
+        document.getElementById('genre-count-badge').textContent=data.genres?.length||0;
+        document.getElementById('tag-count-badge').textContent=data.tags?.length||0;
+    }catch(e){showToast('❌ Ошибка загрузки');}
+}
+function renderGenreManageList(genres){
+    const el=document.getElementById('genres-manage-list');
+    if(!genres.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Жанров нет. Нажми «Загрузить все дефолтные»</div>';return;}
+    el.innerHTML=genres.map(g=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--card2);border:1px solid var(--border);border-radius:7px">
+            <span style="flex:1;font-size:12px;color:var(--text)">${escapeHtml(g.name)}</span>
+            <span style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(g.slug)}</span>
+            <button onclick="deleteGenre(${g.id},this)" style="padding:3px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:5px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🗑</button>
+        </div>`).join('');
+}
+function renderTagManageList(tags){
+    const el=document.getElementById('tags-manage-list');
+    if(!tags.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Тегов нет. Нажми «Загрузить все дефолтные»</div>';return;}
+    el.innerHTML=tags.map(t=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--card2);border:1px solid ${t.is_nsfw?'rgba(239,68,68,0.2)':'var(--border)'};border-radius:7px">
+            <span style="flex:1;font-size:12px;color:${t.is_nsfw?'#f87171':'var(--text)'}">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</span>
+            <span style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(t.slug)}</span>
+            <button onclick="deleteTag(${t.id},this)" style="padding:3px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:5px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🗑</button>
+        </div>`).join('');
+}
+async function addGenre(){
+    const name=document.getElementById('new-genre-name').value.trim();
+    const slug=document.getElementById('new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');
+    if(!name||!slug){showToast('❌ Заполни название и slug');return;}
+    try{
+        const res=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});
+        const data=await res.json();
+        if(data.success){showToast('✅ Жанр добавлен');document.getElementById('new-genre-name').value='';document.getElementById('new-genre-slug').value='';loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+async function deleteGenre(id,btn){
+    if(!confirm('Удалить жанр? Он будет убран у всех манг'))return;
+    btn.disabled=true;
+    try{
+        const res=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){showToast('🗑 Жанр удалён');loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');btn.disabled=false;}
+}
+async function addTag(){
+    const name=document.getElementById('new-tag-name').value.trim();
+    const slug=document.getElementById('new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');
+    const isNsfw=document.getElementById('new-tag-nsfw').checked;
+    if(!name||!slug){showToast('❌ Заполни название и slug');return;}
+    try{
+        const res=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:isNsfw})});
+        const data=await res.json();
+        if(data.success){showToast('✅ Тег добавлен');document.getElementById('new-tag-name').value='';document.getElementById('new-tag-slug').value='';document.getElementById('new-tag-nsfw').checked=false;loadTagsPanel();_genreTagsData=null;}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+async function deleteTag(id,btn){
+    if(!confirm('Удалить тег? Он будет убран у всех манг'))return;
+    btn.disabled=true;
+    try{
+        const res=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){showToast('🗑 Тег удалён');_genreTagsData=null;loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');btn.disabled=false;}
+}
+async function reseedAllTags(){
+    if(!confirm('Загрузить все стандартные теги и жанры? Дубли не добавятся.'))return;
+    try{
+        const res=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);_genreTagsData=null;loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+// Авто-генерация slug из названия
+document.addEventListener('DOMContentLoaded',()=>{
+    const autoSlug=(nameId,slugId)=>{
+        const nameEl=document.getElementById(nameId),slugEl=document.getElementById(slugId);
+        if(nameEl&&slugEl)nameEl.addEventListener('input',()=>{if(!slugEl.dataset.manual)slugEl.value=nameEl.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});
+        if(slugEl)slugEl.addEventListener('input',()=>slugEl.dataset.manual='1');
+    };
+    autoSlug('new-genre-name','new-genre-slug');
+    autoSlug('new-tag-name','new-tag-slug');
+});
 
 // ===== INIT =====
 // Hide page loader
