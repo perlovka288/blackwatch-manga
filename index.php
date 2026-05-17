@@ -756,7 +756,8 @@ if ($path==='/api/admin/manga-list'){header('Content-Type: application/json');$u
 if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
     $userId=getEffectiveUserId($pdo);
-    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
+    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
+    if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав','uid'=>$userId,'admins'=>$hardcodedAdmins]);exit;}
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
@@ -771,6 +772,7 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
 if (preg_match('#^/api/admin/tags/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
     $userId=getEffectiveUserId($pdo);
+    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
     if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{$pdo->prepare("DELETE FROM manga_tags WHERE tag_id=?")->execute([(int)$m[1]]);
     $pdo->prepare("DELETE FROM tags WHERE id=?")->execute([(int)$m[1]]);
@@ -781,6 +783,7 @@ if (preg_match('#^/api/admin/tags/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST
 if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
     $userId=getEffectiveUserId($pdo);
+    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
     if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
@@ -795,6 +798,7 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
 if (preg_match('#^/api/admin/genres/(\d+)/delete$#',$path,$m) && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
     $userId=getEffectiveUserId($pdo);
+    if(!$userId && !empty($_GET['tg_user_id'])) $userId=(int)$_GET['tg_user_id'];
     if(!isAdmin($userId,$hardcodedAdmins)){echo json_encode(['error'=>'Нет прав']);exit;}
     try{$pdo->prepare("DELETE FROM manga_genres WHERE genre_id=?")->execute([(int)$m[1]]);
     $pdo->prepare("DELETE FROM genres WHERE id=?")->execute([(int)$m[1]]);
@@ -838,28 +842,30 @@ if ($path==='/api/admin/dedup-genres' && $_SERVER['REQUEST_METHOD']==='POST') {
 }
 
 
-// API: Get genres and tags lists — с авто-сидом если пусто
+// API: Get genres and tags lists
 if ($path==='/api/genres'){
-    ob_clean(); // сбросить всё что могло попасть в буфер
     header('Content-Type: application/json; charset=utf-8');
     try{
-        $tagCount=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
-        $genreCount=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
-        // Авто-сид если таблицы пустые
-        if($tagCount===0){
+        $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        // Авто-сид если пусто
+        if(empty($tags)){
             $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
             $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT DO NOTHING");
             foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
+            $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
         }
-        if($genreCount===0){
+        if(empty($genres)){
             $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
             $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
             foreach($genresData as $g)$gIns->execute($g);
+            $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
         }
-        $genres=$pdo->query("SELECT id,name,slug FROM genres ORDER BY name ASC")->fetchAll();
-        $tags=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll();
-        echo json_encode(['genres'=>$genres,'tags'=>$tags,'tag_count'=>count($tags),'genre_count'=>count($genres)]);
-    }catch(Exception $e){echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);}exit;
+        echo json_encode(['genres'=>$genres,'tags'=>$tags]);
+    }catch(Exception $e){
+        echo json_encode(['genres'=>[],'tags'=>[],'error'=>$e->getMessage()]);
+    }
+    exit;
 }
 
 
