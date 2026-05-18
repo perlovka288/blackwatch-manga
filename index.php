@@ -591,6 +591,962 @@ if ($path==='/api/check-admin'){
 
 if ($path==='/api/imgbb-keys'){header('Content-Type: application/json');if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'keys'=>[]]);exit;}echo json_encode(['success'=>true,'keys'=>$imgbbKeys]);exit;}
 
+// ═══════════════════════════════════════
+//  /admin — ОТДЕЛЬНАЯ СТРАНИЦА АДМИНКИ
+// ═══════════════════════════════════════
+if ($path === '/admin') {
+    if (!isAdminCombined($pdo, $hardcodedAdmins)) {
+        http_response_code(403);
+        ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>403</title>
+        <style>body{background:#0a0a0e;color:#f2f2f2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+        a{color:#e8192c;text-decoration:none}</style></head><body>
+        <div style="font-size:48px">🔒</div><h2>Нет доступа</h2><a href="/">← На главную</a>
+        </body></html><?php exit;
+    }
+    $bodyClass = isset($_COOKIE['bw_theme']) && $_COOKIE['bw_theme'] === 'light' ? 'light' : '';
+?><!DOCTYPE html>
+<html lang="ru" class="<?=htmlspecialchars($bodyClass)?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>⚙️ Админ-панель · BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+    --bg:#0a0a0e;--bg2:#111116;--card:#161620;--card2:#1e1e2a;--card3:#252535;
+    --border:#2a2a3a;--border2:#3a3a50;
+    --text:#f0f0f8;--text2:#8888a0;--muted:#4a4a60;
+    --accent:#e8192c;--accent2:#ff2d42;--accent-glow:rgba(232,25,44,.22);
+    --green:#22c55e;--green-glow:rgba(34,197,94,.18);
+    --amber:#f59e0b;--amber-glow:rgba(245,158,11,.18);
+    --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.18);
+    --blue:#3b82f6;--blue-glow:rgba(59,130,246,.18);
+    --red:#ef4444;--red-glow:rgba(239,68,68,.18);
+    --t:.2s ease;
+    --sidebar:220px;
+    --r:10px;
+    --shadow:0 4px 24px rgba(0,0,0,.6);
+    --inset:inset 0 1px 0 rgba(255,255,255,.05),0 4px 12px rgba(0,0,0,.4);
+}
+.light{
+    --bg:#ebebf0;--bg2:#e0e0e8;--card:#f8f8fc;--card2:#efeff5;--card3:#e6e6ef;
+    --border:#d0d0e0;--border2:#b8b8cc;
+    --text:#0a0a14;--text2:#505068;--muted:#9090a8;
+    --shadow:0 4px 24px rgba(0,0,0,.12);
+    --inset:inset 0 1px 0 rgba(255,255,255,.8),0 4px 12px rgba(0,0,0,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+
+/* ── LAYOUT ── */
+.adm-layout{display:flex;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.adm-sidebar{
+    width:var(--sidebar);flex-shrink:0;
+    background:var(--card);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+    position:fixed;top:0;left:0;height:100vh;
+    z-index:100;transition:transform var(--t);
+}
+.adm-logo{
+    padding:20px 18px 16px;
+    border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;
+    flex-shrink:0;
+}
+.adm-logo-icon{
+    width:34px;height:34px;border-radius:9px;
+    background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;flex-shrink:0;
+    box-shadow:0 0 14px var(--accent-glow);
+}
+.adm-logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--text)}
+.adm-logo-sub{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
+
+.adm-nav{flex:1;padding:10px 10px;overflow-y:auto;scrollbar-width:none}
+.adm-nav::-webkit-scrollbar{display:none}
+.adm-nav-section{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;padding:10px 8px 5px}
+.adm-nav-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 10px;border-radius:var(--r);
+    color:var(--text2);font-size:12px;font-weight:500;
+    cursor:pointer;transition:all var(--t);margin-bottom:2px;
+    border:1px solid transparent;
+    position:relative;
+}
+.adm-nav-item:hover{background:var(--card2);color:var(--text);border-color:var(--border)}
+.adm-nav-item.active{
+    background:rgba(232,25,44,.1);color:var(--accent);
+    border-color:rgba(232,25,44,.25);
+    box-shadow:0 0 0 1px rgba(232,25,44,.1);
+}
+.adm-nav-item.active .adm-nav-icon{color:var(--accent)}
+.adm-nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.adm-nav-badge{
+    margin-left:auto;min-width:18px;height:18px;
+    background:var(--accent);color:#fff;
+    font-size:9px;font-weight:700;
+    border-radius:9px;padding:0 5px;
+    display:flex;align-items:center;justify-content:center;
+}
+
+.adm-sidebar-footer{
+    padding:12px 10px;border-top:1px solid var(--border);flex-shrink:0;
+    display:flex;flex-direction:column;gap:6px;
+}
+.adm-theme-btn{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
+    background:var(--card2);border:1px solid var(--border);
+    color:var(--text2);font-size:11px;font-weight:600;
+    cursor:pointer;transition:all var(--t);width:100%;
+}
+.adm-theme-btn:hover{border-color:var(--border2);color:var(--text)}
+.adm-back-btn{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
+    background:transparent;border:1px solid var(--border);
+    color:var(--muted);font-size:11px;font-weight:600;
+    cursor:pointer;transition:all var(--t);width:100%;text-decoration:none;
+}
+.adm-back-btn:hover{border-color:var(--border2);color:var(--text2)}
+
+/* ── MAIN CONTENT ── */
+.adm-main{margin-left:var(--sidebar);flex:1;min-height:100vh;background:var(--bg)}
+.adm-topbar{
+    height:56px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 24px;gap:14px;
+    position:sticky;top:0;z-index:50;
+}
+.adm-topbar-title{font-size:15px;font-weight:700;flex:1}
+.adm-topbar-sub{font-size:11px;color:var(--muted)}
+
+/* ── PANELS ── */
+.adm-panel{display:none;padding:24px;animation:fadeIn .18s ease}
+.adm-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── STAT CARDS ── */
+.scard-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.scard{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+    padding:14px 16px;
+    box-shadow:var(--inset);
+    transition:border-color var(--t),transform var(--t);
+}
+.scard:hover{border-color:var(--border2);transform:translateY(-1px)}
+.scard-val{font-family:'Bebas Neue',sans-serif;font-size:36px;line-height:1;margin-bottom:4px}
+.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+
+/* ── SECTION HEADER ── */
+.adm-section-head{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;padding-bottom:10px;
+    border-bottom:1px solid var(--border);
+}
+.adm-section-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.adm-section-badge{
+    background:var(--card2);border:1px solid var(--border);
+    border-radius:20px;padding:2px 9px;font-size:10px;color:var(--muted);font-weight:600;
+}
+
+/* ── BUTTONS ── */
+.btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;
+    cursor:pointer;border:1px solid;transition:all var(--t);
+    font-family:inherit;white-space:nowrap;
+}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.btn:active{transform:translateY(0)}
+.btn-primary{background:var(--accent);border-color:var(--accent2);color:#fff;box-shadow:0 0 12px var(--accent-glow)}
+.btn-green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--green);box-shadow:0 0 8px var(--green-glow)}
+.btn-amber{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--amber)}
+.btn-purple{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:var(--purple)}
+.btn-blue{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:var(--blue)}
+.btn-red{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red)}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text)}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
+.btn-wide{width:100%;justify-content:center}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:8px}
+
+/* ── INPUT ── */
+.adm-inp{
+    width:100%;background:var(--card2);border:1px solid var(--border);
+    border-radius:8px;color:var(--text);font-size:12px;
+    padding:9px 12px;outline:none;transition:border-color var(--t);
+}
+.adm-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.adm-inp::placeholder{color:var(--muted)}
+.adm-textarea{resize:none;min-height:80px;line-height:1.5}
+.adm-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px}
+.adm-field{margin-bottom:12px}
+
+/* ── CARD CONTAINER ── */
+.adm-card{
+    background:var(--card);border:1px solid var(--border);
+    border-radius:var(--r);padding:16px;
+    box-shadow:var(--inset);
+}
+.adm-card+.adm-card{margin-top:10px}
+
+/* ── TOP MANGA LIST ── */
+.top-list{display:flex;flex-direction:column;gap:4px}
+.top-row{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    transition:border-color var(--t);
+}
+.top-row:hover{border-color:var(--border2)}
+.top-idx{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);width:22px;flex-shrink:0;text-align:center}
+.top-name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-likes{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
+
+/* ── ADMIN LIST ── */
+.admin-row{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
+    transition:border-color var(--t);
+}
+.admin-row:hover{border-color:var(--border2)}
+.admin-av{
+    width:30px;height:30px;border-radius:8px;
+    background:rgba(232,25,44,.12);border:1px solid rgba(232,25,44,.2);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;flex-shrink:0;
+}
+.admin-info{flex:1;min-width:0}
+.admin-name{font-size:12px;font-weight:600;color:var(--text)}
+.admin-id{font-size:10px;color:var(--muted);font-family:monospace}
+
+/* ── ARCHIVE ── */
+.aitem{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px}
+.atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+.atext{font-size:12px;color:var(--text2);margin-bottom:3px}
+.adate{font-size:10px;color:var(--muted)}
+
+/* ── MSG ── */
+.amsg-item{padding:11px 13px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;position:relative}
+.amsg-text{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:5px}
+.amsg-meta{font-size:10px;color:var(--muted)}
+.amsg-del{position:absolute;top:8px;right:8px}
+
+/* ── MANGA EDIT LIST ── */
+.me-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    cursor:pointer;transition:all var(--t);margin-bottom:5px;
+}
+.me-item:hover{border-color:var(--border2);background:var(--card3)}
+.me-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card3);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.me-title{font-size:12px;color:var(--text);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-badge{font-size:10px;color:var(--muted);flex-shrink:0}
+
+/* ── CHAPTER ITEM ── */
+.ch-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 11px;background:var(--card2);
+    border:1px solid var(--border);border-radius:7px;margin-bottom:4px;
+}
+.ch-row-label{font-size:12px;font-weight:600;color:var(--text)}
+
+/* ── SUGGEST ── */
+.sug-item{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;display:flex;gap:10px;align-items:flex-start}
+.sug-text{font-size:12px;color:var(--text);flex:1;line-height:1.5}
+.sug-meta{font-size:10px;color:var(--muted);margin-top:3px}
+.sug-read-btn{padding:4px 10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:5px;color:var(--green);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all var(--t)}
+.sug-read-btn:hover{background:rgba(34,197,94,.2)}
+
+/* ── TAGS / GENRES ── */
+.tg-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card2);border:1px solid var(--border);border-radius:7px;margin-bottom:4px}
+.tg-name{flex:1;font-size:12px;color:var(--text)}
+.tg-slug{font-size:10px;color:var(--muted);font-family:monospace}
+
+/* ── FILE UPLOAD ZONE ── */
+.adm-upload-zone{
+    border:2px dashed var(--border2);border-radius:10px;
+    padding:20px;text-align:center;cursor:pointer;
+    transition:all var(--t);background:var(--card2);
+    position:relative;overflow:hidden;
+}
+.adm-upload-zone:hover{border-color:var(--accent);background:rgba(232,25,44,.04)}
+.adm-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.adm-upload-icon{font-size:24px;margin-bottom:6px}
+.adm-upload-text{font-size:11px;color:var(--muted)}
+.adm-upload-hint{font-size:10px;color:var(--muted);margin-top:4px}
+.adm-preview-count{font-size:12px;font-weight:700;color:var(--green);margin-top:6px}
+
+/* ── FILE TABS ── */
+.adm-file-tabs{display:flex;gap:4px;margin-bottom:10px}
+.adm-ftab{
+    padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;
+    cursor:pointer;transition:all var(--t);
+    background:var(--card2);border:1px solid var(--border);color:var(--text2);
+}
+.adm-ftab.active{background:rgba(232,25,44,.1);border-color:rgba(232,25,44,.3);color:var(--accent)}
+.adm-fpanel{display:none}
+.adm-fpanel.active{display:block}
+
+/* ── PROGRESS BAR ── */
+.adm-upbar{height:4px;background:var(--card2);border-radius:2px;margin:10px 0;display:none;overflow:hidden}
+.adm-upbar.active{display:block}
+.adm-upbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
+
+/* ── RESULT BANNER ── */
+.adm-result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:10px}
+.adm-result.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green)}
+.adm-result.error{display:block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red)}
+
+/* ── SPINNER ── */
+.adm-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.loading .adm-spinner{display:inline-block}
+.loading .btn-label{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── PAGINATION ── */
+.page-row{display:flex;gap:5px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.page-btn{
+    padding:5px 11px;background:var(--card2);border:1px solid var(--border);
+    border-radius:6px;color:var(--text2);font-size:11px;font-weight:600;
+    cursor:pointer;font-family:inherit;transition:all var(--t);
+}
+.page-btn:hover{border-color:var(--border2);color:var(--text)}
+.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── GRID 2 COL ── */
+.adm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.adm-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+/* ── QUICK ACTIONS ── */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.qa-btn{
+    display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    padding:12px 14px;border-radius:var(--r);border:1px solid;
+    cursor:pointer;transition:all var(--t);text-align:left;
+    font-family:inherit;
+}
+.qa-btn:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.qa-btn-icon{font-size:20px;margin-bottom:3px}
+.qa-btn-label{font-size:12px;font-weight:700}
+.qa-btn-sub{font-size:10px;opacity:.7}
+.qa-green{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:var(--green)}
+.qa-amber{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:var(--amber)}
+.qa-purple{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--purple)}
+.qa-blue{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:var(--blue)}
+.qa-red{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.25);color:var(--red)}
+
+/* ── ADD ADMIN FORM ── */
+.add-admin-box{
+    display:none;margin-top:10px;
+    padding:14px;background:rgba(239,68,68,.04);
+    border:1px solid rgba(239,68,68,.18);border-radius:10px;
+}
+.add-admin-box.open{display:block}
+
+/* ── TAGS CHIP ── */
+.tag-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag-chip{
+    padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;
+    border:1px solid var(--border);color:var(--text2);
+    transition:all var(--t);display:inline-flex;align-items:center;gap:3px;
+}
+.tag-chip.checked{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.4);color:var(--purple)}
+.tag-chip.nsfw{border-color:rgba(239,68,68,.3);color:var(--red)}
+.tag-chip.nsfw.checked{background:rgba(239,68,68,.12)}
+
+/* ── MOBILE MENU TOGGLE ── */
+.adm-menu-toggle{display:none;padding:8px;margin-right:4px;border-radius:7px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:16px}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+    .adm-sidebar{transform:translateX(-100%)}
+    .adm-sidebar.open{transform:translateX(0)}
+    .adm-main{margin-left:0}
+    .adm-menu-toggle{display:flex;align-items:center;justify-content:center}
+    .scard-row{grid-template-columns:1fr 1fr}
+    .adm-grid2{grid-template-columns:1fr}
+    .qa-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:480px){
+    .scard-row{grid-template-columns:1fr 1fr}
+    .qa-grid{grid-template-columns:1fr}
+    .adm-panel{padding:14px}
+}
+
+/* ── OVERLAY for mobile ── */
+.adm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;backdrop-filter:blur(4px)}
+.adm-overlay.open{display:block}
+</style>
+</head>
+<body class="<?=htmlspecialchars($bodyClass)?>">
+
+<div class="adm-layout">
+
+<!-- SIDEBAR -->
+<aside class="adm-sidebar" id="adm-sidebar">
+    <div class="adm-logo">
+        <div class="adm-logo-icon">⚙️</div>
+        <div>
+            <div class="adm-logo-text">BLACKWATCH</div>
+            <div class="adm-logo-sub">Admin Panel</div>
+        </div>
+    </div>
+
+    <nav class="adm-nav">
+        <div class="adm-nav-section">Обзор</div>
+        <div class="adm-nav-item active" onclick="admNav('stats',this)">
+            <span class="adm-nav-icon">📊</span> Статистика
+        </div>
+        <div class="adm-nav-item" onclick="admNav('archive',this)">
+            <span class="adm-nav-icon">🗂</span> Архив действий
+        </div>
+
+        <div class="adm-nav-section">Контент</div>
+        <div class="adm-nav-item" onclick="admNav('edit',this)">
+            <span class="adm-nav-icon">✏️</span> Редактирование
+        </div>
+        <div class="adm-nav-item" onclick="admNav('add-chapter',this)">
+            <span class="adm-nav-icon">📚</span> Добавить главу
+        </div>
+        <div class="adm-nav-item" onclick="admNav('tags',this)">
+            <span class="adm-nav-icon">🏷</span> Теги и жанры
+        </div>
+
+        <div class="adm-nav-section">Пользователи</div>
+        <div class="adm-nav-item" onclick="admNav('messages',this)">
+            <span class="adm-nav-icon">📨</span> Сообщения
+            <span class="adm-nav-badge" id="msg-nav-badge" style="display:none"></span>
+        </div>
+        <div class="adm-nav-item" onclick="admNav('suggestions',this)">
+            <span class="adm-nav-icon">💡</span> Предложения
+            <span class="adm-nav-badge" id="sug-nav-badge" style="display:none"></span>
+        </div>
+        <div class="adm-nav-item" onclick="admNav('admins',this)">
+            <span class="adm-nav-icon">🛡</span> Администраторы
+        </div>
+    </nav>
+
+    <div class="adm-sidebar-footer">
+        <button class="adm-theme-btn" onclick="admToggleTheme()">
+            <span id="adm-theme-icon">🌙</span>
+            <span id="adm-theme-label">Тёмная тема</span>
+        </button>
+        <a href="/" class="adm-back-btn">← На главную</a>
+    </div>
+</aside>
+
+<!-- MOBILE OVERLAY -->
+<div class="adm-overlay" id="adm-overlay" onclick="closeSidebar()"></div>
+
+<!-- MAIN -->
+<main class="adm-main">
+
+    <!-- TOPBAR -->
+    <div class="adm-topbar">
+        <button class="adm-menu-toggle" onclick="openSidebar()">☰</button>
+        <div style="flex:1">
+            <div class="adm-topbar-title" id="topbar-title">📊 Статистика</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-green btn-sm" onclick="admNav('add-chapter', document.querySelector('.adm-nav-item:nth-child(5)'))">
+                + Глава
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">
+                ➕ Манга
+            </button>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: STATS ══ -->
+    <div class="adm-panel active" id="adm-panel-stats">
+        <div class="scard-row" id="adm-stat-cards">
+            <?php for($i=0;$i<6;$i++): ?>
+            <div class="scard"><div class="scard-val" style="color:var(--muted)">—</div><div class="scard-label">Загрузка...</div></div>
+            <?php endfor; ?>
+        </div>
+
+        <div class="adm-grid2" style="gap:14px">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">♥ Топ по лайкам</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admNav('edit',document.querySelector('[onclick*=edit]'))">Ред-ть →</button>
+                </div>
+                <div class="top-list" id="adm-top-list">
+                    <div style="color:var(--muted);font-size:12px;padding:8px 0">Загрузка...</div>
+                </div>
+            </div>
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">⚡ Быстрые действия</div>
+                </div>
+                <div class="qa-grid">
+                    <button class="qa-btn qa-green" onclick="window.location.href='/'">
+                        <div class="qa-btn-icon">➕</div>
+                        <div class="qa-btn-label">Добавить мангу</div>
+                        <div class="qa-btn-sub">ZIP, обложка, описание</div>
+                    </button>
+                    <button class="qa-btn qa-amber" onclick="admNav('add-chapter',null)">
+                        <div class="qa-btn-icon">📚</div>
+                        <div class="qa-btn-label">Новая глава</div>
+                        <div class="qa-btn-sub">Загрузить страницы</div>
+                    </button>
+                    <button class="qa-btn qa-purple" onclick="admNav('messages',null)">
+                        <div class="qa-btn-icon">📨</div>
+                        <div class="qa-btn-label">Написать всем</div>
+                        <div class="qa-btn-sub">Уведомление</div>
+                    </button>
+                    <button class="qa-btn qa-blue" onclick="admNav('suggestions',null)">
+                        <div class="qa-btn-icon">💡</div>
+                        <div class="qa-btn-label">Предложки</div>
+                        <div class="qa-btn-sub" id="qa-sug-sub">0 новых</div>
+                    </button>
+                    <button class="qa-btn qa-red" onclick="admNav('admins',null)" style="grid-column:1/-1">
+                        <div class="qa-btn-icon">🛡</div>
+                        <div class="qa-btn-label">Управление админами</div>
+                        <div class="qa-btn-sub">Добавить / удалить</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: ARCHIVE ══ -->
+    <div class="adm-panel" id="adm-panel-archive">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">🗂 Архив действий</div>
+                <button class="btn btn-ghost btn-sm" onclick="loadAdmArchive(0)">↺ Обновить</button>
+            </div>
+            <div id="adm-archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="page-row" id="adm-archive-pages"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: EDIT ══ -->
+    <div class="adm-panel" id="adm-panel-edit">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">✏️ Редактирование манги</div>
+            </div>
+            <div id="adm-edit-search-row" style="display:flex;gap:8px;margin-bottom:12px">
+                <input class="adm-inp" id="adm-edit-search" type="text" placeholder="🔍 Поиск манги..." onkeydown="if(event.key==='Enter')admSearchManga()">
+                <button class="btn btn-primary" onclick="admSearchManga()">Найти</button>
+            </div>
+            <div id="adm-manga-list"><div style="color:var(--muted);font-size:12px;padding:8px 0">Введи название или оставь пустым</div></div>
+            <div class="page-row" id="adm-edit-pages"></div>
+            <div id="adm-edit-form-wrap" style="display:none">
+                <button class="btn btn-ghost btn-sm" onclick="admBackToList()" style="margin-bottom:14px">← Назад к списку</button>
+                <div id="adm-edit-form"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: ADD CHAPTER ══ -->
+    <div class="adm-panel" id="adm-panel-add-chapter">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">📚 Добавить главу</div>
+            </div>
+            <div class="adm-field">
+                <label class="adm-label">Манга / Серия</label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input class="adm-inp" id="adm-ch-search" type="text" placeholder="Поиск серии..." onkeydown="if(event.key==='Enter')admSearchForChapter()">
+                    <button class="btn btn-primary" onclick="admSearchForChapter()">Найти</button>
+                </div>
+                <div id="adm-ch-manga-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Найдите серию выше</div></div>
+            </div>
+            <div id="adm-ch-form" style="display:none">
+                <div style="height:1px;background:var(--border);margin:12px 0"></div>
+                <div class="adm-field">
+                    <label class="adm-label">Новая глава</label>
+                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+                        <input class="adm-inp" type="number" id="adm-ch-num" placeholder="№ (1, 2, 2.5...)" step="0.1" min="0">
+                        <input class="adm-inp" type="text" id="adm-ch-title" placeholder="Название (необязательно)">
+                    </div>
+                </div>
+                <div class="adm-field">
+                    <div class="adm-file-tabs">
+                        <div class="adm-ftab active" id="adm-ch-tab-zip" onclick="admSwitchChTab('zip')">📦 ZIP</div>
+                        <div class="adm-ftab" id="adm-ch-tab-photos" onclick="admSwitchChTab('photos')">📸 Фото</div>
+                    </div>
+                    <div class="adm-fpanel active" id="adm-ch-panel-zip">
+                        <div class="adm-upload-zone">
+                            <input type="file" id="adm-ch-zip" accept=".zip" onchange="admChZipChange(this)">
+                            <div class="adm-upload-icon">📦</div>
+                            <div class="adm-upload-text">ZIP архив со страницами</div>
+                            <div class="adm-upload-hint">Нажмите или перетащите файл</div>
+                            <div class="adm-preview-count" id="adm-ch-zip-preview"></div>
+                        </div>
+                    </div>
+                    <div class="adm-fpanel" id="adm-ch-panel-photos">
+                        <div class="adm-upload-zone">
+                            <input type="file" id="adm-ch-photos" accept="image/*" multiple onchange="admChPhotosChange(this)">
+                            <div class="adm-upload-icon">📸</div>
+                            <div class="adm-upload-text">Страницы главы (несколько файлов)</div>
+                            <div class="adm-upload-hint">Нажмите или перетащите файлы</div>
+                            <div class="adm-preview-count" id="adm-ch-photos-preview"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="adm-upbar" id="adm-ch-upbar"><div class="adm-upbar-fill" id="adm-ch-upbar-fill"></div></div>
+                <button class="btn btn-primary btn-wide" id="adm-ch-submit" onclick="admSubmitChapter()">
+                    <span class="adm-spinner"></span>
+                    <span class="btn-label">📤 Загрузить главу</span>
+                </button>
+                <div class="adm-result" id="adm-ch-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: TAGS ══ -->
+    <div class="adm-panel" id="adm-panel-tags">
+        <div class="adm-grid2">
+            <!-- GENRES -->
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🎭 Жанры <span class="adm-section-badge" id="adm-genre-count">0</span></div>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px">
+                    <input class="adm-inp" id="adm-new-genre-name" placeholder="Название">
+                    <input class="adm-inp" id="adm-new-genre-slug" placeholder="slug">
+                    <button class="btn btn-purple btn-sm" onclick="admAddGenre()">+</button>
+                </div>
+                <div id="adm-genres-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+            <!-- TAGS -->
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🏷 Теги <span class="adm-section-badge" id="adm-tag-count">0</span></div>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                    <input class="adm-inp" id="adm-new-tag-name" placeholder="Название">
+                    <input class="adm-inp" id="adm-new-tag-slug" placeholder="slug">
+                    <button class="btn btn-purple btn-sm" onclick="admAddTag()">+</button>
+                </div>
+                <div style="margin-bottom:10px">
+                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px">
+                        <input type="checkbox" id="adm-new-tag-nsfw"> 🔞 NSFW тег
+                    </label>
+                </div>
+                <div id="adm-tags-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-purple" onclick="admReseedTags()">🔄 Загрузить дефолтные теги и жанры</button>
+            <button class="btn btn-red" onclick="admDedupTags()">🧹 Удалить дубли</button>
+            <span style="font-size:11px;color:var(--muted);align-self:center">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: MESSAGES ══ -->
+    <div class="adm-panel" id="adm-panel-messages">
+        <div class="adm-grid2">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">📨 Написать всем пользователям</div>
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Сообщение</label>
+                    <textarea class="adm-inp adm-textarea" id="adm-msg-text" placeholder="Введи текст сообщения..."></textarea>
+                </div>
+                <button class="btn btn-primary btn-wide" onclick="admSendMessage()">📨 Отправить всем</button>
+                <div class="adm-result" id="adm-msg-result"></div>
+            </div>
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">📋 Отправленные сообщения</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admLoadMessages()">↺</button>
+                </div>
+                <div id="adm-msg-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: SUGGESTIONS ══ -->
+    <div class="adm-panel" id="adm-panel-suggestions">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">💡 Предложения пользователей</div>
+                <button class="btn btn-ghost btn-sm" onclick="admLoadSuggestions(0)">↺ Обновить</button>
+            </div>
+            <div id="adm-sug-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="page-row" id="adm-sug-pages"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: ADMINS ══ -->
+    <div class="adm-panel" id="adm-panel-admins">
+        <div class="adm-grid2">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🛡 Список администраторов</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admLoadAdmins()">↺</button>
+                </div>
+                <div id="adm-admins-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">⚡ Назначить администратора</div>
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Email или TG ID</label>
+                    <input class="adm-inp" id="adm-ap-input" type="text" placeholder="admin@example.com или 123456789">
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Тег (роль)</label>
+                    <input class="adm-inp" id="adm-ap-tag" type="text" placeholder="Редактор, Модератор...">
+                </div>
+                <button class="btn btn-red btn-wide" onclick="admSubmitAddAdmin()">✓ Назначить администратора</button>
+                <div class="adm-result" id="adm-ap-result"></div>
+            </div>
+        </div>
+    </div>
+
+</main><!-- /adm-main -->
+</div><!-- /adm-layout -->
+
+<script>
+function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
+function escH(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+// ── THEME ──
+function admToggleTheme(){
+    const isLight=document.body.classList.toggle('light');
+    document.documentElement.classList.toggle('light',isLight);
+    document.cookie='bw_theme='+(isLight?'light':'dark')+';max-age='+(86400*365)+';path=/';
+    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
+    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
+}
+// Init theme
+(function(){
+    const isLight=document.body.classList.contains('light');
+    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
+    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
+})();
+
+// ── MOBILE SIDEBAR ──
+function openSidebar(){document.getElementById('adm-sidebar').classList.add('open');document.getElementById('adm-overlay').classList.add('open');}
+function closeSidebar(){document.getElementById('adm-sidebar').classList.remove('open');document.getElementById('adm-overlay').classList.remove('open');}
+
+// ── NAV ──
+const panelTitles={stats:'📊 Статистика',archive:'🗂 Архив действий',edit:'✏️ Редактирование',['add-chapter']:'📚 Добавить главу',tags:'🏷 Теги и жанры',messages:'📨 Сообщения',suggestions:'💡 Предложения',admins:'🛡 Администраторы'};
+function admNav(tab,el){
+    document.querySelectorAll('.adm-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.adm-nav-item').forEach(i=>i.classList.remove('active'));
+    const panel=document.getElementById('adm-panel-'+tab);
+    if(panel)panel.classList.add('active');
+    if(el)el.classList.add('active');
+    else{// find nav item by onclick
+        document.querySelectorAll('.adm-nav-item').forEach(i=>{if(i.getAttribute('onclick')&&i.getAttribute('onclick').includes("'"+tab+"'"))i.classList.add('active');});
+    }
+    document.getElementById('topbar-title').textContent=panelTitles[tab]||tab;
+    closeSidebar();
+    if(tab==='stats')admLoadStats();
+    if(tab==='archive')admLoadArchive(0);
+    if(tab==='edit')admLoadMangaList('',0);
+    if(tab==='tags')admLoadTagsPanel();
+    if(tab==='messages')admLoadMessages();
+    if(tab==='suggestions')admLoadSuggestions(0);
+    if(tab==='admins')admLoadAdmins();
+}
+
+// ── STATS ──
+async function admLoadStats(){
+    try{const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const d=await r.json();
+    if(d.error){document.getElementById('adm-stat-cards').innerHTML='<div style="color:var(--muted)">Нет прав</div>';return;}
+    const cards=[
+        {val:d.manga_count,label:'📚 Манг',color:'var(--text)'},
+        {val:d.users_count,label:'👤 Юзеров',color:'var(--green)'},
+        {val:d.votes_count,label:'👍 Голосов',color:'var(--amber)'},
+        {val:d.chapters_count,label:'📖 Глав',color:'var(--text)'},
+        {val:d.new_today,label:'🔥 Сегодня',color:'var(--accent)'},
+        {val:d.suggest_count,label:'💡 Предложек',color:'var(--blue)'},
+    ];
+    document.getElementById('adm-stat-cards').innerHTML=cards.map(c=>`<div class="scard"><div class="scard-val" style="color:${c.color}">${c.val}</div><div class="scard-label">${c.label}</div></div>`).join('');
+    document.getElementById('adm-top-list').innerHTML=(d.top_manga||[]).map((m,i)=>`<div class="top-row"><div class="top-idx">${i+1}</div><div class="top-name">${escH(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Нет данных</div>';
+    const sb=d.suggest_count>0;if(sb){const b=document.getElementById('sug-nav-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
+    const qa=document.getElementById('qa-sug-sub');if(qa)qa.textContent=d.suggest_count+' новых';
+    }catch(e){}
+}
+
+// ── ARCHIVE ──
+async function admLoadArchive(pg){
+    try{const r=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    document.getElementById('adm-archive-list').innerHTML=d.items.map(a=>`<div class="aitem"><div class="atype">${escH(a.action_type)}</div><div class="atext">${escH(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Пусто</div>';
+    const tp=Math.ceil(d.total/20);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadArchive(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadArchive(${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-archive-pages').innerHTML=p;}catch(e){}
+}
+
+// ── EDIT ──
+let admEditQ='',admEditPg=0;
+async function admLoadMangaList(q='',pg=0){
+    admEditQ=q;admEditPg=pg;
+    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    if(!d.items?.length){document.getElementById('adm-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Ничего не найдено</div>';document.getElementById('adm-edit-pages').innerHTML='';return;}
+    document.getElementById('adm-manga-list').innerHTML=d.items.map(m=>{const src=m.cover_imgbb_url||'';return`<div class="me-item" onclick="admOpenEdit(${m.id})">${src?`<img class="me-cover" src="${escH(src)}" alt="" onerror="this.style.display='none'">`:''}<div class="me-cover" style="${src?'display:none':'display:flex'}">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`;}).join('');
+    const tp=Math.ceil(d.total/10);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-edit-pages').innerHTML=p;}catch(e){}
+}
+function admSearchManga(){admLoadMangaList(document.getElementById('adm-edit-search').value.trim(),0);}
+document.getElementById('adm-edit-search').addEventListener('keydown',e=>{if(e.key==='Enter')admSearchManga();});
+async function admOpenEdit(mangaId){
+    try{const r=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await r.json();
+    document.getElementById('adm-manga-list').style.display='none';document.getElementById('adm-edit-pages').style.display='none';document.getElementById('adm-edit-search-row').style.display='none';
+    document.getElementById('adm-edit-form-wrap').style.display='block';
+    let chapHtml='';
+    if(manga.is_series&&manga.chapters?.length){chapHtml=`<div class="adm-field" style="margin-top:14px"><label class="adm-label">Главы</label>${manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+escH(ch.title):''}</div><button class="btn btn-red btn-sm" onclick="admDelChapter(${ch.id},this)">🗑 Удалить</button></div>`).join('')}</div>`;}
+    let allG=[],allT=[],mgIds=new Set(),mtIds=new Set();
+    try{const gr=await fetch('/api/genres');const gd=await gr.json();allG=gd.genres||[];allT=gd.tags||[];}catch(e){}
+    try{const mr=await fetch(`/api/manga/${mangaId}/genres`);const md=await mr.json();md.genres?.forEach(g=>mgIds.add(g.id));md.tags?.forEach(t=>mtIds.add(t.id));}catch(e){}
+    const genHtml=allG.length?`<div class="adm-field"><label class="adm-label">🎭 Жанры</label><div class="tag-chip-list">${allG.map(g=>`<label class="tag-chip${mgIds.has(g.id)?' checked':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagHtml=allT.length?`<div class="adm-field"><label class="adm-label">🏷 Теги</label><div class="tag-chip-list">${allT.map(t=>`<label class="tag-chip${mtIds.has(t.id)?' checked':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    document.getElementById('adm-edit-form').innerHTML=`
+        <div class="adm-field"><label class="adm-label">Название</label><input class="adm-inp" type="text" id="aef-title" value="${escH(manga.title)}"></div>
+        <div class="adm-field"><label class="adm-label">Описание</label><textarea class="adm-inp adm-textarea" id="aef-desc">${escH(manga.description||'')}</textarea></div>
+        <div class="adm-field"><label class="adm-label">Ссылка Telegraph</label><input class="adm-inp" type="text" id="aef-link" value="${escH(manga.telegraph_url||'')}"></div>
+        <div class="adm-field"><label class="adm-label">URL обложки</label><input class="adm-inp" type="text" id="aef-cover" value="${escH(manga.cover_imgbb_url||'')}">
+        ${manga.cover_imgbb_url?`<img src="${escH(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-top:8px">`:''}</div>
+        ${genHtml}${tagHtml}${chapHtml}
+        <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-primary" style="flex:1" onclick="admSaveManga(${mangaId})">💾 Сохранить изменения</button>
+            <button class="btn btn-red" onclick="admDelManga(${mangaId})">🗑 Удалить</button>
+        </div>
+        <div class="adm-result" id="aef-result"></div>`;
+    }catch(e){alert('❌ Ошибка загрузки');}
+}
+function admBackToList(){document.getElementById('adm-edit-form-wrap').style.display='none';document.getElementById('adm-manga-list').style.display='block';document.getElementById('adm-edit-pages').style.display='flex';document.getElementById('adm-edit-search-row').style.display='flex';}
+async function admSaveManga(id){
+    try{const res=await fetch(`/api/admin/manga/${id}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('aef-title').value.trim(),description:document.getElementById('aef-desc').value.trim(),telegraph_url:document.getElementById('aef-link').value.trim(),cover_imgbb_url:document.getElementById('aef-cover').value.trim()})});
+    const data=await res.json();
+    const gIds=[...document.querySelectorAll('#adm-edit-form input[data-gid]:checked')].map(el=>+el.dataset.gid);
+    const tIds=[...document.querySelectorAll('#adm-edit-form input[data-tid]:checked')].map(el=>+el.dataset.tid);
+    try{await fetch(`/api/admin/manga/${id}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:gIds,tag_ids:tIds})});}catch(e){}
+    const b=document.getElementById('aef-result');
+    if(data.success){b.className='adm-result success';b.textContent='✅ Сохранено!';}else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
+}
+async function admDelManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){admBackToList();admLoadMangaList(admEditQ,admEditPg);}}catch(e){}}
+async function admDelChapter(id,btn){if(!confirm('Удалить главу?'))return;try{const r=await fetch(`/api/admin/chapter/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){btn.closest('.ch-row').remove();}}catch(e){}}
+
+// ── ADD CHAPTER ──
+let admChMangaId=null,admChFiles=[];
+async function admSearchForChapter(){
+    const q=document.getElementById('adm-ch-search').value.trim();
+    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const d=await r.json();
+    if(!d.items?.length){document.getElementById('adm-ch-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px">Не найдено</div>';return;}
+    document.getElementById('adm-ch-manga-list').innerHTML=d.items.map(m=>`<div class="me-item" onclick="admSelectChManga(${m.id},'${escH(m.title).replace(/'/g,"\\'")}')"><div class="me-cover" style="display:flex">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`).join('');}catch(e){}
+}
+function admSelectChManga(id,title){admChMangaId=id;document.getElementById('adm-ch-form').style.display='block';document.getElementById('adm-ch-manga-list').innerHTML=`<div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.22);border-radius:8px;padding:9px 12px;font-weight:600;color:var(--purple);font-size:12px">✅ ${escH(title)}</div>`;}
+function admSwitchChTab(tab){['zip','photos'].forEach(t=>{document.getElementById('adm-ch-tab-'+t).classList.toggle('active',t===tab);document.getElementById('adm-ch-panel-'+t).classList.toggle('active',t===tab);});}
+function admChPhotosChange(input){admChFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));document.getElementById('adm-ch-photos-preview').textContent=`📸 ${admChFiles.length} стр. выбрано`;}
+async function admChZipChange(input){if(!input.files[0])return;const prev=document.getElementById('adm-ch-zip-preview');prev.textContent='⏳ Распаковка...';try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}admChFiles=blobs;prev.textContent=`📦 ${blobs.length} стр. распаковано`;}catch(e){prev.textContent='❌ '+e.message;}}
+async function admSubmitChapter(){
+    if(!admChMangaId){alert('❌ Выбери серию!');return;}
+    const chNum=parseFloat(document.getElementById('adm-ch-num').value);const chTitle=document.getElementById('adm-ch-title').value.trim();
+    if(!chNum||chNum<0){alert('❌ Укажи номер!');return;}if(!admChFiles.length){alert('❌ Загрузи страницы!');return;}
+    const btn=document.getElementById('adm-ch-submit');btn.disabled=true;btn.classList.add('loading');
+    const pb=document.getElementById('adm-ch-upbar'),pf=document.getElementById('adm-ch-upbar-fill');pb.classList.add('active');pf.style.width='2%';
+    const rb=document.getElementById('adm-ch-result');rb.className='adm-result';rb.textContent='';
+    try{const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();if(!kd.success){alert('❌ Нет доступа');btn.disabled=false;btn.classList.remove('loading');return;}
+    const keys=kd.keys,urls=[],total=admChFiles.length;
+    for(let i=0;i<total;i++){pf.style.width=(2+Math.round(i/total*90))+'%';const u=await uploadOneToImgbb(admChFiles[i],keys);if(u)urls.push(u);}
+    pf.style.width='95%';
+    const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:admChMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
+    const data=await res.json();pf.style.width='100%';
+    if(data.success){rb.className='adm-result success';rb.textContent=`✅ Глава ${chNum} добавлена! ${urls.length} стр.`;}
+    else{rb.className='adm-result error';rb.textContent='❌ '+(data.error||'Ошибка');}
+    }catch(e){rb.className='adm-result error';rb.textContent='❌ '+e.message;}
+    btn.disabled=false;btn.classList.remove('loading');
+}
+
+// ── TAGS ──
+async function admLoadTagsPanel(){
+    try{const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
+    document.getElementById('adm-genre-count').textContent=d.genres?.length||0;
+    document.getElementById('adm-tag-count').textContent=d.tags?.length||0;
+    const gl=document.getElementById('adm-genres-list');
+    gl.innerHTML=d.genres?.length?d.genres.map(g=>`<div class="tg-item"><div class="tg-name">${escH(g.name)}</div><div class="tg-slug">${escH(g.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelGenre(${g.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет жанров</div>';
+    const tl=document.getElementById('adm-tags-list');
+    tl.innerHTML=d.tags?.length?d.tags.map(t=>`<div class="tg-item" style="${t.is_nsfw?'border-color:rgba(239,68,68,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${escH(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${escH(t.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelTag(${t.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет тегов</div>';
+    }catch(e){}
+}
+async function admAddGenre(){const name=document.getElementById('adm-new-genre-name').value.trim();const slug=document.getElementById('adm-new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){document.getElementById('adm-new-genre-name').value='';document.getElementById('adm-new-genre-slug').value='';admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDelGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function admAddTag(){const name=document.getElementById('adm-new-tag-name').value.trim();const slug=document.getElementById('adm-new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=document.getElementById('adm-new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){document.getElementById('adm-new-tag-name').value='';document.getElementById('adm-new-tag-slug').value='';document.getElementById('adm-new-tag-nsfw').checked=false;admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDelTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function admReseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+
+// ── MESSAGES ──
+async function admLoadMessages(){
+    try{const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
+    document.getElementById('adm-msg-list').innerHTML=d.items?.length?d.items.map(m=>`<div class="amsg-item" id="amsg-${m.id}"><div class="amsg-del"><button class="btn btn-red btn-sm" onclick="admDelMessage(${m.id})">Удалить</button></div><div class="amsg-text">${escH(m.text)}</div><div class="amsg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Сообщений нет</div>';
+    }catch(e){}
+}
+async function admSendMessage(){
+    const text=document.getElementById('adm-msg-text').value.trim();
+    if(!text){alert('Введи сообщение');return;}
+    try{const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await r.json();
+    const b=document.getElementById('adm-msg-result');
+    if(d.success){b.className='adm-result success';b.textContent='✅ Сообщение отправлено!';document.getElementById('adm-msg-text').value='';admLoadMessages();}
+    else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
+}
+async function admDelMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=document.getElementById('amsg-'+id);if(el)el.remove();}catch(e){}}
+
+// ── SUGGESTIONS ──
+async function admLoadSuggestions(pg){
+    try{const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    document.getElementById('adm-sug-list').innerHTML=d.items?.length?d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${escH(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="sug-read-btn" onclick="admMarkSug(${s.id},this)">✓ Прочитано</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Новых предложений нет</div>';
+    const tp=Math.ceil(d.total/15);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-sug-pages').innerHTML=p;}catch(e){}
+}
+async function admMarkSug(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
+
+// ── ADMINS ──
+async function admLoadAdmins(){
+    try{const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
+    document.getElementById('adm-admins-list').innerHTML=d.admins?.length?d.admins.map(a=>`<div class="admin-row"><div class="admin-av">🛡</div><div class="admin-info"><div class="admin-name">${escH(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText?.('${a.user_id}');alert('📋 Скопировано')">Копировать</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет данных</div>';
+    }catch(e){}
+}
+async function admSubmitAddAdmin(){
+    const input=document.getElementById('adm-ap-input').value.trim();const tag=document.getElementById('adm-ap-tag').value.trim()||'Администратор';
+    const rb=document.getElementById('adm-ap-result');
+    if(!input){rb.className='adm-result error';rb.textContent='❌ Введи email или TG ID';return;}
+    let endpoint='/api/admin/assign',body={tag,action:'add'};
+    if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}
+    try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();
+    if(d.success){rb.className='adm-result success';rb.textContent='✅ '+d.message;document.getElementById('adm-ap-input').value='';document.getElementById('adm-ap-tag').value='';setTimeout(()=>admLoadAdmins(),1500);}
+    else{rb.className='adm-result error';rb.textContent='❌ '+d.error;}}catch(e){rb.className='adm-result error';rb.textContent='❌ Ошибка сети';}
+}
+
+// ── AUTO SLUG ──
+function autoSlug(nameId,slugId){const n=document.getElementById(nameId),s=document.getElementById(slugId);if(n&&s)n.addEventListener('input',()=>{if(!s.dataset.manual)s.value=n.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});if(s)s.addEventListener('input',()=>s.dataset.manual='1');}
+autoSlug('adm-new-genre-name','adm-new-genre-slug');
+autoSlug('adm-new-tag-name','adm-new-tag-slug');
+
+// ── IMGBB HELPERS (from main page) ──
+let _jszip=null;
+async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
+async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read error'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
+
+// ── INIT ──
+admLoadStats();
+</script>
+</body></html>
+<?php exit;
+}
+
 if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
     header('Content-Type: application/json');
     try{
@@ -4364,7 +5320,7 @@ header{
 .pag-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 /* Right sidebar — functions, compact */
-.stats-right{background:rgba(255,255,255,.015);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.stats-right{background:rgba(255,255,255,.015);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;overflow:hidden}
 .func-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:2px}
 .func-btn{width:100%;padding:9px 11px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;text-align:left;transition:all .18s;border:1px solid;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .func-btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
