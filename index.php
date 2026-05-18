@@ -6256,7 +6256,7 @@ header{
     bottom: 0;
     background: rgba(0,0,0,0.7);
     backdrop-filter: blur(4px);
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     z-index: 9999;
@@ -7176,6 +7176,13 @@ async function submitManga(){
 
 // ===== ADMIN PANEL =====
 function openAdminPanel(){
+    // Проверка: открыть панель только если пользователь администратор
+    const adminBtn = document.getElementById('admin-btn');
+    if (!adminBtn || !adminBtn.classList.contains('visible')) {
+        showToast('❌ У тебя нет прав администратора');
+        return;
+    }
+    
     document.getElementById('admin-modal').style.display='flex';
     loadAdminStats();
     loadAdmins();
