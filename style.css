@@ -1,0 +1,98 @@
+/* =====================================================
+   BLACKWATCH — Global Stylesheet
+   ===================================================== */
+
+:root {
+    --bg: #0a0a0a;
+    --bg2: #0d0d12;
+    --card: #141414;
+    --card2: #1a1a1a;
+    --card3: #1f1f28;
+    --glass: rgba(17,17,24,0.7);
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --border-accent: rgba(232,25,44,0.3);
+    --text: #f2f2f2;
+    --text2: #a0a0a0;
+    --muted: #555;
+    --accent: #e8192c;
+    --accent2: #ff3347;
+    --accent-dim: rgba(232,25,44,0.08);
+    --accent-glow: rgba(232,25,44,0.2);
+    --accent-glow2: rgba(232,25,44,0.35);
+    --green: #16a34a;
+    --green-light: #22c55e;
+    --green-glow: rgba(22,163,74,0.18);
+    --amber: #d97706;
+    --amber-light: #f59e0b;
+    --amber-glow: rgba(217,119,6,0.18);
+    --purple: #7c3aed;
+    --purple-light: #8b5cf6;
+    --purple-glow: rgba(124,58,237,0.18);
+    --blue: #2563eb;
+    --blue-light: #3b82f6;
+    --blue-glow: rgba(37,99,235,0.18);
+    --red: #dc2626;
+    --red-light: #ef4444;
+    --red-glow: rgba(220,38,38,0.18);
+    --orange: #fb923c;
+    --t: 0.22s cubic-bezier(0.4,0,0.2,1);
+    --r: 12px;
+    --r2: 8px;
+    --shadow: 0 8px 40px rgba(0,0,0,0.7);
+    --shadow-card: 0 2px 16px rgba(0,0,0,0.4);
+    --shadow-accent: 0 0 30px rgba(232,25,44,0.18), 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.light {
+    --bg: #f0f0f5;
+    --bg2: #e8e8f0;
+    --card: #ffffff;
+    --card2: #f5f5fa;
+    --card3: #ededf5;
+    --glass: rgba(255,255,255,0.85);
+    --border: rgba(0,0,0,0.08);
+    --border2: rgba(0,0,0,0.14);
+    --border-accent: rgba(232,25,44,0.25);
+    --text: #0a0a14;
+    --text2: #505068;
+    --muted: #9090a8;
+    --accent-dim: rgba(232,25,44,0.05);
+    --accent-glow: rgba(232,25,44,0.1);
+    --shadow: 0 8px 40px rgba(0,0,0,0.15);
+    --shadow-card: 0 2px 12px rgba(0,0,0,0.08);
+    --shadow-accent: 0 0 24px rgba(232,25,44,0.12), 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* =====================================================
+   RESET & BASE
+   ===================================================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+a { text-decoration: none; color: inherit; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, textarea, select { font-family: inherit; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::selection { background: var(--accent-glow2); color: #fff; }
+
+/* =====================================================
+   ANIMATIONS
+   ===================================================== */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.5); } 50% { box-shadow: 0 0 0 6px rgba(248,113,113,0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes ti { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }

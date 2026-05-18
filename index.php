@@ -107,7 +107,13 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if ($path === '/style.css') {
     header('Content-Type: text/css');
     header('Cache-Control: public, max-age=86400');
-    readfile(__DIR__ . '/style.css');
+    $cssFile = __DIR__ . '/style.css';
+    if (file_exists($cssFile)) {
+        readfile($cssFile);
+    } else {
+        // Встроенный fallback CSS — базовые переменные и стили
+        echo ':root{--bg:#0a0a0a;--card:#141414;--card2:#1a1a1a;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--text:#f2f2f2;--text2:#a0a0a0;--muted:#555;--accent:#e8192c;--green:#22c55e;--red:#f87171;--orange:#fb923c}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif}a{text-decoration:none;color:inherit}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}';
+    }
     exit;
 }
 
