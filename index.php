@@ -103,14 +103,6 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-// Favicon
-if ($path === '/favicon.ico') {
-    header('Content-Type: image/x-icon');
-    header('Cache-Control: public, max-age=604800');
-    // Return minimal 1x1 transparent ICO
-    echo base64_decode('AAABAAEAAQEAAAEAIAAwAAAAFgAAACgAAAABAAAAAgAAAAEAIAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==');
-    exit;
-}
 // Отдаём style.css
 if ($path === '/style.css') {
     header('Content-Type: text/css');
@@ -618,93 +610,43 @@ if ($path === '/admin') {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>⚙️ Админ-панель · BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://telegram.org/js/telegram-web-app.js" async></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-/* ═══════════════════════════════════════════
-   BLACKWATCH ADMIN — DARK THEME (default)
-═══════════════════════════════════════════ */
 :root{
-    --bg:#08080c;
-    --bg2:#0d0d12;
-    --card:#111118;
-    --card2:#18181f;
-    --card3:#1f1f28;
-    --glass:rgba(17,17,24,0.7);
-    --border:rgba(255,255,255,0.06);
-    --border2:rgba(255,255,255,0.12);
-    --border-accent:rgba(232,25,44,0.3);
-    --text:#f4f4f8;
-    --text2:#9090a8;
-    --muted:#4a4a62;
-    --accent:#e8192c;
-    --accent2:#ff3347;
-    --accent-dim:rgba(232,25,44,0.08);
-    --accent-glow:rgba(232,25,44,0.2);
-    --accent-glow2:rgba(232,25,44,0.35);
-    --green:#16a34a;--green-light:#22c55e;--green-glow:rgba(22,163,74,.18);
-    --amber:#d97706;--amber-light:#f59e0b;--amber-glow:rgba(217,119,6,.18);
-    --purple:#7c3aed;--purple-light:#8b5cf6;--purple-glow:rgba(124,58,237,.18);
-    --blue:#2563eb;--blue-light:#3b82f6;--blue-glow:rgba(37,99,235,.18);
-    --red:#dc2626;--red-light:#ef4444;--red-glow:rgba(220,38,38,.18);
-    --t:.22s cubic-bezier(.4,0,.2,1);
-    --sidebar:256px;
-    --r:12px;
-    --r2:8px;
-    --shadow:0 8px 40px rgba(0,0,0,.7);
-    --shadow-card:0 2px 16px rgba(0,0,0,.4);
-    --shadow-accent:0 0 30px rgba(232,25,44,.18),0 4px 16px rgba(0,0,0,.5);
+    --bg:#0a0a0e;--bg2:#111116;--card:#161620;--card2:#1e1e2a;--card3:#252535;
+    --border:#2a2a3a;--border2:#3a3a50;
+    --text:#f0f0f8;--text2:#8888a0;--muted:#4a4a60;
+    --accent:#e8192c;--accent2:#ff2d42;--accent-glow:rgba(232,25,44,.22);
+    --green:#22c55e;--green-glow:rgba(34,197,94,.18);
+    --amber:#f59e0b;--amber-glow:rgba(245,158,11,.18);
+    --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.18);
+    --blue:#3b82f6;--blue-glow:rgba(59,130,246,.18);
+    --red:#ef4444;--red-glow:rgba(239,68,68,.18);
+    --t:.2s ease;
+    --sidebar:220px;
+    --r:10px;
+    --shadow:0 4px 24px rgba(0,0,0,.6);
+    --inset:inset 0 1px 0 rgba(255,255,255,.05),0 4px 12px rgba(0,0,0,.4);
 }
-
-/* ═══════════════════════════════════════════
-   LIGHT THEME
-═══════════════════════════════════════════ */
 .light{
-    --bg:#f0f0f5;
-    --bg2:#e8e8f0;
-    --card:#ffffff;
-    --card2:#f5f5fa;
-    --card3:#ededf5;
-    --glass:rgba(255,255,255,0.85);
-    --border:rgba(0,0,0,0.08);
-    --border2:rgba(0,0,0,0.14);
-    --border-accent:rgba(232,25,44,0.25);
-    --text:#0a0a14;
-    --text2:#505068;
-    --muted:#9090a8;
-    --accent-dim:rgba(232,25,44,0.05);
-    --accent-glow:rgba(232,25,44,0.1);
-    --shadow:0 8px 40px rgba(0,0,0,.15);
-    --shadow-card:0 2px 12px rgba(0,0,0,.08);
-    --shadow-accent:0 0 24px rgba(232,25,44,.12),0 4px 12px rgba(0,0,0,.1);
+    --bg:#ebebf0;--bg2:#e0e0e8;--card:#f8f8fc;--card2:#efeff5;--card3:#e6e6ef;
+    --border:#d0d0e0;--border2:#b8b8cc;
+    --text:#0a0a14;--text2:#505068;--muted:#9090a8;
+    --shadow:0 4px 24px rgba(0,0,0,.12);
+    --inset:inset 0 1px 0 rgba(255,255,255,.8),0 4px 12px rgba(0,0,0,.08);
 }
-
-/* ═══════════════════════════════════════════
-   RESET & BASE
-═══════════════════════════════════════════ */
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
-body{
-    background:var(--bg);color:var(--text);
-    font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;
-    -webkit-font-smoothing:antialiased;overflow-x:hidden;
-}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 a{text-decoration:none;color:inherit}
-button{font-family:inherit;cursor:pointer;border:none;background:none}
+button{font-family:inherit;cursor:pointer}
 input,textarea,select{font-family:inherit}
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-::selection{background:var(--accent-glow2);color:#fff}
 
-/* ═══════════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════════ */
+/* ── LAYOUT ── */
 .adm-layout{display:flex;min-height:100vh}
 
-/* ═══════════════════════════════════════════
-   SIDEBAR — MODERN GLASSY
-═══════════════════════════════════════════ */
+/* ── SIDEBAR ── */
 .adm-sidebar{
     width:var(--sidebar);flex-shrink:0;
     background:var(--card);
@@ -712,553 +654,322 @@ input,textarea,select{font-family:inherit}
     display:flex;flex-direction:column;
     position:fixed;top:0;left:0;height:100vh;
     z-index:100;transition:transform var(--t);
-    backdrop-filter:blur(20px);
-    -webkit-backdrop-filter:blur(20px);
 }
-/* Decorative red line top */
-.adm-sidebar::before{
-    content:'';position:absolute;top:0;left:0;right:0;height:2px;
-    background:linear-gradient(90deg,var(--accent),var(--accent2),transparent);
-}
-
-/* LOGO */
 .adm-logo{
-    padding:22px 20px 18px;
+    padding:20px 18px 16px;
     border-bottom:1px solid var(--border);
-    display:flex;align-items:center;gap:13px;
-    flex-shrink:0;position:relative;
+    display:flex;align-items:center;gap:10px;
+    flex-shrink:0;
 }
 .adm-logo-icon{
-    width:40px;height:40px;border-radius:12px;
-    background:linear-gradient(135deg,var(--accent),#c0000f);
+    width:34px;height:34px;border-radius:9px;
+    background:var(--accent);
     display:flex;align-items:center;justify-content:center;
-    font-size:18px;flex-shrink:0;
-    box-shadow:0 4px 20px var(--accent-glow2),0 0 0 1px rgba(232,25,44,.25);
-    position:relative;
+    font-size:16px;flex-shrink:0;
+    box-shadow:0 0 14px var(--accent-glow);
 }
-.adm-logo-icon::after{
-    content:'';position:absolute;inset:0;border-radius:12px;
-    background:linear-gradient(135deg,rgba(255,255,255,.18),transparent);
-}
-.adm-logo-text{
-    font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;
-    color:var(--text);line-height:1;
-}
-.adm-logo-sub{
-    font-size:9px;color:var(--accent);font-weight:700;
-    text-transform:uppercase;letter-spacing:1.5px;margin-top:2px;
-    opacity:.8;
-}
+.adm-logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--text)}
+.adm-logo-sub{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
 
-/* ADMIN PROFILE WIDGET in sidebar */
-.adm-profile-widget{
-    margin:12px 12px 0;padding:12px 14px;
-    background:var(--accent-dim);
-    border:1px solid var(--border-accent);
-    border-radius:var(--r);
-    display:flex;align-items:center;gap:10px;
-}
-.adm-profile-avatar{
-    width:36px;height:36px;border-radius:50%;
-    background:linear-gradient(135deg,var(--accent),#c0000f);
-    display:flex;align-items:center;justify-content:center;
-    font-size:15px;flex-shrink:0;font-weight:700;color:#fff;
-    box-shadow:0 0 12px var(--accent-glow);
-}
-.adm-profile-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.2}
-.adm-profile-role{font-size:10px;color:var(--accent);font-weight:600;opacity:.85}
-
-/* NAV */
-.adm-nav{flex:1;padding:14px 12px;overflow-y:auto;scrollbar-width:none}
+.adm-nav{flex:1;padding:10px 10px;overflow-y:auto;scrollbar-width:none}
 .adm-nav::-webkit-scrollbar{display:none}
-.adm-nav-section{
-    font-size:9px;font-weight:800;color:var(--muted);
-    text-transform:uppercase;letter-spacing:1.2px;
-    padding:14px 8px 6px;
-}
+.adm-nav-section{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;padding:10px 8px 5px}
 .adm-nav-item{
-    display:flex;align-items:center;gap:11px;
-    padding:10px 12px;border-radius:var(--r2);
+    display:flex;align-items:center;gap:10px;
+    padding:9px 10px;border-radius:var(--r);
     color:var(--text2);font-size:12px;font-weight:500;
     cursor:pointer;transition:all var(--t);margin-bottom:2px;
-    border:1px solid transparent;position:relative;
-    user-select:none;
+    border:1px solid transparent;
+    position:relative;
 }
-.adm-nav-item:hover{
-    background:var(--card2);color:var(--text);
-    border-color:var(--border);
-}
+.adm-nav-item:hover{background:var(--card2);color:var(--text);border-color:var(--border)}
 .adm-nav-item.active{
-    background:var(--accent-dim);color:var(--accent);
-    border-color:var(--border-accent);
-    font-weight:600;
+    background:rgba(232,25,44,.1);color:var(--accent);
+    border-color:rgba(232,25,44,.25);
+    box-shadow:0 0 0 1px rgba(232,25,44,.1);
 }
-.adm-nav-item.active::before{
-    content:'';position:absolute;left:-12px;top:50%;transform:translateY(-50%);
-    width:3px;height:60%;background:var(--accent);border-radius:0 2px 2px 0;
-}
-.adm-nav-icon{
-    width:32px;height:32px;border-radius:8px;
-    display:flex;align-items:center;justify-content:center;
-    font-size:14px;flex-shrink:0;
-    background:var(--card2);border:1px solid var(--border);
-    transition:all var(--t);
-}
-.adm-nav-item.active .adm-nav-icon{
-    background:var(--accent-dim);border-color:var(--border-accent);
-}
-.adm-nav-label{flex:1}
+.adm-nav-item.active .adm-nav-icon{color:var(--accent)}
+.adm-nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
 .adm-nav-badge{
-    margin-left:auto;min-width:20px;height:20px;
+    margin-left:auto;min-width:18px;height:18px;
     background:var(--accent);color:#fff;
-    font-size:9px;font-weight:800;
-    border-radius:10px;padding:0 6px;
+    font-size:9px;font-weight:700;
+    border-radius:9px;padding:0 5px;
     display:flex;align-items:center;justify-content:center;
-    box-shadow:0 2px 8px var(--accent-glow);
-    animation:pulse-badge 2s infinite;
 }
-@keyframes pulse-badge{0%,100%{box-shadow:0 0 0 0 var(--accent-glow2)}50%{box-shadow:0 0 0 4px transparent}}
 
-/* SIDEBAR FOOTER */
 .adm-sidebar-footer{
-    padding:14px 12px;border-top:1px solid var(--border);flex-shrink:0;
+    padding:12px 10px;border-top:1px solid var(--border);flex-shrink:0;
     display:flex;flex-direction:column;gap:6px;
 }
 .adm-theme-btn{
-    display:flex;align-items:center;gap:9px;
-    padding:10px 12px;border-radius:var(--r2);
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
     background:var(--card2);border:1px solid var(--border);
     color:var(--text2);font-size:11px;font-weight:600;
     cursor:pointer;transition:all var(--t);width:100%;
 }
-.adm-theme-btn:hover{border-color:var(--border2);color:var(--text);background:var(--card3)}
-.adm-theme-toggle{
-    margin-left:auto;width:36px;height:20px;
-    background:var(--card3);border-radius:10px;
-    position:relative;transition:all var(--t);border:1px solid var(--border);
-}
-.adm-theme-toggle::after{
-    content:'';position:absolute;top:2px;left:2px;
-    width:14px;height:14px;border-radius:7px;
-    background:var(--text2);transition:all var(--t);
-}
-.light .adm-theme-toggle{background:var(--accent);border-color:transparent}
-.light .adm-theme-toggle::after{left:calc(100% - 16px);background:#fff}
+.adm-theme-btn:hover{border-color:var(--border2);color:var(--text)}
 .adm-back-btn{
-    display:flex;align-items:center;gap:9px;
-    padding:10px 12px;border-radius:var(--r2);
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
     background:transparent;border:1px solid var(--border);
     color:var(--muted);font-size:11px;font-weight:600;
     cursor:pointer;transition:all var(--t);width:100%;text-decoration:none;
 }
-.adm-back-btn:hover{border-color:var(--border2);color:var(--text2);background:var(--card2)}
+.adm-back-btn:hover{border-color:var(--border2);color:var(--text2)}
 
-/* ═══════════════════════════════════════════
-   MAIN CONTENT
-═══════════════════════════════════════════ */
+/* ── MAIN CONTENT ── */
 .adm-main{margin-left:var(--sidebar);flex:1;min-height:100vh;background:var(--bg)}
-
-/* TOPBAR */
 .adm-topbar{
-    height:64px;
-    background:var(--glass);
-    border-bottom:1px solid var(--border);
-    display:flex;align-items:center;padding:0 28px;gap:16px;
+    height:56px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 24px;gap:14px;
     position:sticky;top:0;z-index:50;
-    backdrop-filter:blur(20px);
-    -webkit-backdrop-filter:blur(20px);
 }
-.adm-topbar-left{flex:1}
-.adm-topbar-breadcrumb{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
-.adm-topbar-title{font-size:16px;font-weight:800;color:var(--text);letter-spacing:-.2px}
-.adm-topbar-actions{display:flex;gap:8px;align-items:center}
+.adm-topbar-title{font-size:15px;font-weight:700;flex:1}
+.adm-topbar-sub{font-size:11px;color:var(--muted)}
 
-/* TOPBAR STATUS DOTS */
-.adm-status-dot{
-    width:8px;height:8px;border-radius:50%;
-    background:var(--green-light);
-    box-shadow:0 0 8px var(--green-glow);
-    animation:blink-status 3s infinite;
-}
-@keyframes blink-status{0%,80%,100%{opacity:1}90%{opacity:.3}}
-
-/* ═══════════════════════════════════════════
-   PANELS
-═══════════════════════════════════════════ */
-.adm-panel{display:none;padding:28px;animation:fadeInUp .22s ease}
+/* ── PANELS ── */
+.adm-panel{display:none;padding:24px;animation:fadeIn .18s ease}
 .adm-panel.active{display:block}
-@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-/* ═══════════════════════════════════════════
-   STAT CARDS — GLASSMORPHISM
-═══════════════════════════════════════════ */
-.scard-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+/* ── STAT CARDS ── */
+.scard-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
 .scard{
-    background:var(--card);border:1px solid var(--border);
-    border-radius:var(--r);padding:20px 18px;
-    box-shadow:var(--shadow-card);
-    transition:all var(--t);position:relative;overflow:hidden;cursor:default;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+    padding:14px 16px;
+    box-shadow:var(--inset);
+    transition:border-color var(--t),transform var(--t);
 }
-.scard::before{
-    content:'';position:absolute;top:0;left:0;right:0;height:2px;
-    background:var(--scard-accent,var(--border));
-    transition:all var(--t);
-}
-.scard:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:var(--shadow)}
-.scard-icon{font-size:22px;margin-bottom:12px;display:block}
-.scard-val{
-    font-family:'Bebas Neue',sans-serif;font-size:42px;line-height:1;
-    margin-bottom:4px;background:var(--scard-color,var(--text));
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-    background-clip:text;
-}
-.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
-.scard-trend{font-size:10px;color:var(--green-light);margin-top:6px;font-weight:600}
-/* Color variants */
-.scard-red{--scard-accent:var(--accent);--scard-color:var(--accent)}
-.scard-green{--scard-accent:var(--green-light);--scard-color:var(--green-light)}
-.scard-amber{--scard-accent:var(--amber-light);--scard-color:var(--amber-light)}
-.scard-blue{--scard-accent:var(--blue-light);--scard-color:var(--blue-light)}
-.scard-purple{--scard-accent:var(--purple-light);--scard-color:var(--purple-light)}
-.scard-white{--scard-accent:var(--text2);--scard-color:var(--text)}
+.scard:hover{border-color:var(--border2);transform:translateY(-1px)}
+.scard-val{font-family:'Bebas Neue',sans-serif;font-size:36px;line-height:1;margin-bottom:4px}
+.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 
-/* ═══════════════════════════════════════════
-   SECTION HEADERS
-═══════════════════════════════════════════ */
+/* ── SECTION HEADER ── */
 .adm-section-head{
     display:flex;align-items:center;justify-content:space-between;
-    margin-bottom:16px;padding-bottom:12px;
+    margin-bottom:14px;padding-bottom:10px;
     border-bottom:1px solid var(--border);
 }
-.adm-section-title{
-    font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px;
-    letter-spacing:-.1px;
-}
+.adm-section-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
 .adm-section-badge{
     background:var(--card2);border:1px solid var(--border);
-    border-radius:20px;padding:3px 10px;font-size:10px;color:var(--muted);font-weight:700;
+    border-radius:20px;padding:2px 9px;font-size:10px;color:var(--muted);font-weight:600;
 }
 
-/* ═══════════════════════════════════════════
-   BUTTONS
-═══════════════════════════════════════════ */
+/* ── BUTTONS ── */
 .btn{
-    display:inline-flex;align-items:center;gap:7px;
-    padding:9px 16px;border-radius:var(--r2);font-size:12px;font-weight:700;
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;
     cursor:pointer;border:1px solid;transition:all var(--t);
-    font-family:inherit;white-space:nowrap;letter-spacing:.1px;
+    font-family:inherit;white-space:nowrap;
 }
-.btn:hover{transform:translateY(-1px);filter:brightness(1.08)}
-.btn:active{transform:translateY(0);filter:brightness(.96)}
-.btn-primary{
-    background:linear-gradient(135deg,var(--accent),#c0000f);
-    border-color:transparent;color:#fff;
-    box-shadow:0 4px 16px var(--accent-glow),0 1px 0 rgba(255,255,255,.1) inset;
-}
-.btn-primary:hover{box-shadow:0 6px 24px var(--accent-glow2)}
-.btn-green{background:rgba(22,163,74,.12);border-color:rgba(22,163,74,.3);color:var(--green-light)}
-.btn-amber{background:rgba(217,119,6,.1);border-color:rgba(217,119,6,.3);color:var(--amber-light)}
-.btn-purple{background:rgba(124,58,237,.1);border-color:rgba(124,58,237,.3);color:var(--purple-light)}
-.btn-blue{background:rgba(37,99,235,.1);border-color:rgba(37,99,235,.3);color:var(--blue-light)}
-.btn-red{background:rgba(220,38,38,.1);border-color:rgba(220,38,38,.3);color:var(--red-light)}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.btn:active{transform:translateY(0)}
+.btn-primary{background:var(--accent);border-color:var(--accent2);color:#fff;box-shadow:0 0 12px var(--accent-glow)}
+.btn-green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--green);box-shadow:0 0 8px var(--green-glow)}
+.btn-amber{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--amber)}
+.btn-purple{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:var(--purple)}
+.btn-blue{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:var(--blue)}
+.btn-red{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red)}
 .btn-ghost{background:transparent;border-color:var(--border);color:var(--text2)}
-.btn-ghost:hover{border-color:var(--border2);color:var(--text);background:var(--card2)}
-.btn-sm{padding:6px 11px;font-size:11px;border-radius:7px}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text)}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
 .btn-wide{width:100%;justify-content:center}
-.btn-icon{width:34px;height:34px;padding:0;justify-content:center;border-radius:9px}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:8px}
 
-/* ═══════════════════════════════════════════
-   INPUTS
-═══════════════════════════════════════════ */
+/* ── INPUT ── */
 .adm-inp{
-    width:100%;background:var(--card2);
-    border:1px solid var(--border);
-    border-radius:var(--r2);color:var(--text);font-size:12px;
-    padding:10px 13px;outline:none;transition:all var(--t);
+    width:100%;background:var(--card2);border:1px solid var(--border);
+    border-radius:8px;color:var(--text);font-size:12px;
+    padding:9px 12px;outline:none;transition:border-color var(--t);
 }
-.adm-inp:focus{
-    border-color:var(--accent);
-    box-shadow:0 0 0 3px var(--accent-glow);
-    background:var(--card);
-}
+.adm-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .adm-inp::placeholder{color:var(--muted)}
 .adm-textarea{resize:none;min-height:80px;line-height:1.5}
-.adm-label{
-    font-size:10px;font-weight:800;color:var(--muted);
-    text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;
-}
-.adm-field{margin-bottom:14px}
+.adm-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px}
+.adm-field{margin-bottom:12px}
 
-/* ═══════════════════════════════════════════
-   CARD CONTAINER
-═══════════════════════════════════════════ */
+/* ── CARD CONTAINER ── */
 .adm-card{
     background:var(--card);border:1px solid var(--border);
-    border-radius:var(--r);padding:20px;
-    box-shadow:var(--shadow-card);
+    border-radius:var(--r);padding:16px;
+    box-shadow:var(--inset);
 }
-.adm-card+.adm-card{margin-top:12px}
+.adm-card+.adm-card{margin-top:10px}
 
-/* ═══════════════════════════════════════════
-   TOP MANGA LIST
-═══════════════════════════════════════════ */
-.top-list{display:flex;flex-direction:column;gap:6px}
+/* ── TOP MANGA LIST ── */
+.top-list{display:flex;flex-direction:column;gap:4px}
 .top-row{
-    display:flex;align-items:center;gap:12px;
-    padding:10px 14px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);
-    transition:all var(--t);
+    display:flex;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    transition:border-color var(--t);
 }
-.top-row:hover{border-color:var(--border-accent);transform:translateX(2px)}
-.top-idx{
-    font-family:'Bebas Neue',sans-serif;font-size:20px;
-    color:var(--muted);width:24px;flex-shrink:0;text-align:center;
-}
-.top-row:nth-child(1) .top-idx{color:var(--accent)}
-.top-row:nth-child(2) .top-idx{color:var(--amber-light)}
-.top-row:nth-child(3) .top-idx{color:var(--blue-light)}
-.top-name{flex:1;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top-likes{font-size:11px;font-weight:800;color:var(--accent);flex-shrink:0}
+.top-row:hover{border-color:var(--border2)}
+.top-idx{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);width:22px;flex-shrink:0;text-align:center}
+.top-name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-likes{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
 
-/* ═══════════════════════════════════════════
-   ADMIN LIST
-═══════════════════════════════════════════ */
+/* ── ADMIN LIST ── */
 .admin-row{
-    display:flex;align-items:center;gap:12px;
-    padding:12px 14px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);margin-bottom:6px;
-    transition:all var(--t);
-}
-.admin-row:hover{border-color:var(--border-accent)}
-.admin-av{
-    width:36px;height:36px;border-radius:10px;
-    background:linear-gradient(135deg,rgba(232,25,44,.2),rgba(232,25,44,.06));
-    border:1px solid rgba(232,25,44,.2);
-    display:flex;align-items:center;justify-content:center;
-    font-size:15px;flex-shrink:0;
-}
-.admin-info{flex:1;min-width:0}
-.admin-name{font-size:12px;font-weight:700;color:var(--text)}
-.admin-id{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:1px}
-
-/* ═══════════════════════════════════════════
-   ARCHIVE
-═══════════════════════════════════════════ */
-.aitem{
-    padding:12px 14px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);margin-bottom:6px;
-    transition:border-color var(--t);
-}
-.aitem:hover{border-color:var(--border2)}
-.atype{
-    font-size:9px;font-weight:800;text-transform:uppercase;
-    letter-spacing:.8px;color:var(--accent);margin-bottom:4px;
-    display:inline-flex;align-items:center;gap:5px;
-}
-.atype::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.atext{font-size:12px;color:var(--text2);margin-bottom:4px;line-height:1.4}
-.adate{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
-
-/* ═══════════════════════════════════════════
-   MESSAGES
-═══════════════════════════════════════════ */
-.amsg-item{
-    padding:14px 16px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);
-    margin-bottom:8px;position:relative;transition:border-color var(--t);
-}
-.amsg-item:hover{border-color:var(--border2)}
-.amsg-text{font-size:13px;color:var(--text);line-height:1.55;margin-bottom:6px}
-.amsg-meta{font-size:10px;color:var(--muted)}
-.amsg-del{position:absolute;top:10px;right:10px}
-
-/* ═══════════════════════════════════════════
-   MANGA EDIT LIST
-═══════════════════════════════════════════ */
-.me-item{
-    display:flex;align-items:center;gap:12px;
-    padding:10px 14px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);
-    cursor:pointer;transition:all var(--t);margin-bottom:6px;
-}
-.me-item:hover{border-color:var(--border-accent);background:var(--card3);transform:translateX(2px)}
-.me-cover{
-    width:36px;height:48px;border-radius:6px;object-fit:cover;
-    background:var(--card3);border:1px solid var(--border);
-    flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;
-}
-.me-title{font-size:12px;color:var(--text);font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.me-badge{font-size:11px;color:var(--muted);flex-shrink:0;padding:3px 8px;background:var(--card3);border-radius:6px;border:1px solid var(--border)}
-
-/* CHAPTER ITEM */
-.ch-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:9px 13px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;
-    transition:border-color var(--t);
-}
-.ch-row:hover{border-color:var(--border2)}
-.ch-row-label{font-size:12px;font-weight:700;color:var(--text)}
-
-/* ═══════════════════════════════════════════
-   SUGGESTIONS
-═══════════════════════════════════════════ */
-.sug-item{
-    padding:12px 14px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);
-    margin-bottom:6px;display:flex;gap:12px;align-items:flex-start;
-    transition:border-color var(--t);
-}
-.sug-item:hover{border-color:var(--border2)}
-.sug-text{font-size:12px;color:var(--text);flex:1;line-height:1.55}
-.sug-meta{font-size:10px;color:var(--muted);margin-top:4px}
-.sug-read-btn{
-    padding:5px 11px;background:rgba(22,163,74,.1);
-    border:1px solid rgba(22,163,74,.25);border-radius:7px;
-    color:var(--green-light);font-size:10px;font-weight:700;
-    cursor:pointer;font-family:inherit;flex-shrink:0;transition:all var(--t);
-}
-.sug-read-btn:hover{background:rgba(22,163,74,.2)}
-
-/* ═══════════════════════════════════════════
-   TAGS / GENRES
-═══════════════════════════════════════════ */
-.tg-item{
     display:flex;align-items:center;gap:10px;
     padding:9px 12px;background:var(--card2);
-    border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;
+    border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
     transition:border-color var(--t);
 }
-.tg-item:hover{border-color:var(--border2)}
-.tg-name{flex:1;font-size:12px;font-weight:600;color:var(--text)}
-.tg-slug{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;padding:2px 7px;background:var(--card3);border-radius:5px}
-
-/* TAG CHIPS */
-.tag-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.tag-chip{
-    padding:5px 11px;border-radius:20px;font-size:11px;cursor:pointer;
-    border:1px solid var(--border);color:var(--text2);
-    transition:all var(--t);display:inline-flex;align-items:center;gap:4px;
-    font-weight:500;
+.admin-row:hover{border-color:var(--border2)}
+.admin-av{
+    width:30px;height:30px;border-radius:8px;
+    background:rgba(232,25,44,.12);border:1px solid rgba(232,25,44,.2);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;flex-shrink:0;
 }
-.tag-chip:hover{border-color:var(--border2);color:var(--text)}
-.tag-chip.checked{background:rgba(124,58,237,.12);border-color:rgba(124,58,237,.35);color:var(--purple-light);font-weight:600}
-.tag-chip.nsfw{border-color:rgba(220,38,38,.25);color:var(--red-light)}
-.tag-chip.nsfw.checked{background:rgba(220,38,38,.1)}
+.admin-info{flex:1;min-width:0}
+.admin-name{font-size:12px;font-weight:600;color:var(--text)}
+.admin-id{font-size:10px;color:var(--muted);font-family:monospace}
 
-/* ═══════════════════════════════════════════
-   FILE UPLOAD
-═══════════════════════════════════════════ */
+/* ── ARCHIVE ── */
+.aitem{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px}
+.atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+.atext{font-size:12px;color:var(--text2);margin-bottom:3px}
+.adate{font-size:10px;color:var(--muted)}
+
+/* ── MSG ── */
+.amsg-item{padding:11px 13px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;position:relative}
+.amsg-text{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:5px}
+.amsg-meta{font-size:10px;color:var(--muted)}
+.amsg-del{position:absolute;top:8px;right:8px}
+
+/* ── MANGA EDIT LIST ── */
+.me-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    cursor:pointer;transition:all var(--t);margin-bottom:5px;
+}
+.me-item:hover{border-color:var(--border2);background:var(--card3)}
+.me-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card3);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.me-title{font-size:12px;color:var(--text);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-badge{font-size:10px;color:var(--muted);flex-shrink:0}
+
+/* ── CHAPTER ITEM ── */
+.ch-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 11px;background:var(--card2);
+    border:1px solid var(--border);border-radius:7px;margin-bottom:4px;
+}
+.ch-row-label{font-size:12px;font-weight:600;color:var(--text)}
+
+/* ── SUGGEST ── */
+.sug-item{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;display:flex;gap:10px;align-items:flex-start}
+.sug-text{font-size:12px;color:var(--text);flex:1;line-height:1.5}
+.sug-meta{font-size:10px;color:var(--muted);margin-top:3px}
+.sug-read-btn{padding:4px 10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:5px;color:var(--green);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all var(--t)}
+.sug-read-btn:hover{background:rgba(34,197,94,.2)}
+
+/* ── TAGS / GENRES ── */
+.tg-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card2);border:1px solid var(--border);border-radius:7px;margin-bottom:4px}
+.tg-name{flex:1;font-size:12px;color:var(--text)}
+.tg-slug{font-size:10px;color:var(--muted);font-family:monospace}
+
+/* ── FILE UPLOAD ZONE ── */
 .adm-upload-zone{
-    border:2px dashed var(--border2);border-radius:var(--r);
-    padding:28px 20px;text-align:center;cursor:pointer;
+    border:2px dashed var(--border2);border-radius:10px;
+    padding:20px;text-align:center;cursor:pointer;
     transition:all var(--t);background:var(--card2);
     position:relative;overflow:hidden;
 }
-.adm-upload-zone:hover{border-color:var(--accent);background:var(--accent-dim)}
+.adm-upload-zone:hover{border-color:var(--accent);background:rgba(232,25,44,.04)}
 .adm-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.adm-upload-icon{font-size:28px;margin-bottom:8px;display:block}
-.adm-upload-text{font-size:12px;color:var(--text2);font-weight:600}
-.adm-upload-hint{font-size:10px;color:var(--muted);margin-top:5px}
-.adm-preview-count{font-size:13px;font-weight:700;color:var(--green-light);margin-top:8px}
+.adm-upload-icon{font-size:24px;margin-bottom:6px}
+.adm-upload-text{font-size:11px;color:var(--muted)}
+.adm-upload-hint{font-size:10px;color:var(--muted);margin-top:4px}
+.adm-preview-count{font-size:12px;font-weight:700;color:var(--green);margin-top:6px}
 
-/* FILE TABS */
-.adm-file-tabs{display:flex;gap:5px;margin-bottom:12px}
+/* ── FILE TABS ── */
+.adm-file-tabs{display:flex;gap:4px;margin-bottom:10px}
 .adm-ftab{
-    padding:8px 16px;border-radius:var(--r2);font-size:11px;font-weight:700;
+    padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;
     cursor:pointer;transition:all var(--t);
     background:var(--card2);border:1px solid var(--border);color:var(--text2);
 }
-.adm-ftab.active{background:var(--accent-dim);border-color:var(--border-accent);color:var(--accent)}
+.adm-ftab.active{background:rgba(232,25,44,.1);border-color:rgba(232,25,44,.3);color:var(--accent)}
 .adm-fpanel{display:none}
 .adm-fpanel.active{display:block}
 
-/* ═══════════════════════════════════════════
-   PROGRESS BAR
-═══════════════════════════════════════════ */
-.adm-upbar{height:3px;background:var(--card2);border-radius:2px;margin:12px 0;display:none;overflow:hidden}
+/* ── PROGRESS BAR ── */
+.adm-upbar{height:4px;background:var(--card2);border-radius:2px;margin:10px 0;display:none;overflow:hidden}
 .adm-upbar.active{display:block}
-.adm-upbar-fill{
-    height:100%;border-radius:2px;transition:width .3s ease;width:0;
-    background:linear-gradient(90deg,var(--accent),var(--amber-light),var(--accent));
-    background-size:200% 100%;animation:shimmer 1.5s infinite linear;
-}
-@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.adm-upbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
 
-/* RESULT BANNER */
-.adm-result{display:none;padding:12px 16px;border-radius:var(--r2);font-size:12px;font-weight:700;margin-top:12px}
-.adm-result.success{display:block;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:var(--green-light)}
-.adm-result.error{display:block;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:var(--red-light)}
+/* ── RESULT BANNER ── */
+.adm-result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:10px}
+.adm-result.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green)}
+.adm-result.error{display:block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red)}
 
-/* SPINNER */
-.adm-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+/* ── SPINNER ── */
+.adm-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
 .loading .adm-spinner{display:inline-block}
 .loading .btn-label{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ═══════════════════════════════════════════
-   PAGINATION
-═══════════════════════════════════════════ */
-.page-row{display:flex;gap:6px;align-items:center;margin-top:12px;flex-wrap:wrap}
+/* ── PAGINATION ── */
+.page-row{display:flex;gap:5px;align-items:center;margin-top:10px;flex-wrap:wrap}
 .page-btn{
-    padding:6px 13px;background:var(--card2);border:1px solid var(--border);
-    border-radius:7px;color:var(--text2);font-size:11px;font-weight:700;
+    padding:5px 11px;background:var(--card2);border:1px solid var(--border);
+    border-radius:6px;color:var(--text2);font-size:11px;font-weight:600;
     cursor:pointer;font-family:inherit;transition:all var(--t);
 }
 .page-btn:hover{border-color:var(--border2);color:var(--text)}
-.page-btn.active{background:var(--accent);border-color:transparent;color:#fff;box-shadow:0 2px 12px var(--accent-glow)}
+.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
-/* ═══════════════════════════════════════════
-   GRID LAYOUTS
-═══════════════════════════════════════════ */
+/* ── GRID 2 COL ── */
 .adm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.adm-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.adm-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 
-/* ═══════════════════════════════════════════
-   QUICK ACTION CARDS
-═══════════════════════════════════════════ */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+/* ── QUICK ACTIONS ── */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .qa-btn{
-    display:flex;flex-direction:column;align-items:flex-start;gap:4px;
-    padding:16px;border-radius:var(--r);border:1px solid;
+    display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    padding:12px 14px;border-radius:var(--r);border:1px solid;
     cursor:pointer;transition:all var(--t);text-align:left;
-    font-family:inherit;position:relative;overflow:hidden;
+    font-family:inherit;
 }
-.qa-btn::after{
-    content:'';position:absolute;top:0;right:0;bottom:0;
-    width:3px;background:currentColor;opacity:.3;
-    transition:opacity var(--t);
-}
-.qa-btn:hover{transform:translateY(-3px);filter:brightness(1.1)}
-.qa-btn:hover::after{opacity:.6}
-.qa-btn-icon{font-size:24px;margin-bottom:4px}
-.qa-btn-label{font-size:12px;font-weight:800;letter-spacing:-.1px}
-.qa-btn-sub{font-size:10px;opacity:.65}
-.qa-green{background:rgba(22,163,74,.07);border-color:rgba(22,163,74,.2);color:var(--green-light)}
-.qa-amber{background:rgba(217,119,6,.07);border-color:rgba(217,119,6,.2);color:var(--amber-light)}
-.qa-purple{background:rgba(124,58,237,.07);border-color:rgba(124,58,237,.2);color:var(--purple-light)}
-.qa-blue{background:rgba(37,99,235,.07);border-color:rgba(37,99,235,.2);color:var(--blue-light)}
-.qa-red{background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.2);color:var(--red-light)}
+.qa-btn:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.qa-btn-icon{font-size:20px;margin-bottom:3px}
+.qa-btn-label{font-size:12px;font-weight:700}
+.qa-btn-sub{font-size:10px;opacity:.7}
+.qa-green{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:var(--green)}
+.qa-amber{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:var(--amber)}
+.qa-purple{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--purple)}
+.qa-blue{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:var(--blue)}
+.qa-red{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.25);color:var(--red)}
 
-/* ═══════════════════════════════════════════
-   ADD ADMIN FORM
-═══════════════════════════════════════════ */
+/* ── ADD ADMIN FORM ── */
 .add-admin-box{
-    display:none;margin-top:12px;
-    padding:16px;background:rgba(220,38,38,.04);
-    border:1px solid rgba(220,38,38,.16);border-radius:var(--r);
+    display:none;margin-top:10px;
+    padding:14px;background:rgba(239,68,68,.04);
+    border:1px solid rgba(239,68,68,.18);border-radius:10px;
 }
 .add-admin-box.open{display:block}
 
-/* ═══════════════════════════════════════════
-   MOBILE
-═══════════════════════════════════════════ */
-.adm-menu-toggle{
-    display:none;padding:9px;margin-right:6px;
-    border-radius:9px;background:var(--card2);
-    border:1px solid var(--border);color:var(--text);font-size:16px;
-    cursor:pointer;
+/* ── TAGS CHIP ── */
+.tag-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag-chip{
+    padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;
+    border:1px solid var(--border);color:var(--text2);
+    transition:all var(--t);display:inline-flex;align-items:center;gap:3px;
 }
+.tag-chip.checked{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.4);color:var(--purple)}
+.tag-chip.nsfw{border-color:rgba(239,68,68,.3);color:var(--red)}
+.tag-chip.nsfw.checked{background:rgba(239,68,68,.12)}
+
+/* ── MOBILE MENU TOGGLE ── */
+.adm-menu-toggle{display:none;padding:8px;margin-right:4px;border-radius:7px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:16px}
+
+/* ── RESPONSIVE ── */
 @media(max-width:768px){
     .adm-sidebar{transform:translateX(-100%)}
     .adm-sidebar.open{transform:translateX(0)}
@@ -1267,146 +978,103 @@ input,textarea,select{font-family:inherit}
     .scard-row{grid-template-columns:1fr 1fr}
     .adm-grid2{grid-template-columns:1fr}
     .qa-grid{grid-template-columns:1fr 1fr}
-    .adm-panel{padding:16px}
 }
 @media(max-width:480px){
     .scard-row{grid-template-columns:1fr 1fr}
     .qa-grid{grid-template-columns:1fr}
-    .adm-panel{padding:12px}
-    .adm-topbar{padding:0 16px}
+    .adm-panel{padding:14px}
 }
 
-/* OVERLAY for mobile */
-.adm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99;backdrop-filter:blur(6px)}
+/* ── OVERLAY for mobile ── */
+.adm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;backdrop-filter:blur(4px)}
 .adm-overlay.open{display:block}
-
-/* ═══════════════════════════════════════════
-   DECORATIVE BG MESH
-═══════════════════════════════════════════ */
-.adm-bg-mesh{
-    position:fixed;pointer-events:none;z-index:0;
-    top:-20%;right:-10%;width:600px;height:600px;
-    background:radial-gradient(ellipse at center,rgba(232,25,44,.04) 0%,transparent 70%);
-    border-radius:50%;animation:float-mesh 8s ease-in-out infinite;
-}
-.adm-bg-mesh2{
-    top:auto;bottom:-20%;right:auto;left:-10%;
-    background:radial-gradient(ellipse at center,rgba(37,99,235,.03) 0%,transparent 70%);
-    animation-delay:-4s;animation-duration:10s;
-}
-@keyframes float-mesh{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.05)}}
 </style>
 </head>
 <body class="<?=htmlspecialchars($bodyClass)?>">
 
-<!-- decorative bg -->
-<div class="adm-bg-mesh"></div>
-<div class="adm-bg-mesh adm-bg-mesh2"></div>
+<div class="adm-layout">
 
-<div class="adm-layout" style="position:relative;z-index:1">
-
-<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<!-- SIDEBAR -->
 <aside class="adm-sidebar" id="adm-sidebar">
     <div class="adm-logo">
-        <div class="adm-logo-icon">⚔</div>
+        <div class="adm-logo-icon">⚙️</div>
         <div>
             <div class="adm-logo-text">BLACKWATCH</div>
-            <div class="adm-logo-sub">Control Center</div>
-        </div>
-    </div>
-
-    <!-- Admin profile widget -->
-    <div class="adm-profile-widget">
-        <div class="adm-profile-avatar">A</div>
-        <div>
-            <div class="adm-profile-name">Администратор</div>
-            <div class="adm-profile-role">⬢ Super Admin</div>
+            <div class="adm-logo-sub">Admin Panel</div>
         </div>
     </div>
 
     <nav class="adm-nav">
         <div class="adm-nav-section">Обзор</div>
         <div class="adm-nav-item active" onclick="admNav('stats',this)">
-            <span class="adm-nav-icon">📊</span>
-            <span class="adm-nav-label">Статистика</span>
+            <span class="adm-nav-icon">📊</span> Статистика
         </div>
         <div class="adm-nav-item" onclick="admNav('archive',this)">
-            <span class="adm-nav-icon">🗂</span>
-            <span class="adm-nav-label">Архив действий</span>
+            <span class="adm-nav-icon">🗂</span> Архив действий
         </div>
 
         <div class="adm-nav-section">Контент</div>
         <div class="adm-nav-item" onclick="admNav('edit',this)">
-            <span class="adm-nav-icon">✏️</span>
-            <span class="adm-nav-label">Редактирование</span>
+            <span class="adm-nav-icon">✏️</span> Редактирование
         </div>
         <div class="adm-nav-item" onclick="admNav('add-chapter',this)">
-            <span class="adm-nav-icon">📚</span>
-            <span class="adm-nav-label">Добавить главу</span>
+            <span class="adm-nav-icon">📚</span> Добавить главу
         </div>
         <div class="adm-nav-item" onclick="admNav('tags',this)">
-            <span class="adm-nav-icon">🏷</span>
-            <span class="adm-nav-label">Теги и жанры</span>
+            <span class="adm-nav-icon">🏷</span> Теги и жанры
         </div>
 
         <div class="adm-nav-section">Пользователи</div>
         <div class="adm-nav-item" onclick="admNav('messages',this)">
-            <span class="adm-nav-icon">📨</span>
-            <span class="adm-nav-label">Сообщения</span>
+            <span class="adm-nav-icon">📨</span> Сообщения
             <span class="adm-nav-badge" id="msg-nav-badge" style="display:none"></span>
         </div>
         <div class="adm-nav-item" onclick="admNav('suggestions',this)">
-            <span class="adm-nav-icon">💡</span>
-            <span class="adm-nav-label">Предложения</span>
+            <span class="adm-nav-icon">💡</span> Предложения
             <span class="adm-nav-badge" id="sug-nav-badge" style="display:none"></span>
         </div>
         <div class="adm-nav-item" onclick="admNav('admins',this)">
-            <span class="adm-nav-icon">🛡</span>
-            <span class="adm-nav-label">Администраторы</span>
+            <span class="adm-nav-icon">🛡</span> Администраторы
         </div>
     </nav>
 
     <div class="adm-sidebar-footer">
         <button class="adm-theme-btn" onclick="admToggleTheme()">
             <span id="adm-theme-icon">🌙</span>
-            <span id="adm-theme-label" style="flex:1">Тёмная тема</span>
-            <div class="adm-theme-toggle"></div>
+            <span id="adm-theme-label">Тёмная тема</span>
         </button>
-        <a href="/" class="adm-back-btn">
-            <span>←</span> На сайт
-        </a>
+        <a href="/" class="adm-back-btn">← На главную</a>
     </div>
 </aside>
 
 <!-- MOBILE OVERLAY -->
 <div class="adm-overlay" id="adm-overlay" onclick="closeSidebar()"></div>
 
-<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<!-- MAIN -->
 <main class="adm-main">
 
     <!-- TOPBAR -->
     <div class="adm-topbar">
         <button class="adm-menu-toggle" onclick="openSidebar()">☰</button>
-        <div class="adm-topbar-left">
-            <div class="adm-topbar-breadcrumb">BLACKWATCH / Admin</div>
-            <div class="adm-topbar-title" id="topbar-title">Статистика</div>
+        <div style="flex:1">
+            <div class="adm-topbar-title" id="topbar-title">📊 Статистика</div>
         </div>
-        <div class="adm-topbar-actions">
-            <div class="adm-status-dot" title="Онлайн"></div>
-            <button class="btn btn-ghost btn-sm" onclick="admNav('add-chapter', null)">+ Глава</button>
-            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">+ Манга</button>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-green btn-sm" onclick="admNav('add-chapter', document.querySelector('.adm-nav-item:nth-child(5)'))">
+                + Глава
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">
+                ➕ Манга
+            </button>
         </div>
     </div>
 
     <!-- ══ PANEL: STATS ══ -->
     <div class="adm-panel active" id="adm-panel-stats">
         <div class="scard-row" id="adm-stat-cards">
-            <div class="scard scard-red"><span class="scard-icon">📚</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
-            <div class="scard scard-green"><span class="scard-icon">👤</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
-            <div class="scard scard-amber"><span class="scard-icon">👍</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
-            <div class="scard scard-blue"><span class="scard-icon">📖</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
-            <div class="scard scard-purple"><span class="scard-icon">🔥</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
-            <div class="scard scard-white"><span class="scard-icon">💡</span><div class="scard-val">—</div><div class="scard-label">Загрузка...</div></div>
+            <?php for($i=0;$i<6;$i++): ?>
+            <div class="scard"><div class="scard-val" style="color:var(--muted)">—</div><div class="scard-label">Загрузка...</div></div>
+            <?php endfor; ?>
         </div>
 
         <div class="adm-grid2" style="gap:14px">
@@ -1673,7 +1341,7 @@ function openSidebar(){document.getElementById('adm-sidebar').classList.add('ope
 function closeSidebar(){document.getElementById('adm-sidebar').classList.remove('open');document.getElementById('adm-overlay').classList.remove('open');}
 
 // ── NAV ──
-const panelTitles={stats:'Статистика',archive:'Архив действий',edit:'Редактирование',['add-chapter']:'Добавить главу',tags:'Теги и жанры',messages:'Сообщения',suggestions:'Предложения',admins:'Администраторы'};
+const panelTitles={stats:'📊 Статистика',archive:'🗂 Архив действий',edit:'✏️ Редактирование',['add-chapter']:'📚 Добавить главу',tags:'🏷 Теги и жанры',messages:'📨 Сообщения',suggestions:'💡 Предложения',admins:'🛡 Администраторы'};
 function admNav(tab,el){
     document.querySelectorAll('.adm-panel').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.adm-nav-item').forEach(i=>i.classList.remove('active'));
@@ -1699,14 +1367,14 @@ async function admLoadStats(){
     try{const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const d=await r.json();
     if(d.error){document.getElementById('adm-stat-cards').innerHTML='<div style="color:var(--muted)">Нет прав</div>';return;}
     const cards=[
-        {val:d.manga_count,label:'Манг',icon:'📚',cls:'scard-red'},
-        {val:d.users_count,label:'Юзеров',icon:'👤',cls:'scard-green'},
-        {val:d.votes_count,label:'Голосов',icon:'👍',cls:'scard-amber'},
-        {val:d.chapters_count,label:'Глав',icon:'📖',cls:'scard-blue'},
-        {val:d.new_today,label:'Сегодня',icon:'🔥',cls:'scard-purple'},
-        {val:d.suggest_count,label:'Предложек',icon:'💡',cls:'scard-white'},
+        {val:d.manga_count,label:'📚 Манг',color:'var(--text)'},
+        {val:d.users_count,label:'👤 Юзеров',color:'var(--green)'},
+        {val:d.votes_count,label:'👍 Голосов',color:'var(--amber)'},
+        {val:d.chapters_count,label:'📖 Глав',color:'var(--text)'},
+        {val:d.new_today,label:'🔥 Сегодня',color:'var(--accent)'},
+        {val:d.suggest_count,label:'💡 Предложек',color:'var(--blue)'},
     ];
-    document.getElementById('adm-stat-cards').innerHTML=cards.map(c=>`<div class="scard ${c.cls}"><span class="scard-icon">${c.icon}</span><div class="scard-val">${c.val}</div><div class="scard-label">${c.label}</div></div>`).join('');
+    document.getElementById('adm-stat-cards').innerHTML=cards.map(c=>`<div class="scard"><div class="scard-val" style="color:${c.color}">${c.val}</div><div class="scard-label">${c.label}</div></div>`).join('');
     document.getElementById('adm-top-list').innerHTML=(d.top_manga||[]).map((m,i)=>`<div class="top-row"><div class="top-idx">${i+1}</div><div class="top-name">${escH(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Нет данных</div>';
     const sb=d.suggest_count>0;if(sb){const b=document.getElementById('sug-nav-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
     const qa=document.getElementById('qa-sug-sub');if(qa)qa.textContent=d.suggest_count+' новых';
@@ -4235,7 +3903,7 @@ if (preg_match('#^/view/(\d+)$#',$path,$m)){
 .fallback{position:absolute;text-align:center;display:none;padding:20px}
 .fallback p{margin-bottom:16px;color:#aaa}
 .telegraph-link{background:#7c5cff;color:#fff;padding:12px 24px;border-radius:40px;text-decoration:none;font-weight:600;display:inline-block}
-</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
 <a href="/read/<?=$id?>" class="back-btn">← Назад</a>
 <div class="counter"><span id="counter">—</span></div>
@@ -4286,7 +3954,7 @@ if (preg_match('#^/view-chapter/(\d+)$#',$path,$m)){
 .chapter-end h2{font-size:24px;font-weight:800}.chapter-end p{color:#aaa;font-size:14px}
 .end-btn{padding:14px 28px;border-radius:50px;border:none;font-size:15px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;font-family:sans-serif}
 .end-next{background:#7c5cff;color:#fff}.end-back{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2)}
-</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
 <div class="top-bar">
     <a href="/read/<?=$chapter['manga_id']?>" class="back-btn">← К манге</a>
@@ -4535,7 +4203,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 .color-opt.sel{border-color:#fff;transform:scale(1.15)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(124,92,255,0.95);color:#fff;padding:10px 22px;border-radius:50px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(124,92,255,0.4);animation:toastIn 0.3s ease;white-space:nowrap}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
 <a href="/" class="back">← Каталог</a>
 <div class="manga-page">
@@ -4933,7 +4601,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
     .wrap{padding:14px 12px 70px}
     .lib-title{font-size:18px}
 }
-</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
 <body>
 <div id="lib-loader" style="position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s,visibility 0.4s">
   <div class="loader-ring">
@@ -4983,9 +4651,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 // Hide loader after page ready
-(function(){function hideLoader(){var l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},450);}}
-document.addEventListener('DOMContentLoaded',function(){setTimeout(hideLoader,100);});
-setTimeout(hideLoader,800);})();
+window.addEventListener('load',()=>{const l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
 const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
@@ -5083,7 +4749,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 img{display:block;max-width:100%}
 
 /* ── PAGE LOADER ── */
-#page-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .45s ease;animation:loaderAutoHide 0s 2s forwards}@keyframes loaderAutoHide{to{opacity:0;pointer-events:none;display:none}}
+#page-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .45s ease}
 #page-loader.hidden{opacity:0;pointer-events:none}
 .bw-logo-load{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:8px;color:var(--text);opacity:.8}
 .loader-bar{width:140px;height:3px;background:var(--border2);border-radius:3px;overflow:hidden}
@@ -5705,7 +5371,7 @@ header{
 .suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
 .suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
 </style>
-<script src="https://telegram.org/js/telegram-web-app.js" async></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
@@ -5987,927 +5653,184 @@ header{
 </div>
 </div>
 
-<!-- ===== ADMIN PANEL - НОВЫЙ ДИЗАЙН ===== -->
-<div class="modal-overlay admin-panel-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
-<div class="admin-panel-wrapper">
-    <!-- Sidebar Navigation -->
-    <div class="admin-sidebar">
-        <div class="admin-header">
-            <div class="admin-logo">
-                <span class="admin-logo-icon">⚙️</span>
-                <span class="admin-logo-text">Admin</span>
-            </div>
-            <button class="admin-close-btn" onclick="closeAdminPanel()">✕</button>
-        </div>
-        
-        <nav class="admin-nav">
-            <button class="admin-nav-item active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">
-                <span class="admin-nav-icon">📊</span>
-                <span>Dashboard</span>
-            </button>
-            <button class="admin-nav-item" data-tab="manga" onclick="switchAdminTab('manga')">
-                <span class="admin-nav-icon">📚</span>
-                <span>Манга</span>
-            </button>
-            <button class="admin-nav-item" data-tab="chapters" onclick="switchAdminTab('chapters')">
-                <span class="admin-nav-icon">📑</span>
-                <span>Главы</span>
-            </button>
-            <button class="admin-nav-item" data-tab="tags" onclick="switchAdminTab('tags')">
-                <span class="admin-nav-icon">🏷️</span>
-                <span>Теги</span>
-            </button>
-            <button class="admin-nav-item" data-tab="messages" onclick="switchAdminTab('messages')">
-                <span class="admin-nav-icon">💬</span>
-                <span>Сообщения</span>
-            </button>
-            <button class="admin-nav-item" data-tab="settings" onclick="switchAdminTab('settings')">
-                <span class="admin-nav-icon">⚡</span>
-                <span>Настройки</span>
-            </button>
-        </nav>
+<!-- MODAL: ADMIN PANEL -->
+<div class="modal-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
+<div class="modal admin-modal">
+    <button class="modal-x" onclick="closeAdminPanel()">✕</button>
+    <div class="modal-head" style="flex-shrink:0">⚙️ Админ-панель</div>
+    <div class="admin-tabs">
+        <button class="atab active" onclick="switchAdminTab('stats')">📊 Статистика</button>
+        <button class="atab" onclick="switchAdminTab('messages')">📨 Сообщения</button>
+        <button class="atab" onclick="switchAdminTab('edit')">✏️ Редактирование</button>
+        <button class="atab" onclick="switchAdminTab('add-chapter')">📚 Добавить главу</button>
+        <button class="atab" onclick="switchAdminTab('tags')">🏷 Теги/Жанры</button>
+    </div>
 
-        <div class="admin-footer">
-            <button class="admin-theme-btn" onclick="toggleTheme()" title="Смена темы">🌓</button>
+    <!-- STATS -->
+    <div class="apanel active" id="panel-stats">
+        <div class="stats-layout">
+            <div class="stats-left">
+                <div class="stats-tabs">
+                    <button class="stab active" onclick="showStatsView('grid')">📊 Статистика</button>
+                    <button class="stab" onclick="showStatsView('archive')">🗂 Архив</button>
+                </div>
+                <div id="stats-grid-view">
+                    <div class="scard-grid" id="stat-grid"><div style="color:var(--muted);grid-column:1/-1;padding:10px 0;font-size:12px">Загрузка...</div></div>
+                    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Топ по лайкам</div>
+                    <div class="top-list" id="top-list"></div>
+                    <button class="edit-manga-btn" onclick="switchAdminTab('edit')">✏️ Редактировать мангу</button>
+                </div>
+                <div id="stats-archive-view" style="display:none">
+                    <div class="archive-list" id="archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+                    <div class="pagination" id="archive-pagination"></div>
+                </div>
+            </div>
+            <div class="stats-right">
+                <div class="func-title">Функционал</div>
+                <button class="func-btn func-green" onclick="closeAdminPanel();openAddModal()">➕ Добавить мангу<br><small style="font-size:10px;opacity:0.8">ZIP, обложка, описание</small></button>
+                <div class="func-orange-row">
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📚 Добавить серию</button>
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📑 Добавить главу</button>
+                </div>
+                <button class="func-btn func-purple" onclick="switchAdminTab('messages')">📨 Написать всем <span id="suggest-badge" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <button class="func-btn func-blue" id="suggest-btn" onclick="showStatsView('suggestions')">💡 Предложки <span id="suggest-badge2" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <div class="admins-wrap" style="margin-top:14px">
+                    <div class="admin-lbl">Список админов</div>
+                    <div id="admins-list"><div style="color:var(--muted);font-size:11px">Загрузка...</div></div>
+                    <button onclick="toggleAdminAddPanel()" id="admin-add-toggle-btn" style="width:100%;margin-top:8px;padding:8px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">➕ Добавить нового администратора</button>
+                    <div id="admin-add-panel" style="display:none;margin-top:9px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:12px">
+                        <div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:9px">⚡ Назначить администратора</div>
+                        <input id="ap-admin-input" type="text" placeholder="Email или TG ID" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <input id="ap-admin-tag" type="text" placeholder="Тег (например: Редактор)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <div style="display:flex;gap:6px">
+                            <button onclick="submitAddAdmin()" style="flex:1;padding:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:7px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">&#10003; Назначить</button>
+                            <button onclick="toggleAdminAddPanel()" style="padding:8px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">Отмена</button>
+                        </div>
+                        <div id="ap-admin-result" style="font-size:11px;margin-top:7px"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="stats-suggestions-view" style="display:none;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                <div style="font-size:12px;font-weight:700">💡 Предложения пользователей</div>
+                <button onclick="showStatsView('grid')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">← Назад</button>
+            </div>
+            <div class="suggest-preview" id="suggest-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="pagination" id="suggest-pagination"></div>
         </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="admin-content">
-        <!-- Dashboard Tab -->
-        <div class="admin-tab-panel active" id="panel-dashboard">
-            <div class="admin-header-section">
-                <h1 class="admin-title">📊 Dashboard</h1>
-                <p class="admin-subtitle">Общая статистика и управление</p>
-            </div>
-
-            <div class="admin-stats-grid">
-                <div class="admin-stat-card">
-                    <div class="stat-icon">📖</div>
-                    <div class="stat-info">
-                        <div class="stat-label">Всего манги</div>
-                        <div class="stat-value" id="stat-total">0</div>
-                    </div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="stat-icon">❤️</div>
-                    <div class="stat-info">
-                        <div class="stat-label">Всего лайков</div>
-                        <div class="stat-value" id="stat-likes">0</div>
-                    </div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="stat-icon">👥</div>
-                    <div class="stat-info">
-                        <div class="stat-label">Активных юзеров</div>
-                        <div class="stat-value" id="stat-users">0</div>
-                    </div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="stat-icon">💬</div>
-                    <div class="stat-info">
-                        <div class="stat-label">Комментариев</div>
-                        <div class="stat-value" id="stat-comments">0</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="admin-action-section">
-                <h3 class="admin-section-title">Быстрые действия</h3>
-                <div class="admin-action-grid">
-                    <button class="admin-action-btn admin-action-primary" onclick="closeAdminPanel();openAddModal()">
-                        <span class="action-icon">➕</span>
-                        <span class="action-text">Добавить мангу</span>
-                    </button>
-                    <button class="admin-action-btn admin-action-secondary" onclick="switchAdminTab('chapters')">
-                        <span class="action-icon">📑</span>
-                        <span class="action-text">Добавить главу</span>
-                    </button>
-                    <button class="admin-action-btn admin-action-secondary" onclick="switchAdminTab('messages')">
-                        <span class="action-icon">📨</span>
-                        <span class="action-text">Отправить уведомление</span>
-                    </button>
-                    <button class="admin-action-btn admin-action-danger" onclick="switchAdminTab('settings')">
-                        <span class="action-icon">⚡</span>
-                        <span class="action-text">Администраторы</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="admin-top-section">
-                <h3 class="admin-section-title">Топ манги</h3>
-                <div id="top-list-dashboard" class="top-manga-list"></div>
-            </div>
+    <!-- MESSAGES panel -->
+    <div class="apanel" id="panel-messages">
+        <div class="msg-compose">
+            <label class="fl" style="margin-bottom:6px">Написать всем пользователям</label>
+            <textarea id="admin-msg-text" placeholder="Введи сообщение..."></textarea>
+            <button class="msg-send-btn" onclick="sendAdminMessage()">📨 Отправить всем</button>
         </div>
+        <div class="func-title" style="margin-top:14px">Отправленные сообщения</div>
+        <div class="msg-list" id="admin-msg-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Загрузка...</div></div>
+    </div>
 
-        <!-- Manga Management Tab -->
-        <div class="admin-tab-panel" id="panel-manga">
-            <div class="admin-header-section">
-                <h1 class="admin-title">📚 Управление мангой</h1>
-                <p class="admin-subtitle">Редактирование и удаление</p>
-            </div>
-
-            <div class="admin-search-box">
-                <input type="text" id="manga-search" placeholder="Поиск манги..." class="admin-search-input">
-            </div>
-
-            <div class="manga-edit-list" id="manga-edit-list">
-                <div style="text-align:center; color: var(--muted); padding: 20px;">Загрузка...</div>
-            </div>
+    <!-- EDIT -->
+    <div class="apanel" id="panel-edit">
+        <div class="esearch-row">
+            <input class="esearch-inp" id="edit-search-input" type="text" placeholder="🔍 Поиск манги...">
+            <button class="esearch-btn" onclick="searchMangaEdit()">Найти</button>
         </div>
+        <div class="manga-edit-list" id="manga-edit-list"><div style="color:var(--muted);padding:10px 0;font-size:12px">Введи название или оставь пустым</div></div>
+        <div class="pagination" id="edit-pagination"></div>
+        <div id="edit-manga-form-wrap" style="display:none">
+            <button class="back-edit-btn" onclick="backToMangaList()">← Назад к списку</button>
+            <div class="edit-form-wrap" id="edit-manga-form"></div>
+        </div>
+    </div>
 
-        <!-- Chapters Tab -->
-        <div class="admin-tab-panel" id="panel-chapters">
-            <div class="admin-header-section">
-                <h1 class="admin-title">📑 Добавить главу</h1>
-                <p class="admin-subtitle">Загрузи главу к существующей манге</p>
+    <!-- ADD CHAPTER -->
+    <div class="apanel" id="panel-add-chapter">        <div class="fg">
+            <label class="fl">Манга / Серия</label>
+            <div class="esearch-row">
+                <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
+                <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
             </div>
-
-            <div class="admin-form-section">
-                <div class="admin-form-group">
-                    <label class="admin-form-label">Выбери мангу</label>
-                    <select id="chapter-manga-select" class="admin-form-input">
-                        <option value="">Загрузка...</option>
-                    </select>
+            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
+        </div>
+        <div id="ch-add-form" style="display:none">
+            <div class="add-ch-form">
+                <h4>➕ Новая глава</h4>
+                <div class="ch-inputs">
+                    <input type="number" id="ch-num" placeholder="Номер (1, 2, 2.5...)" step="0.1" min="0">
+                    <input type="text" id="ch-title-input" placeholder="Название (необязательно)">
                 </div>
-
-                <div class="admin-form-group">
-                    <label class="admin-form-label">Номер главы</label>
-                    <input type="number" id="chapter-num" class="admin-form-input" placeholder="1.0" step="0.1">
+                <div class="file-tabs">
+                    <div class="file-tab active" id="ch-tab-zip" onclick="switchChTab('zip')">📦 ZIP</div>
+                    <div class="file-tab" id="ch-tab-photos" onclick="switchChTab('photos')">📸 Фото</div>
                 </div>
-
-                <div class="admin-form-group">
-                    <label class="admin-form-label">Название главы (опционально)</label>
-                    <input type="text" id="chapter-title" class="admin-form-input" placeholder="Название...">
-                </div>
-
-                <div class="admin-form-group">
-                    <label class="admin-form-label">Загрузи страницы</label>
-                    <div class="admin-upload-zone" id="chapter-upload-zone">
-                        <input type="file" id="chapter-file" accept=".zip,image/*" multiple>
-                        <div class="upload-icon">📦</div>
-                        <div class="upload-text">Загрузи ZIP или выбери фото</div>
+                <div class="file-panel active" id="ch-panel-zip">
+                    <div class="upload-zone" id="ch-zip-zone" style="padding:13px">
+                        <input type="file" id="ch-zip-input" accept=".zip" onchange="onChZipChange(this)">
+                        <div class="upload-icon" style="font-size:20px">📦</div>
+                        <div class="upload-text" style="font-size:11px">ZIP со страницами</div>
+                        <div class="upload-preview" id="ch-zip-preview"></div>
                     </div>
                 </div>
-
-                <button class="admin-btn admin-btn-primary" onclick="submitChapter()">
-                    <span class="btn-spinner" id="ch-spinner" style="display:none">⏳</span>
-                    📤 Загрузить главу
-                </button>
-            </div>
-        </div>
-
-        <!-- Tags Tab -->
-        <div class="admin-tab-panel" id="panel-tags">
-            <div class="admin-header-section">
-                <h1 class="admin-title">🏷️ Теги и Жанры</h1>
-                <p class="admin-subtitle">Управление категориями контента</p>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <!-- Genres -->
-                <div class="admin-card">
-                    <h3 class="admin-card-title">🎭 Жанры</h3>
-                    
-                    <div class="admin-form-group">
-                        <input type="text" id="new-genre-name" placeholder="Название жанра" class="admin-form-input">
-                        <input type="text" id="new-genre-slug" placeholder="slug" class="admin-form-input" style="margin-top:8px">
-                        <button class="admin-btn admin-btn-secondary" onclick="addGenre()" style="margin-top:8px; width:100%">➕ Добавить</button>
-                    </div>
-
-                    <div id="genres-manage-list" class="tags-list"></div>
-                </div>
-
-                <!-- Tags -->
-                <div class="admin-card">
-                    <h3 class="admin-card-title">🏷️ Теги</h3>
-                    
-                    <div class="admin-form-group">
-                        <input type="text" id="new-tag-name" placeholder="Название тега" class="admin-form-input">
-                        <input type="text" id="new-tag-slug" placeholder="slug" class="admin-form-input" style="margin-top:8px">
-                        <label class="admin-checkbox">
-                            <input type="checkbox" id="new-tag-nsfw">
-                            🔞 NSFW
-                        </label>
-                        <button class="admin-btn admin-btn-secondary" onclick="addTag()" style="margin-top:8px; width:100%">➕ Добавить</button>
-                    </div>
-
-                    <div id="tags-manage-list" class="tags-list"></div>
-                </div>
-            </div>
-
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
-                <button class="admin-btn admin-btn-secondary" onclick="reseedAllTags()">🔄 Загрузить дефолтные</button>
-                <button class="admin-btn admin-btn-danger" onclick="dedupTagsGenres()" style="margin-left:10px">🧹 Удалить дубли</button>
-            </div>
-        </div>
-
-        <!-- Messages Tab -->
-        <div class="admin-tab-panel" id="panel-messages">
-            <div class="admin-header-section">
-                <h1 class="admin-title">💬 Сообщения</h1>
-                <p class="admin-subtitle">Отправь уведомление всем пользователям</p>
-            </div>
-
-            <div class="admin-card">
-                <div class="admin-form-group">
-                    <label class="admin-form-label">Текст сообщения</label>
-                    <textarea id="admin-message-text" class="admin-form-textarea" placeholder="Напиши сообщение..."></textarea>
-                </div>
-
-                <button class="admin-btn admin-btn-primary" onclick="sendAdminMessage()">
-                    📨 Отправить всем
-                </button>
-
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);">
-                    <h3 class="admin-card-title">История сообщений</h3>
-                    <div id="messages-history" class="messages-list"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Settings Tab -->
-        <div class="admin-tab-panel" id="panel-settings">
-            <div class="admin-header-section">
-                <h1 class="admin-title">⚡ Настройки и администраторы</h1>
-                <p class="admin-subtitle">Управление правами администраторов</p>
-            </div>
-
-            <div class="admin-card">
-                <h3 class="admin-card-title">👥 Список администраторов</h3>
-                <div id="admins-list" class="admin-list"></div>
-
-                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
-                    <button class="admin-btn admin-btn-secondary" onclick="toggleAdminAddPanel()">➕ Добавить администратора</button>
-                    
-                    <div id="admin-add-panel" class="admin-form-section" style="display:none; margin-top:15px; padding:15px; background:rgba(239,68,68,0.05); border-radius:10px; border:1px solid rgba(239,68,68,0.2)">
-                        <div class="admin-form-group">
-                            <input type="text" id="ap-admin-input" placeholder="Email или TG ID" class="admin-form-input">
-                        </div>
-                        <div class="admin-form-group">
-                            <input type="text" id="ap-admin-tag" placeholder="Тег (например: Редактор)" class="admin-form-input">
-                        </div>
-                        <button class="admin-btn admin-btn-danger" onclick="admSubmitAddAdmin()" style="width:100%">⚡ Назначить</button>
+                <div class="file-panel" id="ch-panel-photos">
+                    <div class="upload-zone" id="ch-photos-zone" style="padding:13px">
+                        <input type="file" id="ch-photos-input" accept="image/*" multiple onchange="onChPhotosChange(this)">
+                        <div class="upload-icon" style="font-size:20px">📸</div>
+                        <div class="upload-text" style="font-size:11px">Страницы главы</div>
+                        <div class="upload-preview" id="ch-photos-preview"></div>
                     </div>
                 </div>
+                <div class="upbar" id="ch-upload-progress"><div class="upbar-fill" id="ch-upload-fill"></div></div>
+                <button class="sbtn" id="ch-submit-btn" onclick="submitChapter()" style="margin-top:7px"><span class="btn-text">📤 Загрузить главу</span><div class="spinner"></div></button>
+                <div class="result-banner" id="ch-result-banner"></div>
             </div>
         </div>
     </div>
+
+    <!-- PANEL: TAGS & GENRES -->
+    <div class="apanel" id="panel-tags">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+            <!-- ЖАНРЫ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🎭 Жанры <span id="genre-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить жанр -->
+                <div style="display:flex;gap:6px;margin-bottom:10px">
+                    <input id="new-genre-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+            <!-- ТЕГИ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🏷 Теги <span id="tag-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить тег -->
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                    <input id="new-tag-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-tag-slug" placeholder="slug (isekai)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
+                    <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+        </div>
+        <!-- Кнопки внизу -->
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.2)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
+            <button onclick="dedupTagsGenres()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🧹 Удалить дубли</button>
+            <span style="font-size:11px;color:var(--muted)">Если жанров больше 15 или тегов больше 54 — нажми «Удалить дубли»</span>
+        </div>
+    </div>
+
 </div>
 </div>
-
-<style>
-/* ===== ADMIN PANEL - NEW DESIGN ===== */
-.admin-panel-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(4px);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    padding: 16px;
-}
-
-.admin-panel-wrapper {
-    width: 100%;
-    max-width: 1200px;
-    max-height: 90vh;
-    display: flex;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 20px 80px rgba(0,0,0,0.5);
-    animation: slideUp 0.3s ease-out;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Sidebar */
-.admin-sidebar {
-    width: 220px;
-    background: linear-gradient(180deg, var(--card2) 0%, rgba(22,22,22,0.8) 100%);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 20px 0;
-    overflow-y: auto;
-}
-
-.admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 16px 20px;
-    border-bottom: 1px solid var(--border);
-}
-
-.admin-logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--text);
-}
-
-.admin-logo-icon {
-    font-size: 18px;
-}
-
-.admin-close-btn {
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    color: var(--muted);
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.admin-close-btn:hover {
-    background: rgba(255,255,255,0.1);
-    color: var(--text);
-}
-
-/* Navigation */
-.admin-nav {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0 12px;
-}
-
-.admin-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    color: var(--text2);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-    text-align: left;
-}
-
-.admin-nav-item:hover {
-    background: rgba(124,92,255,0.08);
-    color: var(--text);
-}
-
-.admin-nav-item.active {
-    background: rgba(124,92,255,0.15);
-    color: #a78bfa;
-}
-
-.admin-nav-icon {
-    font-size: 16px;
-}
-
-/* Footer */
-.admin-footer {
-    display: flex;
-    justify-content: center;
-    padding: 16px 0;
-    border-top: 1px solid var(--border);
-}
-
-.admin-theme-btn {
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--border);
-    background: transparent;
-    border-radius: 8px;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.admin-theme-btn:hover {
-    background: rgba(255,255,255,0.05);
-    border-color: var(--border2);
-}
-
-/* Main Content */
-.admin-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    background: var(--bg);
-}
-
-.admin-tab-panel {
-    display: none;
-    padding: 28px;
-    animation: fadeIn 0.3s ease-out;
-}
-
-.admin-tab-panel.active {
-    display: block;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-/* Header Section */
-.admin-header-section {
-    margin-bottom: 28px;
-}
-
-.admin-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 4px;
-}
-
-.admin-subtitle {
-    font-size: 13px;
-    color: var(--muted);
-}
-
-/* Stats Grid */
-.admin-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 28px;
-}
-
-.admin-stat-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    transition: all 0.2s;
-}
-
-.admin-stat-card:hover {
-    border-color: rgba(124,92,255,0.3);
-    background: rgba(124,92,255,0.03);
-}
-
-.stat-icon {
-    font-size: 24px;
-}
-
-.stat-info {
-    flex: 1;
-}
-
-.stat-label {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 4px;
-}
-
-.stat-value {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text);
-}
-
-/* Action Section */
-.admin-action-section {
-    margin-bottom: 28px;
-}
-
-.admin-section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.admin-action-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-}
-
-.admin-action-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 16px;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.2s;
-}
-
-.action-icon {
-    font-size: 20px;
-}
-
-.action-text {
-    text-align: center;
-}
-
-.admin-action-primary {
-    background: linear-gradient(135deg, #4ade80, #22c55e);
-    color: #fff;
-}
-
-.admin-action-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(74,222,128,0.3);
-}
-
-.admin-action-secondary {
-    background: rgba(124,92,255,0.1);
-    color: #a78bfa;
-    border: 1px solid rgba(124,92,255,0.3);
-}
-
-.admin-action-secondary:hover {
-    background: rgba(124,92,255,0.2);
-}
-
-.admin-action-danger {
-    background: rgba(239,68,68,0.1);
-    color: #f87171;
-    border: 1px solid rgba(239,68,68,0.3);
-}
-
-.admin-action-danger:hover {
-    background: rgba(239,68,68,0.2);
-}
-
-/* Card */
-.admin-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 20px;
-}
-
-.admin-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 16px;
-}
-
-/* Form */
-.admin-form-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.admin-form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.admin-form-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.admin-form-input,
-.admin-form-textarea {
-    background: var(--card2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-family: inherit;
-    font-size: 13px;
-    padding: 10px 12px;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.admin-form-input:focus,
-.admin-form-textarea:focus {
-    border-color: rgba(124,92,255,0.5);
-    background: rgba(124,92,255,0.03);
-}
-
-.admin-form-textarea {
-    min-height: 100px;
-    resize: vertical;
-    max-height: 300px;
-}
-
-.admin-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text);
-    cursor: pointer;
-    margin-top: 8px;
-}
-
-.admin-checkbox input {
-    cursor: pointer;
-    width: 16px;
-    height: 16px;
-}
-
-/* Upload Zone */
-.admin-upload-zone {
-    border: 2px dashed var(--border);
-    border-radius: 10px;
-    padding: 30px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-.admin-upload-zone:hover {
-    border-color: rgba(124,92,255,0.5);
-    background: rgba(124,92,255,0.03);
-}
-
-.admin-upload-zone input {
-    display: none;
-}
-
-.upload-icon {
-    font-size: 28px;
-}
-
-.upload-text {
-    font-size: 13px;
-    color: var(--text2);
-}
-
-/* Buttons */
-.admin-btn {
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.admin-btn-primary {
-    background: linear-gradient(135deg, #7c5cff, #5a3fa0);
-    color: #fff;
-}
-
-.admin-btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(124,92,255,0.3);
-}
-
-.admin-btn-secondary {
-    background: rgba(124,92,255,0.1);
-    color: #a78bfa;
-    border: 1px solid rgba(124,92,255,0.3);
-}
-
-.admin-btn-secondary:hover {
-    background: rgba(124,92,255,0.2);
-}
-
-.admin-btn-danger {
-    background: rgba(239,68,68,0.1);
-    color: #f87171;
-    border: 1px solid rgba(239,68,68,0.3);
-}
-
-.admin-btn-danger:hover {
-    background: rgba(239,68,68,0.2);
-}
-
-/* Search Box */
-.admin-search-box {
-    margin-bottom: 20px;
-}
-
-.admin-search-input {
-    width: 100%;
-    padding: 12px 16px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-family: inherit;
-    font-size: 13px;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.admin-search-input:focus {
-    border-color: rgba(124,92,255,0.5);
-    background: rgba(124,92,255,0.03);
-}
-
-/* Lists */
-.tags-list,
-.admin-list,
-.messages-list,
-.top-manga-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.tag-item,
-.admin-item,
-.message-item,
-.manga-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px;
-    background: var(--card2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 12px;
-    transition: all 0.2s;
-}
-
-.tag-item:hover,
-.admin-item:hover,
-.message-item:hover,
-.manga-item:hover {
-    background: rgba(124,92,255,0.05);
-    border-color: rgba(124,92,255,0.3);
-}
-
-/* Light Theme */
-body.light {
-    --bg: #f8f9fa;
-    --card: #fff;
-    --card2: #f3f4f6;
-    --border: #e5e7eb;
-    --border2: #d1d5db;
-    --text: #111827;
-    --text2: #4b5563;
-    --muted: #9ca3af;
-}
-
-body.light .admin-sidebar {
-    background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
-}
-
-body.light .admin-content {
-    background: #f3f4f6;
-}
-
-@media (max-width: 900px) {
-    .admin-panel-wrapper {
-        flex-direction: column;
-        max-height: 95vh;
-    }
-    
-    .admin-sidebar {
-        width: 100%;
-        flex-direction: row;
-        padding: 16px;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        max-height: none;
-    }
-    
-    .admin-header {
-        flex: 1;
-        padding: 0;
-        border: none;
-    }
-    
-    .admin-nav {
-        flex-direction: row;
-        gap: 8px;
-        flex: 1;
-        margin: 0 16px;
-        padding: 0;
-    }
-    
-    .admin-nav-item {
-        white-space: nowrap;
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-    
-    .admin-footer {
-        border: none;
-        padding: 0;
-    }
-    
-    .admin-content {
-        max-height: calc(95vh - 60px);
-    }
-    
-    .admin-stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-@media (max-width: 600px) {
-    .admin-panel-overlay {
-        padding: 0;
-    }
-    
-    .admin-panel-wrapper {
-        max-height: 100vh;
-        border-radius: 0;
-        max-width: 100%;
-    }
-    
-    .admin-sidebar {
-        flex-direction: column;
-        height: auto;
-    }
-    
-    .admin-header {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-    }
-    
-    .admin-close-btn {
-        align-self: flex-start;
-    }
-    
-    .admin-nav {
-        gap: 0;
-        flex-direction: row;
-        overflow-x: auto;
-    }
-    
-    .admin-nav-item {
-        flex-shrink: 0;
-        gap: 6px;
-    }
-    
-    .admin-content {
-        padding: 16px;
-    }
-    
-    .admin-stats-grid {
-        grid-template-columns: 1fr;
-        gap: 12px;
-    }
-    
-    .admin-action-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-</style>
-
 
 <script>
 // ===== THEME =====
@@ -6934,28 +5857,12 @@ function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove(
 
 // ===== ADMIN CHECK =====
 async function checkAdmin(){
-    try{
-        const tgId=getTgUser();
-        const url='/api/check-admin'+(tgId?'?tg_user_id='+tgId:'');
-        const res=await fetch(url);
-        const data=await res.json();
-        if(data.is_admin){
-            const btn=document.getElementById('admin-btn');
-            if(btn)btn.classList.add('visible');
-        }
-    }catch(e){}
+    try{const res=await fetch('/api/check-admin?tg_user_id='+getTgUser());const data=await res.json();if(data.is_admin)document.getElementById('admin-btn').classList.add('visible');}catch(e){}
 }
 
 // ===== CATALOG =====
 let page=0,q='',loading=false,hasMore=true,currentSort='new',activeGenre='',activeTag='';
-// Lazy DOM refs — объявляем как функции, чтобы не упасть до DOMContentLoaded
-const getGrid=()=>document.getElementById('grid');
-const getMoreBtn=()=>document.getElementById('more');
-const getStatsDiv=()=>document.getElementById('stats');
-// Переопределяем как свойства window для обратной совместимости
-Object.defineProperty(window,'grid',{get:getGrid,configurable:true});
-Object.defineProperty(window,'moreBtn',{get:getMoreBtn,configurable:true});
-Object.defineProperty(window,'statsDiv',{get:getStatsDiv,configurable:true});
+const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
 function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
 
 // ===== GENRE/TAG FILTER =====
@@ -7079,16 +5986,14 @@ function onSearch(val){
 }
 
 async function load(reset=false){
-    const grid=getGrid(),moreBtn=getMoreBtn(),statsDiv=getStatsDiv();
-    if(!grid)return;
     if(loading)return;loading=true;
-    if(reset){page=0;grid.innerHTML='';hasMore=true;if(moreBtn)moreBtn.style.display='none';}
+    if(reset){page=0;grid.innerHTML='';hasMore=true;moreBtn.style.display='none';}
     if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">📖 Загрузка...</div>';
     try{
         const _gp=activeGenre?'&genre='+encodeURIComponent(activeGenre):activeTag?'&tag='+encodeURIComponent(activeTag):'';
         const res=await fetch('/api/manga?page='+page+'&q='+encodeURIComponent(q)+'&sort='+currentSort+_gp);
         const data=await res.json();
-        if(page===0){grid.innerHTML='';if(statsDiv)statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
+        if(page===0){grid.innerHTML='';statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
         if(!data.items.length&&page===0){grid.innerHTML='<div class="empty">😔 Ничего не найдено</div>';loading=false;return;}
         const delay=reset?0:0;
         data.items.forEach((m,i)=>{
@@ -7108,9 +6013,9 @@ async function load(reset=false){
             grid.appendChild(el);
         });
         hasMore=data.items.length>=data.limit;
-        if(moreBtn)moreBtn.style.display=hasMore?'block':'none';
+        moreBtn.style.display=hasMore?'block':'none';
         page++;
-    }catch(e){if(page===0&&grid)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
+    }catch(e){if(page===0)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
     loading=false;
 }
 
@@ -7203,171 +6108,17 @@ async function submitManga(){
 ['cover-zone','zip-zone','photos-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
 
 // ===== ADMIN PANEL =====
-function openAdminPanel(){
-    // Проверка: открыть панель только если пользователь администратор
-    const adminBtn = document.getElementById('admin-btn');
-    if (!adminBtn || !adminBtn.classList.contains('visible')) {
-        showToast('❌ У тебя нет прав администратора');
-        return;
-    }
-    
-    document.getElementById('admin-modal').style.display='flex';
-    loadAdminStats();
-    loadAdmins();
-    setTimeout(()=>loadAdminDashboard(), 100);
-}
-
-function closeAdminPanel(){
-    document.getElementById('admin-modal').style.display='none';
-}
-
+function openAdminPanel(){document.getElementById('admin-modal').classList.add('open');loadAdminStats();loadAdmins();}
+function closeAdminPanel(){document.getElementById('admin-modal').classList.remove('open');}
 function switchAdminTab(tab){
-    // Скрыть все табы
-    document.querySelectorAll('.admin-tab-panel').forEach(p=>p.classList.remove('active'));
-    // Обновить активность навигации
-    document.querySelectorAll('.admin-nav-item').forEach(item=>{
-        item.classList.remove('active');
-        if(item.dataset.tab===tab) item.classList.add('active');
-    });
-    // Показать нужный таб
-    const panel=document.getElementById('panel-'+tab);
-    if(panel) panel.classList.add('active');
-    
-    // Загрузить данные в зависимости от таба
-    if(tab==='dashboard') loadAdminDashboard();
-    if(tab==='manga') loadMangaEditList();
-    if(tab==='chapters') loadChaptersPanel();
-    if(tab==='tags') loadTagsPanel();
-    if(tab==='messages') loadAdminMessages();
-    if(tab==='settings') loadAdminSettings();
-}
-
-// Загружение dashboard'а
-async function loadAdminDashboard(){
-    try {
-        const res = await fetch('/api/admin/stats?tg_user_id=' + getTgUser());
-        const data = await res.json();
-        if(!data.manga_count) return;
-        
-        document.getElementById('stat-total').textContent = data.manga_count || '0';
-        document.getElementById('stat-likes').textContent = data.votes_count || '0';
-        document.getElementById('stat-users').textContent = data.users_count || '0';
-        document.getElementById('stat-comments').textContent = data.comments_count || '0';
-        
-        // Загрузить топ мангу
-        const topHtml = (data.top_manga || []).slice(0, 10).map(m => `
-            <div class="manga-item">
-                <div style="flex:1">
-                    <div style="font-weight:600; color:var(--text); margin-bottom:4px">${escapeHtml(m.title)}</div>
-                    <div style="font-size:11px; color:var(--muted)">❤️ ${m.likes || 0} лайков</div>
-                </div>
-                <button class="admin-btn admin-btn-secondary" onclick="switchAdminTab('manga')" style="padding:6px 10px; font-size:11px">Редактировать</button>
-            </div>
-        `).join('');
-        
-        const topList = document.getElementById('top-list-dashboard');
-        if(topList) topList.innerHTML = topHtml || '<div style="color:var(--muted); text-align:center; padding:20px">Нет манги</div>';
-    } catch(e) { console.error(e); }
-}
-
-// Загружение панели манги
-async function loadMangaEditList(){
-    try {
-        const res = await fetch('/api/admin/manga-list?tg_user_id=' + getTgUser());
-        const data = await res.json();
-        if(!data.success) return;
-        
-        const list = data.manga || [];
-        const html = list.map(m => `
-            <div class="manga-item">
-                <div>
-                    <div style="font-weight:600; color:var(--text)">${escapeHtml(m.title)}</div>
-                    <div style="font-size:11px; color:var(--muted); margin-top:4px">ID: ${m.id} | ❤️ ${m.likes || 0}</div>
-                </div>
-                <div style="display:flex; gap:8px">
-                    <button class="admin-btn admin-btn-secondary" style="padding:6px 10px; font-size:11px" onclick="editManga(${m.id})">✏️ Редактировать</button>
-                    <button class="admin-btn admin-btn-danger" style="padding:6px 10px; font-size:11px" onclick="deleteManga(${m.id})">🗑️ Удалить</button>
-                </div>
-            </div>
-        `).join('');
-        
-        document.getElementById('manga-edit-list').innerHTML = html || '<div style="color:var(--muted); text-align:center; padding:20px">Нет манги</div>';
-    } catch(e) { console.error(e); }
-}
-
-// Загружение панели глав
-async function loadChaptersPanel(){
-    try {
-        const res = await fetch('/api/admin/manga-list?tg_user_id=' + getTgUser());
-        const data = await res.json();
-        if(!data.success) return;
-        
-        const select = document.getElementById('chapter-manga-select');
-        if(select) {
-            select.innerHTML = '<option value="">Выберите мангу...</option>' +
-                (data.manga || []).map(m => `<option value="${m.id}">${escapeHtml(m.title)}</option>`).join('');
-        }
-    } catch(e) { console.error(e); }
-}
-
-// Загружение панели тегов
-async function loadTagsPanel(){
-    try {
-        const res = await fetch('/api/genres?tg_user_id=' + getTgUser());
-        const genres = await res.json();
-        
-        const res2 = await fetch('/api/tags?tg_user_id=' + getTgUser());
-        const tags = await res2.json();
-        
-        // Рендер жанров
-        const genreHtml = (genres || []).map(g => `
-            <div class="tag-item">
-                <div>
-                    <div style="font-weight:600">${escapeHtml(g.name)}</div>
-                    <div style="font-size:11px; color:var(--muted); margin-top:2px">${g.slug}</div>
-                </div>
-                <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px" onclick="deleteGenre(${g.id})">✕</button>
-            </div>
-        `).join('');
-        document.getElementById('genres-manage-list').innerHTML = genreHtml;
-        
-        // Рендер тегов
-        const tagHtml = (tags || []).map(t => `
-            <div class="tag-item">
-                <div>
-                    <div style="font-weight:600">${escapeHtml(t.name)} ${t.is_nsfw ? '🔞' : ''}</div>
-                    <div style="font-size:11px; color:var(--muted); margin-top:2px">${t.slug}</div>
-                </div>
-                <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px" onclick="deleteTag(${t.id})">✕</button>
-            </div>
-        `).join('');
-        document.getElementById('tags-manage-list').innerHTML = tagHtml;
-    } catch(e) { console.error(e); }
-}
-
-// Загружение сообщений
-async function loadAdminMessages(){
-    try {
-        const res = await fetch('/api/admin/messages?tg_user_id=' + getTgUser());
-        const data = await res.json();
-        if(!data.success) return;
-        
-        const html = (data.messages || []).map(m => `
-            <div class="message-item">
-                <div style="flex:1">
-                    <div style="font-size:13px; color:var(--text); line-height:1.4">${escapeHtml(m.text)}</div>
-                    <div style="font-size:11px; color:var(--muted); margin-top:4px">${new Date(m.created_at).toLocaleString('ru-RU')}</div>
-                </div>
-            </div>
-        `).join('');
-        
-        document.getElementById('messages-history').innerHTML = html || '<div style="color:var(--muted); text-align:center; padding:20px">История пуста</div>';
-    } catch(e) { console.error(e); }
-}
-
-// Загружение настроек
-async function loadAdminSettings(){
-    loadAdmins();
+    const tabs=['stats','messages','edit','add-chapter','tags'];
+    document.querySelectorAll('.atab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
+    document.querySelectorAll('.apanel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('panel-'+tab).classList.add('active');
+    if(tab==='stats')loadAdminStats();
+    if(tab==='messages')loadAdminMessages();
+    if(tab==='edit')loadMangaEditList('',0);
+    if(tab==='tags')loadTagsPanel();
 }
 function showStatsView(view){
     document.getElementById('stats-grid-view').style.display=view==='grid'?'block':'none';
@@ -7618,32 +6369,27 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ===== INIT =====
-// Hide page loader — вызывается только после загрузки данных
-function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.45s ease';l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},500);}}
+// Hide page loader
+(function(){
+    function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.3s ease';l.style.opacity='0';l.style.visibility='hidden';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},350);}}
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hideLoader);}
+    else{hideLoader();}
+    setTimeout(hideLoader,1500);
+})();
 
 // ===== HERO CAROUSEL =====
 let _heroData=[],_heroCur=0,_heroTimer=null;
 async function loadHero(){
     try{
-        let items=[];
-        // Сначала пробуем топ недели
-        const res=await fetch('/api/top-week');
-        const data=await res.json();
-        if(data.success&&data.items?.length) items=data.items;
-        // Фолбэк — берём просто последние манги из каталога
-        if(!items.length){
-            const r2=await fetch('/api/manga?page=0&sort=new&q=');
-            const d2=await r2.json();
-            if(d2.items?.length) items=d2.items;
-        }
-        if(!items.length)return;
-        _heroData=items.slice(0,6);
+        const res=await fetch('/api/top-week');const data=await res.json();
+        if(!data.success||!data.items?.length)return;
+        _heroData=data.items.slice(0,6);
         const track=document.getElementById('hero-track');
         const dots=document.getElementById('hero-dots');
         const thumbs=document.getElementById('hero-thumbs');
         if(!track)return;
         track.innerHTML=_heroData.map((m,i)=>{
-            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:(m.cover_imgbb_url&&!m.cover_imgbb_url.startsWith('tg://'))?m.cover_imgbb_url:'';
+            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';
             const rat=m.avg_rating>0?`<div class="hero-stat">★ <strong>${m.avg_rating}</strong></div>`:'';
             const lk=m.likes>0?`<div class="hero-stat">♥ <strong>${m.likes}</strong></div>`:'';
             const vw=m.weekly_views>0?`<div class="hero-stat">👁 <strong>${m.weekly_views}</strong></div>`:'';
@@ -7666,12 +6412,12 @@ async function loadHero(){
         }).join('');
         if(dots)dots.innerHTML=_heroData.map((_,i)=>`<div class="hero-dot${i===0?' active':''}" onclick="heroGo(${i})"></div>`).join('');
         if(thumbs)thumbs.innerHTML=_heroData.map((m,i)=>{
-            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:(m.cover_imgbb_url&&!m.cover_imgbb_url.startsWith('tg://'))?m.cover_imgbb_url:'';
+            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';
             return `<div class="hero-thumb${i===0?' active':''}" onclick="heroGo(${i})">${src?`<img src="${escapeHtml(src)}" alt="">`:''}</div>`;
         }).join('');
         heroGo(0);
-        if(_heroData.length>1) _heroTimer=setInterval(()=>heroGo((_heroCur+1)%_heroData.length),5500);
-    }catch(e){console.error('loadHero error:',e);}
+        _heroTimer=setInterval(()=>heroGo((_heroCur+1)%_heroData.length),5500);
+    }catch(e){}
 }
 function heroGo(idx){
     _heroCur=Math.max(0,Math.min(_heroData.length-1,idx));
@@ -7694,24 +6440,8 @@ function heroSlide(dir){
     check();window.addEventListener('resize',check);
 })();
 
-// ===== ЕДИНЫЙ БЛОК ИНИЦИАЛИЗАЦИИ =====
-document.addEventListener('DOMContentLoaded', async function(){
-    // Запускаем все загрузки параллельно, лоадер скрываем только после
-    try {
-        await Promise.all([
-            loadHero(),
-            loadTopWeek(),
-            load(),
-            loadNew(),
-            loadContinue(),
-            checkAdmin()
-        ]);
-    } catch(e) {}
-    // Скрываем лоадер только после завершения всех запросов
-    hideLoader();
-    // Периодическое обновление топа
-    setInterval(loadTopWeek, 30 * 60 * 1000);
-});
+load();loadNew();loadContinue();checkAdmin();
+document.addEventListener('DOMContentLoaded',function(){loadHero();loadTopWeek();setInterval(loadTopWeek,30*60*1000);});
 
 
 // ===== НОВЫЕ JS ФУНКЦИИ =====
@@ -8075,6 +6805,12 @@ async function loadUserLevel(accountId) {
 
 // Event слушатели
 document.addEventListener('DOMContentLoaded', function() {
+    // Топ недели на главной
+    if (document.getElementById('top-week-section')) {
+        loadTopWeek();
+        setInterval(loadTopWeek, 30 * 60 * 1000);
+    }
+    
     // Комментарии на странице чтения
     if (document.getElementById('comments-section')) {
         const mangaId = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
@@ -8233,3 +6969,4 @@ document.addEventListener('click', function(e) {
 
 </body>
 </html>
+
