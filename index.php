@@ -6,7 +6,7 @@ ini_set('log_errors', 1);
 
 $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
 try {
-    $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_TIMEOUT => 10]);
+    $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 } catch (PDOException $e) { die("DB Error: " . $e->getMessage()); }
 
 try {
@@ -103,17 +103,19 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($_SESSION['guest_id'])) $_SESSION['guest_id'] = rand(1000000, 9999999);
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Favicon
+if ($path === '/favicon.ico') {
+    header('Content-Type: image/x-icon');
+    header('Cache-Control: public, max-age=604800');
+    // Return minimal 1x1 transparent ICO
+    echo base64_decode('AAABAAEAAQEAAAEAIAAwAAAAFgAAACgAAAABAAAAAgAAAAEAIAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==');
+    exit;
+}
 // Отдаём style.css
 if ($path === '/style.css') {
     header('Content-Type: text/css');
     header('Cache-Control: public, max-age=86400');
-    $cssFile = __DIR__ . '/style.css';
-    if (file_exists($cssFile)) {
-        readfile($cssFile);
-    } else {
-        // Встроенный fallback CSS — базовые переменные и стили
-        echo ':root{--bg:#0a0a0a;--card:#141414;--card2:#1a1a1a;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--text:#f2f2f2;--text2:#a0a0a0;--muted:#555;--accent:#e8192c;--green:#22c55e;--red:#f87171;--orange:#fb923c}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif}a{text-decoration:none;color:inherit}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}';
-    }
+    readfile(__DIR__ . '/style.css');
     exit;
 }
 
@@ -4981,7 +4983,9 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 // Hide loader after page ready
-window.addEventListener('load',()=>{const l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
+(function(){function hideLoader(){var l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},450);}}
+document.addEventListener('DOMContentLoaded',function(){setTimeout(hideLoader,100);});
+setTimeout(hideLoader,3000);})();
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
 const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
@@ -5018,10 +5022,10 @@ load();
 # ========================= HOME =========================
 
 # ========================= HOME =========================
-try { $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn(); } catch(Exception $e) { $total = 0; }
+$total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 // Count unread admin messages
-try { $msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn(); } catch(Exception $e) { $msgCount = 0; }
+$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="ru">
