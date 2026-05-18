@@ -1583,22 +1583,22 @@ if ($path==='/login') {
     if (getCurrentAccount($pdo)) { header('Location: /'); exit; }
     $redirect = htmlspecialchars($_GET['redirect'] ?? '/');
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Вход | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0a0a;--card:#141414;--border:#1e1e1e;--border2:#2a2a2a;--text:#f0f0f0;--text2:#b8b8b8;--muted:#555;--accent:#d0d0d0}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
 .box{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:38px 34px;width:100%;max-width:400px;position:relative;z-index:1}
 .logo{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;letter-spacing:3px;color:var(--text2);text-decoration:none;display:block;text-align:center;margin-bottom:30px;text-transform:uppercase}
 h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
 .sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:28px}
 .fg{margin-bottom:14px}
 label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:5px}
-input[type=text],input[type=email],input[type=password]{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:12px 14px;outline:none;transition:border-color .15s}
+input[type=text],input[type=email],input[type=password]{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:Outfit,sans-serif;font-size:14px;padding:12px 14px;outline:none;transition:border-color .15s}
 input:focus{border-color:var(--border2)}
 .remember{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:20px}
 .remember input{width:auto;accent-color:var(--accent)}
-.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .15s;margin-bottom:14px}
+.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:Outfit,sans-serif;transition:opacity .15s;margin-bottom:14px}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .err{background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.22);border-radius:10px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:14px;display:none}
@@ -1652,12 +1652,12 @@ document.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 if ($path==='/register') {
     if (getCurrentAccount($pdo)) { header('Location: /'); exit; }
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Регистрация | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--green:#4ade80}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(255,255,255,0.03) 0%,transparent 60%);pointer-events:none}
 .box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:420px;position:relative;z-index:1}
 .logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:2px;color:var(--text2);text-decoration:none;display:block;text-align:center;margin-bottom:28px;opacity:0.85}
@@ -1665,14 +1665,14 @@ h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6p
 .sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:26px;line-height:1.6}
 .fg{margin-bottom:13px;position:relative}
 label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px}
-input{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
+input{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
 input:focus{border-color:var(--border2)}
 input.valid{border-color:rgba(74,222,128,.4)}
 input.invalid{border-color:rgba(248,113,113,.4)}
 .hint{font-size:10px;color:var(--muted);margin-top:4px}
 .hint.ok{color:var(--green)}
 .hint.bad{color:#f87171}
-.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .2s;margin-bottom:12px;margin-top:6px}
+.btn{width:100%;padding:13px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:Outfit,sans-serif;transition:opacity .2s;margin-bottom:12px;margin-top:6px}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:14px;display:none}
@@ -1747,11 +1747,11 @@ if ($path === '/messages' || preg_match('~^/messages\?with=(\d+)~', $path, $m)) 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Сообщения | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh}
 .page-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;background:rgba(12,12,12,.92);backdrop-filter:blur(12px)}
 .back-btn{color:var(--muted);text-decoration:none;font-size:13px;transition:color .2s}.back-btn:hover{color:var(--text)}
 .page-title{font-family:'Syne',sans-serif;font-weight:800;font-size:17px}
@@ -1882,11 +1882,11 @@ if ($path==='/profile') {
         $needsReauth = (time() - $lastConfirm) > (30*24*3600);
     }
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Профиль | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0a0a;--card:#141414;--border:#1e1e1e;--border2:#2a2a2a;--text:#f0f0f0;--text2:#b8b8b8;--muted:#555;--accent:#d0d0d0;--green:#4ade80;--orange:#fb923c;--red:#f87171}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:24px 16px}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;padding:24px 16px}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:22px;transition:color .18s}
 .back:hover{color:var(--text)}
 .wrap{max-width:560px;margin:0 auto;position:relative}
@@ -2356,11 +2356,11 @@ if ($path==='/profile/edit') {
     $custStmt->execute([(int)$account['id']]);
     $custom = $custStmt->fetch() ?: ['avatar_url'=>null,'banner_url'=>null,'banner_color'=>'#1a1a2e','bio'=>null];
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Редактировать профиль | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80;--orange:#fb923c;--red:#f87171}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;padding:20px}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}.back:hover{color:var(--text)}
 .wrap{max-width:540px;margin:0 auto;position:relative;z-index:1}
@@ -2691,11 +2691,11 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $currentXp = $targetXp - $totalXpToLevel;
     $xpProgress = $xpForLevel > 0 ? min(100, max(0, round(($currentXp / $xpForLevel) * 100))) : 0;
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($target['username'])?> | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#7c5cff;--green:#4ade80;--orange:#fb923c;--red:#f87171}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:20px}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;padding:20px}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(124,92,255,0.04) 0%,transparent 55%);pointer-events:none}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .2s}.back:hover{color:var(--text)}
 .wrap{max-width:580px;margin:0 auto;position:relative;z-index:1}
@@ -2875,11 +2875,11 @@ if ($path==='/verify-email') {
     if (!$account) { header('Location: /register'); exit; }
     if ($account['is_verified']) { header('Location: /'); exit; }
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Подтверждение email | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--muted:#666;--accent:#e0e0e0;--orange:#fb923c}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 .box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:400px;text-align:center}
 .logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:2px;color:var(--text2);text-decoration:none;display:block;margin-bottom:24px}
 .icon{font-size:48px;margin-bottom:16px}
@@ -3044,11 +3044,11 @@ if (preg_match('#^/read/(\d+)$#',$path,$m)){
         $title = htmlspecialchars($manga['title']);
         $cover = !empty($manga['cover_imgbb_url']) ? htmlspecialchars($manga['cover_imgbb_url']) : '';
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=$title?> | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
 <?php if($cover):?>body::before{content:'';position:fixed;inset:0;background:url('<?=$cover?>') center/cover no-repeat;filter:blur(40px) brightness(0.15);pointer-events:none;z-index:0}<?php endif;?>
 .box{position:relative;z-index:1;max-width:380px;width:100%}
 .lock{font-size:56px;margin-bottom:16px}
@@ -3088,13 +3088,13 @@ p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}
     $genresStmt=$pdo->prepare("SELECT g.name,g.slug FROM genres g JOIN manga_genres mg ON g.id=mg.genre_id WHERE mg.manga_id=? ORDER BY g.name");$genresStmt->execute([$id]);$mangaGenres=$genresStmt->fetchAll();
     $tagsStmt=$pdo->prepare("SELECT t.name,t.slug,t.is_nsfw FROM tags t JOIN manga_tags mt ON t.id=mt.tag_id WHERE mt.manga_id=? ORDER BY t.name");$tagsStmt->execute([$id]);$mangaTags=$tagsStmt->fetchAll();
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=htmlspecialchars($manga['title'])?> | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--border2:#2e2e2e;--text:#f2f2f2;--text2:#c8c8c8;--accent:#e0e0e0;--muted:#666666;--green:#4ade80;--orange:#fb923c}
-.dark{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666666}
-.light{--bg:#f7f7f7;--card:#ffffff;--border:#e2e2e2;--border2:#d0d0d0;--text:#141414;--text2:#3a3a3a;--accent:#333333;--muted:#a0a0a0;--green:#16a34a;--orange:#ea580c}
+:root{--bg:#0a0a0b;--card:#141416;--border:#222226;--border2:#333338;--text:#f5f5f7;--text2:#8e8e9a;--accent:#e8192c;--muted:#4a4a58;--green:#22c55e;--orange:#f97316}
+.dark{--bg:#0a0a0b;--card:#141416;--border:#222226;--text:#f5f5f7;--muted:#4a4a58}
+.light{--bg:#f5f5f7;--card:#ffffff;--border:#dcdce8;--border2:#c8c8d8;--text:#0a0a0e;--text2:#505060;--accent:#e8192c;--muted:#9090a8;--green:#16a34a;--orange:#ea580c}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
+body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
 .back{display:inline-flex;align-items:center;gap:8px;margin:18px 20px 0;color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;transition:color 0.18s;letter-spacing:0.1px}
 .back:hover{color:var(--text)}
 .manga-page{max-width:820px;margin:0 auto;padding:16px 16px 80px}
@@ -3129,7 +3129,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .status-add-btn{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.18s;font-family:inherit}
 .status-add-btn:hover{border-color:var(--border2);color:var(--text)}
 .read-section{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px;margin-bottom:14px}
-.read-section h3{font-size:11px;font-weight:700;margin-bottom:11px;font-family:'Inter',sans-serif;letter-spacing:0.7px;text-transform:uppercase;color:var(--muted)}
+.read-section h3{font-size:11px;font-weight:700;margin-bottom:11px;font-family:Outfit,sans-serif;letter-spacing:0.7px;text-transform:uppercase;color:var(--muted)}
 .read-btn{display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;transition:all 0.18s;margin-right:7px;margin-bottom:7px}
 .read-primary{background:var(--text);color:var(--bg)}
 .read-primary:hover{opacity:0.88;transform:translateY(-1px)}
@@ -3141,7 +3141,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .ch-num{font-weight:700;font-size:13px;color:var(--text)}.ch-title{font-size:11px;color:var(--muted);margin-left:5px}.ch-date{font-size:10px;color:var(--muted)}.ch-pages{font-size:10px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:2px 7px;border-radius:7px}
 /* Similar manga */
 .similar-section{margin-top:22px}
-.similar-title{font-size:10px;font-weight:700;font-family:'Inter',sans-serif;margin-bottom:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px}
+.similar-title{font-size:10px;font-weight:700;font-family:Outfit,sans-serif;margin-bottom:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px}
 .similar-list{display:flex;gap:9px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
 .similar-list::-webkit-scrollbar{display:none}
 .sim-card{flex:0 0 86px;text-decoration:none;color:var(--text);transition:all 0.18s}
@@ -3321,7 +3321,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
         <?php if($currentAccount): ?>
         <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px">
             <textarea id="manga-comment-input" placeholder="Поделись мнением о манге..."
-                style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px 12px;font-family:'Inter',sans-serif;font-size:13px;resize:none;outline:none;min-height:72px;max-height:150px;line-height:1.5;transition:border-color .2s"
+                style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px 12px;font-family:Outfit,sans-serif;font-size:13px;resize:none;outline:none;min-height:72px;max-height:150px;line-height:1.5;transition:border-color .2s"
                 onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'"></textarea>
             <div style="display:flex;justify-content:flex-end">
                 <button onclick="submitMangaComment(<?=(int)$id?>)" style="padding:8px 18px;background:var(--text);color:var(--bg);border:none;border-radius:9px;cursor:pointer;font-weight:700;font-size:13px;font-family:inherit;transition:opacity .2s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
@@ -3527,14 +3527,14 @@ loadMangaComments(<?=(int)$id?>);
 if ($path==='/library'){
     if (!$currentAccount) {
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}.box{max-width:360px;width:100%}.lock{font-size:56px;margin-bottom:16px}h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}.btns{display:flex;gap:10px;flex-direction:column}.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;display:block}.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;display:block}.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}</style>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}.box{max-width:360px;width:100%}.lock{font-size:56px;margin-bottom:16px}h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}.btns{display:flex;gap:10px;flex-direction:column}.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;display:block}.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;display:block}.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}</style>
 </head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock">📚</div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
     $userId=getEffectiveUserId($pdo);
     // Get custom statuses
     $csStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$csStmt->execute([$userId]);$customStatuses=$csStmt->fetchAll();
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
 <style>
 /* ===== THEME VARS — идентично главной ===== */
@@ -3557,7 +3557,7 @@ if ($path==='/library'){
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{background:#0a0a0a;color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s;position:relative}
+body{background:#0a0a0a;color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s;position:relative}
 body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 60% 40% at 20% 80%,rgba(255,255,255,0.02) 0%,transparent 60%),radial-gradient(ellipse 50% 35% at 80% 10%,rgba(255,255,255,0.015) 0%,transparent 55%),linear-gradient(180deg,#080808 0%,#0c0c0c 40%,#111111 100%)}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 55% 25% at 50% -5%,rgba(255,255,255,0.016) 0%,transparent 55%)}
 .light body{background:#f5f5f5}
@@ -3571,7 +3571,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .logo{font-size:17px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);text-decoration:none;flex-shrink:0;letter-spacing:2px;text-transform:uppercase;opacity:0.9}
 
 /* Back button */
-.back-btn{color:var(--muted);text-decoration:none;font-size:12px;margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:8px;font-weight:500;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);white-space:nowrap;letter-spacing:0.2px;font-family:'Inter',sans-serif}
+.back-btn{color:var(--muted);text-decoration:none;font-size:12px;margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:8px;font-weight:500;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);white-space:nowrap;letter-spacing:0.2px;font-family:Outfit,sans-serif}
 .back-btn:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.04);transform:translateX(-2px)}
 .light .back-btn:hover{background:rgba(0,0,0,0.04)}
 
@@ -3584,15 +3584,15 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 
 /* ===== CONTROLS ===== */
 .lib-controls{display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
-.lib-search{flex:1;min-width:180px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;padding:9px 16px;font-family:'Inter',sans-serif;transition:all 0.2s;outline:none;letter-spacing:0.1px}
+.lib-search{flex:1;min-width:180px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;padding:9px 16px;font-family:Outfit,sans-serif;transition:all 0.2s;outline:none;letter-spacing:0.1px}
 .lib-search:focus{border-color:var(--border2);background:rgba(255,255,255,0.06)}
 .light .lib-search{background:rgba(0,0,0,0.03)}
-.sort-select{padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none;transition:all 0.2s}
+.sort-select{padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:Outfit,sans-serif;cursor:pointer;outline:none;transition:all 0.2s}
 .sort-select:focus{border-color:var(--border2)}
 .light .sort-select{background:rgba(0,0,0,0.03)}
 .view-btns{display:flex;gap:3px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;padding:3px}
 .light .view-btns{background:rgba(0,0,0,0.03)}
-.view-btn{padding:6px 12px;border-radius:7px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:11px;font-weight:500;font-family:'Inter',sans-serif;transition:all 0.2s;letter-spacing:0.2px}
+.view-btn{padding:6px 12px;border-radius:7px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:11px;font-weight:500;font-family:Outfit,sans-serif;transition:all 0.2s;letter-spacing:0.2px}
 .view-btn.active{background:var(--card2);border:1px solid var(--border2);color:var(--text);font-weight:600}
 
 /* ===== SECTION HEADER ===== */
@@ -3614,7 +3614,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 .cover{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;transition:transform 0.35s ease}
 .cover-ph{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:var(--card2);color:var(--muted);font-size:32px}
 .card-info{padding:9px 10px}
-.card-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;font-family:'Inter',sans-serif;color:var(--text2)}
+.card-title{font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;font-family:Outfit,sans-serif;color:var(--text2)}
 
 /* ===== LIST view ===== */
 .list-view{display:flex;flex-direction:column;gap:6px}
@@ -5757,7 +5757,7 @@ document.addEventListener('click', function(e) {
                 <div style="position:relative">
                     <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none">🔍</span>
                     <input id="message-search" type="text" placeholder="Найти пользователя..." oninput="searchUsers(this.value)"
-                        style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px 8px 30px;color:var(--text);font-size:12px;outline:none;font-family:'Inter',sans-serif;transition:border-color .18s"
+                        style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px 8px 30px;color:var(--text);font-size:12px;outline:none;font-family:Outfit,sans-serif;transition:border-color .18s"
                         onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'">
                 </div>
                 <div id="user-search-results" style="margin-top:6px;max-height:130px;overflow-y:auto;border-radius:8px;overflow:hidden"></div>
@@ -5782,7 +5782,7 @@ document.addEventListener('click', function(e) {
                         style="width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center"
                         onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">😊</button>
                     <textarea id="chat-input" placeholder="Напиши сообщение..." rows="1"
-                        style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:9px 12px;outline:none;resize:none;min-height:36px;max-height:100px;line-height:1.45;transition:border-color .18s;scrollbar-width:none"
+                        style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:13px;padding:9px 12px;outline:none;resize:none;min-height:36px;max-height:100px;line-height:1.45;transition:border-color .18s;scrollbar-width:none"
                         onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'"
                         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}" oninput="autoResizeChat(this)"></textarea>
                     <button onclick="sendChatMessage()" title="Отправить"
