@@ -687,10 +687,6 @@ if (preg_match('#^/api/pages/(\d+)$#',$path,$m)){
 if ($path==='/api/progress'&&$_SERVER['REQUEST_METHOD']==='POST'){header('Content-Type: application/json');$input=json_decode(file_get_contents('php://input'),true);$userId=getEffectiveUserId($pdo);if(!empty($input['tg_user_id'])&&is_numeric($input['tg_user_id']))$userId=(int)$input['tg_user_id'];$mangaId=(int)($input['manga_id']??0);$pageNum=(int)($input['page_num']??1);$totalPages=(int)($input['total_pages']??0);$chapterId=isset($input['chapter_id'])?(int)$input['chapter_id']:null;if($mangaId&&$userId){$pdo->prepare("INSERT INTO reading_progress (user_id,manga_id,page_num,total_pages,chapter_id,updated_at) VALUES (?,?,?,?,?,NOW()) ON CONFLICT (user_id,manga_id) DO UPDATE SET page_num=EXCLUDED.page_num,total_pages=EXCLUDED.total_pages,chapter_id=EXCLUDED.chapter_id,updated_at=NOW()")->execute([$userId,$mangaId,$pageNum,$totalPages,$chapterId]);echo json_encode(['success'=>true]);}else{echo json_encode(['success'=>false]);}exit;}
 
 if ($path==='/api/progress'){header('Content-Type: application/json');$userId=getEffectiveUserId($pdo);
-// Single manga progress lookup (used by reader to restore page)
-if(!empty($_GET['manga_id'])&&is_numeric($_GET['manga_id'])){$mId=(int)$_GET['manga_id'];$s=$pdo->prepare("SELECT page_num,total_pages,chapter_id FROM reading_progress WHERE user_id=? AND manga_id=?");$s->execute([$userId,$mId]);$row=$s->fetch();echo json_encode($row?['page_num'=>(int)$row['page_num'],'total_pages'=>(int)$row['total_pages'],'chapter_id'=>$row['chapter_id']?intval($row['chapter_id']):null]:['page_num'=>1,'total_pages'=>0,'chapter_id'=>null]);exit;}
-// Single chapter progress lookup
-if(!empty($_GET['chapter_id'])&&is_numeric($_GET['chapter_id'])){$cId=(int)$_GET['chapter_id'];$s=$pdo->prepare("SELECT rp.page_num,rp.total_pages FROM reading_progress rp WHERE rp.user_id=? AND rp.chapter_id=?");$s->execute([$userId,$cId]);$row=$s->fetch();echo json_encode($row?['page_num'=>(int)$row['page_num'],'total_pages'=>(int)$row['total_pages']]:['page_num'=>1,'total_pages'=>0]);exit;}
 $stmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,m.file_id,m.is_series,rp.page_num,rp.total_pages,rp.updated_at,rp.chapter_id,s.status,mc.chapter_num FROM user_manga_status s JOIN manga m ON s.manga_id=m.id LEFT JOIN reading_progress rp ON rp.manga_id=m.id AND rp.user_id=s.user_id LEFT JOIN manga_chapters mc ON mc.id=rp.chapter_id WHERE s.user_id=? AND s.status IN ('now','will') ORDER BY rp.updated_at DESC NULLS LAST LIMIT 20");
 $stmt->execute([$userId]);$rows=$stmt->fetchAll();
 foreach($rows as &$row){
@@ -2392,8 +2388,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .color-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .color-preset{width:26px;height:26px;border-radius:7px;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
 .color-preset.active{border-color:#fff;transform:scale(1.2)}
-.save-btn{width:100%;padding:12px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
-.save-btn:hover{opacity:.88}
+.save-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
+.save-btn:hover{opacity:.88;transform:translateY(-1px)}
 .save-btn:disabled{opacity:.4;cursor:not-allowed}
 .err-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:9px 13px;color:#fca5a5;font-size:12px;margin-bottom:10px;display:none}
 .err-box.show{display:block}
@@ -2964,7 +2960,7 @@ const loadEl=document.getElementById('loading'),pageEl=document.getElementById('
 const mangaId=<?=$id?>;
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function saveProgress(p){try{localStorage.setItem('progress_'+mangaId,p);}catch(e){}fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,page_num:p+1,total_pages:pages.length,tg_user_id:getTgUser()})}).catch(()=>{});}
-async function init(){try{const res=await fetch('/api/pages/<?=$id?>');const data=await res.json();pages=data.pages||[];if(!pages.length){loadEl.style.display='none';fallEl.style.display='block';return;}loadEl.style.display='none';let saved=0;try{const tgId=getTgUser();if(tgId){const pr=await fetch('/api/progress?manga_id='+mangaId+'&tg_user_id='+tgId);const pd=await pr.json();if(pd.page_num>1)saved=pd.page_num-1;}if(!saved){saved=parseInt(localStorage.getItem('progress_'+mangaId)||'0');}}catch(e2){try{saved=parseInt(localStorage.getItem('progress_'+mangaId)||'0');}catch(e3){}}current=saved>=pages.length?0:saved;render();}catch(e){loadEl.style.display='none';fallEl.style.display='block';}}
+async function init(){try{const res=await fetch('/api/pages/<?=$id?>');const data=await res.json();pages=data.pages||[];if(!pages.length){loadEl.style.display='none';fallEl.style.display='block';return;}loadEl.style.display='none';let saved=0;try{saved=parseInt(localStorage.getItem('progress_'+mangaId)||'0');}catch(e){}current=saved>=pages.length?0:saved;render();}catch(e){loadEl.style.display='none';fallEl.style.display='block';}}
 function render(){if(!pages[current])return;pageEl.style.display='none';const img=new Image();img.onload=()=>{pageEl.src=pages[current];pageEl.style.display='block';cntEl.innerText=(current+1)+' / '+pages.length;};img.onerror=()=>{if(current<pages.length-1){current++;render();}else{fallEl.style.display='block';}};img.src=pages[current];cntEl.innerText=(current+1)+' / '+pages.length;}
 function nextPage(){if(current<pages.length-1){current++;render();saveProgress(current);}}
 function prevPage(){if(current>0){current--;render();saveProgress(current);}}
@@ -3027,7 +3023,7 @@ const loadEl=document.getElementById('loading'),pageEl=document.getElementById('
 const mangaId=<?=$chapter['manga_id']?>,chapterId=<?=$chapterId?>;
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function saveProgress(p){fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,chapter_id:chapterId,page_num:p+1,total_pages:pages.length,tg_user_id:getTgUser()})}).catch(()=>{});}
-async function init(){try{const res=await fetch('/api/chapter-pages/<?=$chapterId?>');const data=await res.json();pages=data.pages||[];if(!pages.length){loadEl.style.display='none';fallEl.style.display='block';return;}loadEl.style.display='none';let saved=0;try{const tgId=getTgUser();if(tgId){const pr=await fetch('/api/progress?chapter_id='+chapterId+'&tg_user_id='+tgId);const pd=await pr.json();if(pd.page_num>1)saved=pd.page_num-1;}}catch(e2){}current=saved>=pages.length?0:saved;render();}catch(e){loadEl.style.display='none';fallEl.style.display='block';}}
+async function init(){try{const res=await fetch('/api/chapter-pages/<?=$chapterId?>');const data=await res.json();pages=data.pages||[];if(!pages.length){loadEl.style.display='none';fallEl.style.display='block';return;}loadEl.style.display='none';render();}catch(e){loadEl.style.display='none';fallEl.style.display='block';}}
 function render(){if(!pages[current])return;pageEl.style.display='none';const img=new Image();img.onload=()=>{pageEl.src=pages[current];pageEl.style.display='block';cntEl.innerText=(current+1)+' / '+pages.length;};img.onerror=()=>{if(current<pages.length-1){current++;render();}else{showEnd();}};img.src=pages[current];cntEl.innerText=(current+1)+' / '+pages.length;}
 function nextPage(){if(current<pages.length-1){current++;render();saveProgress(current);}else{showEnd();}}
 function prevPage(){if(current>0){current--;render();saveProgress(current);}}
@@ -4218,9 +4214,9 @@ header{
 @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
 
 /* ── MODALS ── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(18px);z-index:800;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(18px);z-index:800;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
 .modal-overlay.open{display:flex}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;max-width:480px;width:100%;position:relative;animation:modalIn .22s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;max-width:480px;width:100%;position:relative;animation:modalIn .22s cubic-bezier(.34,1.56,.64,1)}
 @keyframes modalIn{from{opacity:0;transform:scale(.94)translateY(10px)}to{opacity:1;transform:scale(1)translateY(0)}}
 .modal-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:.3px;margin-bottom:16px}
 .modal-head{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:.3px;margin-bottom:4px}
@@ -4313,7 +4309,7 @@ header{
 /* ═══════════════════════════════════════
    ADMIN PANEL — MODERN REDESIGN
 ═══════════════════════════════════════ */
-.admin-modal{max-width:960px;width:96vw;padding:0;overflow:hidden;border-radius:18px;max-height:90vh;display:flex;flex-direction:column}
+.admin-modal{max-width:960px;width:96vw;padding:0;overflow:visible;border-radius:18px;display:flex;flex-direction:column;margin:auto}
 .admin-modal .modal-head{padding:20px 24px 0;font-size:19px;flex-shrink:0}
 .admin-modal .modal-x{top:18px;right:18px}
 
@@ -4324,8 +4320,8 @@ header{
 .atab:hover{color:var(--text2)}
 .atab.active{color:var(--text);border-bottom-color:var(--accent)}
 
-/* Panels — scrollable */
-.apanel{display:none;padding:18px 24px 24px;overflow-y:auto;max-height:calc(90vh - 120px)}
+/* Panels — no forced scroll, content determines height */
+.apanel{display:none;padding:18px 24px 24px}
 .apanel.active{display:block}
 
 /* Stats layout — side by side, responsive */
@@ -4355,7 +4351,7 @@ header{
 .edit-manga-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* Archive */
-.archive-list{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;scrollbar-width:thin}
+.archive-list{display:flex;flex-direction:column;gap:5px}
 .aitem{padding:8px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
 .atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:2px}
 .atext{font-size:12px;color:var(--text2);margin-bottom:2px}
@@ -4389,7 +4385,7 @@ header{
 .msg-compose textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .msg-send-btn{margin-top:8px;padding:9px 18px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s}
 .msg-send-btn:hover{background:var(--accent2);transform:translateY(-1px)}
-.msg-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
+.msg-list{display:flex;flex-direction:column;gap:6px}
 .msg-item{padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
 .msg-text{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.5}
 .msg-meta{font-size:10px;color:var(--muted)}
@@ -4400,7 +4396,7 @@ header{
 .esearch-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .esearch-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s;white-space:nowrap}
 .esearch-btn:hover{background:var(--accent2)}
-.manga-edit-list{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin;margin-bottom:10px}
+.manga-edit-list{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
 .manga-edit-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
 .manga-edit-item:hover{border-color:var(--border2);background:rgba(255,255,255,.04)}
 .manga-edit-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card2);border:1px solid var(--border);flex-shrink:0}
@@ -4411,13 +4407,19 @@ header{
 .edit-form-wrap{display:flex;flex-direction:column;gap:8px}
 
 /* Suggestions */
-.suggest-preview{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
+.suggest-preview{display:flex;flex-direction:column;gap:5px}
 .suggest-item{padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:flex-start}
 .suggest-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
 .suggest-meta{font-size:10px;color:var(--muted);margin-top:3px}
 .suggest-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;text-transform:uppercase}
 .suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
 .suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
+
+/* Chapter admin list in edit panel */
+.ch-admin-list{display:flex;flex-direction:column;gap:4px}
+.ch-admin-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px}
+.del-ch-btn{padding:4px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s}
+.del-ch-btn:hover{background:rgba(239,68,68,0.2)}
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -4801,7 +4803,7 @@ header{
                 <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
                 <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
             </div>
-            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
+            <div class="manga-edit-list" id="ch-manga-list"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
         </div>
         <div id="ch-add-form" style="display:none">
             <div class="add-ch-form">
@@ -4850,7 +4852,7 @@ header{
                     <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
                     <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
                 </div>
-                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px"></div>
             </div>
 
             <!-- ТЕГИ -->
@@ -4865,7 +4867,7 @@ header{
                     <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
                     <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
                 </div>
-                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px"></div>
             </div>
 
         </div>
@@ -5243,9 +5245,8 @@ async function openEditManga(mangaId){
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allGenres=gd.genres||[];allTags=gd.tags||[];}catch(e){}
     try{const mgr=await fetch(`/api/manga/${mangaId}/genres`);const mgd=await mgr.json();
     mgd.genres?.forEach(g=>mangaGenreIds.add(g.id));mgd.tags?.forEach(t=>mangaTagIds.add(t.id));}catch(e){}
-    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:140px;overflow-y:auto;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
-    document.getElementById('edit-manga-form').innerHTML=`
+    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';    document.getElementById('edit-manga-form').innerHTML=`
         <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
         <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
         <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
