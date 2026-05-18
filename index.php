@@ -7600,12 +7600,8 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ===== INIT =====
-// Hide page loader
-(function(){
-    function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.3s ease';l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},350);}}
-    hideLoader();
-    setTimeout(hideLoader,500);
-})();
+// Hide page loader — вызывается только после загрузки данных
+function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.45s ease';l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},500);}}
 
 // ===== HERO CAROUSEL =====
 let _heroData=[],_heroCur=0,_heroTimer=null;
@@ -7670,8 +7666,24 @@ function heroSlide(dir){
     check();window.addEventListener('resize',check);
 })();
 
-load();loadNew();loadContinue();checkAdmin();
-document.addEventListener('DOMContentLoaded',function(){loadHero();loadTopWeek();setInterval(loadTopWeek,30*60*1000);});
+// ===== ЕДИНЫЙ БЛОК ИНИЦИАЛИЗАЦИИ =====
+document.addEventListener('DOMContentLoaded', async function(){
+    // Запускаем все загрузки параллельно, лоадер скрываем только после
+    try {
+        await Promise.all([
+            loadHero(),
+            loadTopWeek(),
+            load(),
+            loadNew(),
+            loadContinue(),
+            checkAdmin()
+        ]);
+    } catch(e) {}
+    // Скрываем лоадер только после завершения всех запросов
+    hideLoader();
+    // Периодическое обновление топа
+    setInterval(loadTopWeek, 30 * 60 * 1000);
+});
 
 
 // ===== НОВЫЕ JS ФУНКЦИИ =====
@@ -8035,12 +8047,6 @@ async function loadUserLevel(accountId) {
 
 // Event слушатели
 document.addEventListener('DOMContentLoaded', function() {
-    // Топ недели на главной
-    if (document.getElementById('top-week-section')) {
-        loadTopWeek();
-        setInterval(loadTopWeek, 30 * 60 * 1000);
-    }
-    
     // Комментарии на странице чтения
     if (document.getElementById('comments-section')) {
         const mangaId = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
