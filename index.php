@@ -4357,152 +4357,6 @@ header{
     <button class="load-more" id="more" onclick="load()" style="display:none">Загрузить ещё</button>
 </div>
 
-<!-- PAGE LOADER -->
-<div id="page-loader">
-  <div class="loader-ring">
-    <div class="loader-dot"></div><div class="loader-dot"></div>
-    <div class="loader-dot"></div><div class="loader-dot"></div>
-    <div class="loader-dot"></div><div class="loader-dot"></div>
-    <div class="loader-dot"></div><div class="loader-dot"></div>
-  </div>
-</div>
-
-<header>
-<div class="header-inner">
-    <a href="/" class="logo">⚫ BLACKWATCH</a>
-    <div class="header-actions">
-        <button class="theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
-        <button class="hbtn hbtn-ghost" onclick="openRandom()">🎲</button>
-        <?php if ($currentAccount): ?>
-        <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
-        <a href="/profile" class="hbtn" style="gap:6px">👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span></a>
-        <?php else: ?>
-        <a href="/login" class="hbtn">Войти</a>
-        <a href="/register" class="hbtn" style="background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18)">Регистрация</a>
-        <?php endif; ?>
-        <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
-    </div>
-</div>
-</header>
-
-<!-- SIDEBAR ICONS (правая боковая панель) -->
-<div class="sidebar-icons">
-    <div class="sidebar-rail">
-        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
-        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
-            💬
-            <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
-            <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
-        </button>
-        <?php if ($currentAccount): ?>
-        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">👤</a>
-        <?php endif; ?>
-        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">🤖</a>
-        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">🛟</button>
-        <div style="width:100%;height:1px;background:var(--border);margin:2px 0"></div>
-        <button class="sidebar-icon-btn theme-btn" onclick="toggleTheme()" title="Сменить тему" id="theme-btn-side">🌙</button>
-    </div>
-</div>
-
-<div class="wrap">
-    <!-- ПОИСК ПОД ШАПКОЙ -->
-    <div class="top-search-wrap">
-        <span class="search-icon">🔍</span>
-        <input class="search" type="text" placeholder="Поиск манги..." id="search" oninput="onSearch(this.value)" autocomplete="off">
-        <div class="search-dropdown" id="search-dropdown"></div>
-    </div>
-
-    <!-- НОВИНКИ -->
-    <div class="new-section" id="new-section" style="display:none">
-        <div class="sec-header">
-            <div class="sec-title"><span>🔥</span>Новинки<span class="sec-count" id="new-count">0</span></div>
-        </div>
-        <div class="slider-wrap">
-            <div class="sarrow left hidden" id="sl-left" onclick="slideLeft()">‹</div>
-            <div class="slider-outer"><div class="slider-track" id="slider-track"></div></div>
-            <div class="sarrow right hidden" id="sl-right" onclick="slideRight()">›</div>
-        </div>
-    </div>
-
-    <!-- ===== ТОП НЕДЕЛИ — отдельный блок ===== -->
-    <div id="top-week-section" style="display:none" class="top-week-section">
-        <div class="top-week-accent-line"></div>
-        <div class="sec-header" style="margin-bottom:14px">
-            <div class="sec-title">🏆 Топ недели<span class="sec-count" style="margin-left:8px"><span id="top-week-count">0</span></span></div>
-            <div style="display:flex;gap:5px">
-                <button id="tw-left" onclick="topWeekSlide(-1)" class="sarrow" style="width:28px;height:28px;font-size:14px">‹</button>
-                <button id="tw-right" onclick="topWeekSlide(1)" class="sarrow" style="width:28px;height:28px;font-size:14px">›</button>
-            </div>
-        </div>
-        <div style="position:relative;overflow:hidden">
-            <div id="top-week-track" style="display:flex;gap:10px;transition:transform 0.35s cubic-bezier(0.4,0,0.2,1)"></div>
-        </div>
-    </div>
-
-    <!-- ПРОДОЛЖИТЬ -->
-    <div class="cont-section" id="cont-section" style="display:none">
-        <div class="sec-header"><div class="sec-title"><span>▶</span>Продолжить читать</div></div>
-        <div class="cont-list" id="cont-list"></div>
-    </div>
-
-    <!-- ТОП НЕДЕЛИ -->
-    <?php
-    try {
-        $topWeek = $pdo->query("SELECT a.username, pc.avatar_url,
-            COALESCE(ux.level,1) as level,
-            COALESCE(ux.weekly_pages,0) as weekly_pages,
-            COALESCE(ux.weekly_chapters,0) as weekly_chapters,
-            COALESCE(ux.total_xp,0) as total_xp
-            FROM user_xp ux
-            JOIN accounts a ON a.id=ux.account_id
-            LEFT JOIN profile_customizations pc ON pc.account_id=ux.account_id
-            WHERE ux.weekly_pages > 0 OR ux.weekly_chapters > 0
-            ORDER BY ux.weekly_pages DESC
-            LIMIT 5")->fetchAll();
-    } catch(Exception $e) { $topWeek = []; }
-    if (!empty($topWeek)):
-    ?>
-    <div class="cont-section" style="margin-bottom:16px">
-        <div class="sec-header" style="margin-bottom:12px">
-            <div class="sec-title"><span>🏆</span>Топ недели <a href="/rankings" style="font-size:10px;color:var(--muted);text-decoration:none;font-weight:500;margin-left:8px">Все →</a></div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-        <?php foreach($topWeek as $i => $tw): ?>
-        <a href="/u/<?=htmlspecialchars($tw['username'])?>" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:8px 12px;transition:all .18s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
-            <div style="width:22px;font-size:13px;font-weight:800;color:<?=$i===0?'#f59e0b':($i===1?'#9ca3af':($i===2?'#b45309':'var(--muted)'))?>;text-align:center"><?=$i+1?></div>
-            <div style="width:32px;height:32px;border-radius:50%;background:#1a1a2e;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">
-                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?>👤<?php endif; ?>
-            </div>
-            <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;color:var(--text2)"><?=htmlspecialchars($tw['username'])?></div>
-                <div style="font-size:10px;color:var(--muted)">Ур. <?=(int)$tw['level']?> · <?=(int)$tw['weekly_pages']?> стр. за неделю</div>
-            </div>
-            <div style="font-size:10px;color:var(--muted);text-align:right"><?=(int)$tw['weekly_chapters']?> гл.</div>
-        </a>
-        <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <!-- FILTERS -->
-    <div class="filters">
-        <button class="filter-btn active" id="f-new" onclick="setFilter('new')">🕒 Новые</button>
-        <button class="filter-btn" id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
-        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">🔤 А-Я</button>
-        <button class="filter-btn" id="f-genre-tag" onclick="toggleGenreFilter()" style="gap:5px">🏷 Жанр/Тег</button>
-        <span class="stats-label" id="stats">Манг: <strong><?=(int)$total?></strong></span>
-    </div>
-    <!-- GENRE/TAG FILTER PANEL -->
-    <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🎭 Жанры</div>
-        <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;max-height:100px;overflow-y:auto"></div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🏷 Теги</div>
-        <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
-        <button onclick="clearGenreFilter()" style="padding:5px 13px;background:transparent;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">✕ Сбросить</button>
-    </div>
-    <div class="grid" id="grid"></div>
-    <button class="load-more" id="more" onclick="load()" style="display:none">Загрузить ещё</button>
-</div>
 
 <!-- MODAL: ADD MANGA -->
 <div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeAddModal()">
@@ -5260,7 +5114,12 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 // ===== INIT =====
 // Hide page loader
-window.addEventListener('load',()=>{const l=document.getElementById('page-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
+(function(){
+    function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.3s ease';l.style.opacity='0';l.style.visibility='hidden';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},350);}}
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hideLoader);}
+    else{hideLoader();}
+    setTimeout(hideLoader,1500);
+})();
 load();loadNew();loadContinue();checkAdmin();
 
 
