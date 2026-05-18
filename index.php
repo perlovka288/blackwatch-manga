@@ -1884,34 +1884,35 @@ if ($path==='/profile') {
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Профиль | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0a0a;--card:#141414;--border:#1e1e1e;--border2:#2a2a2a;--text:#f0f0f0;--text2:#b8b8b8;--muted:#555;--accent:#d0d0d0;--green:#4ade80;--orange:#fb923c;--red:#f87171}
+:root{--bg:#0a0a0b;--card:#141416;--border:#222226;--border2:#333338;--text:#f5f5f7;--text2:#8e8e9a;--muted:#4a4a58;--accent:#e8192c;--green:#22c55e;--orange:#f97316;--red:#e8192c}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;padding:24px 16px}
 .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:22px;transition:color .18s}
 .back:hover{color:var(--text)}
-.wrap{max-width:560px;margin:0 auto;position:relative}
+.wrap{max-width:580px;margin:0 auto;position:relative}
 .card{background:var(--card);border:1px solid var(--border);border-radius:18px;margin-bottom:12px;overflow:hidden}
-.profile-banner{width:100%;height:115px;background:<?=htmlspecialchars($custom['banner_color']??'#111')?>;background-size:cover;background-position:center;position:relative;overflow:hidden}
+.profile-banner{width:100%;height:130px;background:<?=htmlspecialchars($custom['banner_color']??'#111')?>;background-size:cover;background-position:center;position:relative;overflow:hidden}
+.profile-banner::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(20,20,22,0.8) 100%)}
 .profile-banner-img{width:100%;height:100%;object-fit:cover;display:block}
-.avatar-wrap{position:relative;margin-top:-44px;margin-left:20px;display:inline-block;z-index:2}
-.avatar{width:84px;height:84px;border-radius:50%;background:#1a1a1a;border:3px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden;flex-shrink:0}
+.avatar-wrap{position:relative;margin-top:-46px;margin-left:22px;display:inline-block;z-index:2}
+.avatar{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#0a0a0e);border:3px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:36px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
 .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.profile-header-row{display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px 16px}
+.profile-header-row{display:flex;align-items:flex-start;justify-content:space-between;padding:0 22px 18px}
 .profile-name-col{flex:1;min-width:0}
 .edit-profile-btn{padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;margin-top:10px;margin-left:12px}
-.edit-profile-btn:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.03)}
-.admin-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ef4444;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;margin-left:8px;vertical-align:middle}
-.verify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(74,222,128,0.09);border:1px solid rgba(74,222,128,0.28);color:var(--green);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle}
-.username{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;color:var(--text);margin-bottom:3px;margin-top:12px}
+.edit-profile-btn:hover{border-color:var(--border2);color:var(--text);background:rgba(255,255,255,0.04)}
+.admin-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(232,25,44,0.12);border:1px solid rgba(232,25,44,0.35);color:#e8192c;font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px;letter-spacing:0.8px;text-transform:uppercase;margin-left:8px;vertical-align:middle}
+.verify-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(34,197,94,0.09);border:1px solid rgba(34,197,94,0.28);color:var(--green);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle}
+.username{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:3px;margin-top:13px}
 .email{font-size:12px;color:var(--muted);margin-bottom:8px}
 .bio-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
-.joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:3px 10px;border-radius:7px;display:inline-block}
+.joined{font-size:11px;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:3px 11px;border-radius:7px;display:inline-block}
 .sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:13px;padding:20px 22px 0}
 .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 22px 20px}
-.stat{display:flex;flex-direction:column;align-items:center;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;padding:14px 8px;text-decoration:none;color:var(--text);transition:all .15s}
-.stat:hover{border-color:var(--border2);background:rgba(255,255,255,.04)}
-.stat-n{font-size:22px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text);line-height:1}
-.stat-l{font-size:10px;color:var(--muted);margin-top:4px;font-weight:500;text-align:center}
+.stat{display:flex;flex-direction:column;align-items:center;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;padding:14px 8px;text-decoration:none;color:var(--text);transition:all .18s}
+.stat:hover{border-color:var(--border2);background:rgba(255,255,255,.04);transform:translateY(-2px)}
+.stat-n{font-size:24px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text);line-height:1}
+.stat-l{font-size:10px;color:var(--muted);margin-top:5px;font-weight:600;text-align:center;letter-spacing:.3px}
 .profile-link{font-size:12px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:5px;margin-top:6px;transition:color .15s}
 .profile-link:hover{color:var(--text2)}
 .verify-banner{background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.18);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
@@ -2070,18 +2071,18 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок']; }
     ?>
     <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:18px 20px 16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <div style="display:flex;align-items:center;gap:8px">
+        <div style="padding:18px 22px 18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div style="display:flex;align-items:center;gap:9px">
                     <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Уровень</span>
-                    <span style="background:<?=htmlspecialchars($levelFrame['color'])?>;color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px"><?=htmlspecialchars($levelFrame['label'])?> <?=$curLevel?></span>
+                    <span style="background:<?=htmlspecialchars($levelFrame['color'])?>;color:#fff;font-size:11px;font-weight:800;padding:3px 11px;border-radius:20px;letter-spacing:.3px"><?=htmlspecialchars($levelFrame['label'])?> <?=$curLevel?></span>
                 </div>
-                <span style="font-size:11px;color:var(--muted)">⭐ <?=number_format($totalXp)?> XP</span>
+                <span style="font-size:12px;color:var(--muted);font-weight:600">⭐ <?=number_format($totalXp)?> XP</span>
             </div>
-            <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
-                <div style="background:<?=htmlspecialchars($levelFrame['color'])?>;height:100%;width:<?=$xpProgress['pct']?>%;border-radius:4px;transition:width .6s"></div>
+            <div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden">
+                <div style="background:linear-gradient(90deg,<?=htmlspecialchars($levelFrame['color'])?>,<?=htmlspecialchars($levelFrame['color'])?>aa);height:100%;width:<?=$xpProgress['pct']?>%;border-radius:6px;transition:width .6s;box-shadow:0 0 8px <?=htmlspecialchars($levelFrame['color'])?>66"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;margin-top:5px">
+            <div style="display:flex;justify-content:space-between;margin-top:6px">
                 <span style="font-size:10px;color:var(--muted)"><?=number_format($xpProgress['current'])?> / <?=number_format($xpProgress['needed'])?> XP</span>
                 <span style="font-size:10px;color:var(--muted)">Lv<?=$curLevel?> → Lv<?=$xpProgress['next_lvl']?></span>
             </div>
@@ -4232,7 +4233,17 @@ header{
 .btn-secondary{padding:10px 20px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:8px;font-weight:500;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;transition:all var(--t)}
 .btn-secondary:hover{border-color:var(--border2);color:var(--text)}
 
-/* ── STATS / ADMIN ── */
+/* ── SEARCH DROPDOWN (header) ── */
+.header-search-wrap{position:relative;flex:1;max-width:460px}
+#header-search-dropdown .sd-item{display:flex;align-items:center;gap:10px;padding:10px 14px;color:var(--text);text-decoration:none;border-bottom:1px solid var(--border);transition:background var(--t)}
+#header-search-dropdown .sd-item:last-child{border-bottom:none}
+#header-search-dropdown .sd-item:hover{background:rgba(255,255,255,0.05)}
+#header-search-dropdown .sd-cover{width:40px;height:54px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--card);border:1px solid var(--border)}
+#header-search-dropdown .sd-cover-ph{width:40px;height:54px;border-radius:6px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;border:1px solid var(--border)}
+#header-search-dropdown .sd-info{flex:1;min-width:0}
+#header-search-dropdown .sd-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+#header-search-dropdown .sd-meta{font-size:11px;color:var(--muted)}
+#header-search-dropdown .sd-rating{font-size:10px;color:#f59e0b;margin-top:2px}
 .stats-layout{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:18px}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
 .stat-card-val{font-family:'Bebas Neue',sans-serif;font-size:34px;color:var(--text)}
@@ -4294,6 +4305,115 @@ header{
     .slide-cover-ph{width:100px;height:138px}
     .scard-grid{grid-template-columns:1fr 1fr}
 }
+
+/* ═══════════════════════════════════════
+   ADMIN PANEL — MODERN REDESIGN
+═══════════════════════════════════════ */
+.admin-modal{max-width:860px;width:100%;padding:0;overflow:hidden;border-radius:18px}
+.admin-modal .modal-head{padding:20px 24px 0;font-size:19px}
+.admin-modal .modal-x{top:18px;right:18px}
+
+/* Tabs */
+.admin-tabs{display:flex;gap:2px;padding:14px 24px 0;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.admin-tabs::-webkit-scrollbar{display:none}
+.atab{padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;white-space:nowrap;border-radius:0;margin-bottom:-1px}
+.atab:hover{color:var(--text2)}
+.atab.active{color:var(--text);border-bottom-color:var(--accent)}
+
+/* Panels */
+.apanel{display:none;padding:20px 24px 24px}
+.apanel.active{display:block}
+
+/* Stats layout */
+.stats-layout{display:grid;grid-template-columns:1fr 300px;gap:16px}
+@media(max-width:680px){.stats-layout{grid-template-columns:1fr}}
+
+/* Stat cards grid */
+.scard-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.scard{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:3px}
+.scard-val{font-family:'Bebas Neue',sans-serif;font-size:32px;line-height:1;color:var(--text)}
+.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+
+/* Stats sub-tabs */
+.stats-tabs{display:flex;gap:5px;margin-bottom:12px}
+.stab{padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .18s}
+.stab:hover{border-color:var(--border2);color:var(--text2)}
+.stab.active{background:rgba(232,25,44,.1);border-color:rgba(232,25,44,.35);color:var(--accent)}
+
+/* Top manga list */
+.top-list{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.top-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;font-size:12px}
+.top-name{color:var(--text2);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
+.top-likes{color:var(--accent);font-size:11px;font-weight:700;flex-shrink:0}
+
+/* Edit manga button */
+.edit-manga-btn{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .18s;margin-top:4px}
+.edit-manga-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Archive */
+.archive-list{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;scrollbar-width:thin}
+.aitem{padding:8px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
+.atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:2px}
+.atext{font-size:12px;color:var(--text2);margin-bottom:2px}
+.adate{font-size:10px;color:var(--muted)}
+
+/* Pagination */
+.pagination{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+.pag-btn{padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.pag-btn:hover{border-color:var(--border2);color:var(--text)}
+.pag-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Right sidebar — functions */
+.stats-right{background:rgba(255,255,255,.015);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:7px}
+.func-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:2px}
+.func-btn{width:100%;padding:10px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;text-align:left;transition:all .18s;border:1px solid}
+.func-btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.func-green{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.35);color:#22c55e}
+.func-amber{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3);color:#f59e0b}
+.func-purple{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:#8b5cf6}
+.func-blue{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:#3b82f6}
+.func-orange-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.admins-wrap{padding-top:8px;border-top:1px solid var(--border)}
+.admin-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.admin-item{display:flex;align-items:center;justify-content:space-between;padding:7px 9px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px;margin-bottom:4px}
+.admin-item-name{font-size:12px;color:var(--text2);font-weight:500}
+.admin-item-id{font-size:10px;color:var(--muted);font-family:monospace}
+
+/* Messages panel */
+.msg-compose{margin-bottom:16px}
+.msg-compose textarea{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;padding:10px 12px;outline:none;resize:none;min-height:80px;transition:border-color .18s}
+.msg-compose textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.msg-send-btn{margin-top:8px;padding:9px 18px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s}
+.msg-send-btn:hover{background:var(--accent2);transform:translateY(-1px)}
+.msg-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
+.msg-item{padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
+.msg-text{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.5}
+.msg-meta{font-size:10px;color:var(--muted)}
+
+/* Edit search */
+.esearch-row{display:flex;gap:6px;margin-bottom:10px}
+.esearch-inp{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;padding:9px 12px;outline:none;transition:border-color .18s}
+.esearch-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.esearch-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s;white-space:nowrap}
+.esearch-btn:hover{background:var(--accent2)}
+.manga-edit-list{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin;margin-bottom:10px}
+.manga-edit-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
+.manga-edit-item:hover{border-color:var(--border2);background:rgba(255,255,255,.04)}
+.manga-edit-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card2);border:1px solid var(--border);flex-shrink:0}
+.manga-edit-cover-ph{width:32px;height:44px;border-radius:5px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;border:1px solid var(--border)}
+.manga-edit-title{font-size:12px;color:var(--text2);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.back-edit-btn{padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:12px}
+.back-edit-btn:hover{border-color:var(--border2);color:var(--text)}
+.edit-form-wrap{display:flex;flex-direction:column;gap:8px}
+
+/* Suggestions */
+.suggest-preview{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
+.suggest-item{padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:flex-start}
+.suggest-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
+.suggest-meta{font-size:10px;color:var(--muted);margin-top:3px}
+.suggest-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;text-transform:uppercase}
+.suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
+.suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -4314,9 +4434,10 @@ header{
     </a>
 
     <!-- Center Search -->
-    <div class="header-search-wrap">
+    <div class="header-search-wrap" style="position:relative">
         <span class="header-search-icon">🔍</span>
-        <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onSearch(this.value);document.getElementById('search').value=this.value" autocomplete="off">
+        <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onHeaderSearch(this.value)" autocomplete="off">
+        <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
     </div>
 
     <!-- Right Actions -->
@@ -4364,7 +4485,7 @@ header{
         <div class="search-dropdown" id="search-dropdown"></div>
     </div>
     <!-- Desktop hidden search input sync -->
-    <input id="search" type="hidden" style="display:none" value="">
+    <div id="search-hidden" style="display:none"></div>
 
     <!-- ═══ HERO BANNER ═══ -->
     <div class="hero-banner" id="hero-banner">
@@ -4840,15 +4961,61 @@ function renderAddForm(data){
 // ===== SEARCH DROPDOWN =====
 let searchTimeout;
 const searchDrop=document.getElementById('search-dropdown');
+
+// Header search dropdown
+let headerSearchTimeout;
+const headerDrop=document.getElementById('header-search-dropdown');
+
+function onHeaderSearch(val){
+    clearTimeout(headerSearchTimeout);
+    q=val.trim();
+    if(!q){
+        headerDrop.style.display='none';
+        load(true);
+        return;
+    }
+    headerSearchTimeout=setTimeout(async()=>{
+        load(true);
+        try{
+            const res=await fetch(`/api/manga?page=0&q=${encodeURIComponent(q)}&sort=new`);
+            const data=await res.json();
+            if(!data.items||!data.items.length){
+                headerDrop.innerHTML='<div style="padding:16px;color:var(--muted);font-size:12px;text-align:center">😔 Ничего не найдено</div>';
+                headerDrop.style.display='block';
+                return;
+            }
+            headerDrop.innerHTML=data.items.slice(0,7).map(m=>{
+                let src=m.cover_display||'';
+                if(src&&src.startsWith('tg://'))src='';
+                const rating=m.avg_rating>0?`<div class="sd-rating">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))} ${m.avg_rating}</div>`:'';
+                return `<a class="sd-item" href="/read/${m.id}">
+                    ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div>${rating}</div>
+                </a>`;
+            }).join('');
+            if(data.total>7){
+                headerDrop.innerHTML+=`<div style="padding:10px 14px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)">Найдено: ${data.total} — смотри каталог ниже</div>`;
+            }
+            headerDrop.style.display='block';
+        }catch(e){}
+    },280);
+}
+
+document.addEventListener('click',e=>{
+    if(!e.target.closest('.header-search-wrap'))headerDrop.style.display='none';
+    if(!e.target.closest('.top-search-wrap')&&searchDrop)searchDrop.classList.remove('open');
+});
+
 function onSearch(val){
     clearTimeout(searchTimeout);
     q=val.trim();
-    if(!q){searchDrop.classList.remove('open');load(true);return;}
+    if(!q){if(searchDrop)searchDrop.classList.remove('open');load(true);return;}
     searchTimeout=setTimeout(async()=>{
         load(true);
         try{
             const res=await fetch(`/api/manga?page=0&q=${encodeURIComponent(q)}&sort=new`);
             const data=await res.json();
+            if(!searchDrop)return;
             if(!data.items.length){searchDrop.innerHTML='<div style="padding:14px;color:var(--muted);font-size:12px;text-align:center">Ничего не найдено</div>';searchDrop.classList.add('open');return;}
             searchDrop.innerHTML=data.items.slice(0,6).map(m=>{
                 let src=m.cover_display||'';if(src&&src.startsWith('tg://'))src='';
@@ -4861,7 +5028,6 @@ function onSearch(val){
         }catch(e){}
     },280);
 }
-document.addEventListener('click',e=>{if(!e.target.closest('.top-search-wrap'))searchDrop.classList.remove('open');});
 
 async function load(reset=false){
     if(loading)return;loading=true;
@@ -5009,12 +5175,12 @@ async function loadAdminStats(){
     try{const res=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const data=await res.json();
     if(data.error){document.getElementById('stat-grid').innerHTML='<div style="color:var(--muted);grid-column:1/-1;font-size:12px">Нет прав</div>';return;}
     document.getElementById('stat-grid').innerHTML=`
-        <div class="scard"><div class="scard-num">${data.manga_count}</div><div class="scard-lbl">📚 Манг</div></div>
-        <div class="scard green"><div class="scard-num">${data.users_count}</div><div class="scard-lbl">👤 Юзеров</div></div>
-        <div class="scard orange"><div class="scard-num">${data.votes_count}</div><div class="scard-lbl">👍 Голосов</div></div>
-        <div class="scard"><div class="scard-num">${data.chapters_count}</div><div class="scard-lbl">📖 Глав</div></div>
-        <div class="scard green"><div class="scard-num">${data.new_today}</div><div class="scard-lbl">🔥 Сегодня</div></div>
-        <div class="scard"><div class="scard-num">${data.suggest_count}</div><div class="scard-lbl">💡 Предложек</div></div>`;
+        <div class="scard"><div class="scard-val">${data.manga_count}</div><div class="scard-label">📚 Манг</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--green)">${data.users_count}</div><div class="scard-label">👤 Юзеров</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--orange)">${data.votes_count}</div><div class="scard-label">👍 Голосов</div></div>
+        <div class="scard"><div class="scard-val">${data.chapters_count}</div><div class="scard-label">📖 Глав</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--accent)">${data.new_today}</div><div class="scard-label">🔥 Сегодня</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--blue)">${data.suggest_count}</div><div class="scard-label">💡 Предложек</div></div>`;
     document.getElementById('top-list').innerHTML=(data.top_manga||[]).map(m=>`<div class="top-row"><div class="top-name">${escapeHtml(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('');
     const sb=document.getElementById('suggest-badge2');if(sb)sb.textContent=data.suggest_count>0?data.suggest_count:'';}catch(e){}
 }
@@ -5031,7 +5197,7 @@ async function loadSuggestions(pg){
     document.getElementById('suggest-pagination').innerHTML=pages;}catch(e){}
 }
 async function markSuggestion(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
-async function loadAdmins(){try{const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();if(!data.admins)return;document.getElementById('admins-list').innerHTML=data.admins.map(a=>`<div class="admin-row"><div><div class="admin-tag">${escapeHtml(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard?.writeText?.('${a.user_id}');showToast('📋 Скопировано')">Копировать</button></div>`).join('');}catch(e){}}
+async function loadAdmins(){try{const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();if(!data.admins)return;document.getElementById('admins-list').innerHTML=data.admins.map(a=>`<div class="admin-item"><div><div class="admin-item-name">${escapeHtml(a.tag)}</div><div class="admin-item-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard?.writeText?.('${a.user_id}');showToast('📋 Скопировано')">Копировать</button></div>`).join('');}catch(e){}}
 function toggleAdminAddPanel(){const p=document.getElementById('admin-add-panel');p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block'){document.getElementById('ap-admin-input').focus();document.getElementById('ap-admin-result').textContent='';}}
 async function submitAddAdmin(){const input=document.getElementById('ap-admin-input').value.trim();const tag=document.getElementById('ap-admin-tag').value.trim()||'Администратор';const result=document.getElementById('ap-admin-result');if(!input){result.style.color='var(--red)';result.textContent='❌ Введи email или TG ID';return;}let endpoint='/api/admin/assign';let body={tag,action:'add'};if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await res.json();if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;document.getElementById('ap-admin-input').value='';document.getElementById('ap-admin-tag').value='';setTimeout(()=>{toggleAdminAddPanel();loadAdmins();},1500);}else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}}catch(e){result.style.color='var(--red)';result.textContent='❌ Ошибка сети';}}
 
@@ -5056,7 +5222,7 @@ async function loadMangaEditList(q='',pg=0){
     try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
     const list=document.getElementById('manga-edit-list');
     if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:10px 0;font-size:12px">Ничего не найдено</div>';document.getElementById('edit-pagination').innerHTML='';return;}
-    list.innerHTML=data.items.map(m=>`<div class="meitem" onclick="openEditManga(${m.id})"><div class="me-cover">📖</div><div><div class="me-title">${escapeHtml(m.title)}</div><div class="me-meta">${m.is_series?'📚 Серия':'📄 Обычная'}</div></div></div>`).join('');
+    list.innerHTML=data.items.map(m=>{const src=m.cover_imgbb_url||'';return`<div class="manga-edit-item" onclick="openEditManga(${m.id})">${src?`<img class="manga-edit-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="manga-edit-cover-ph" style="${src?'display:none':'display:flex'}">📖</div><div class="manga-edit-title">${escapeHtml(m.title)}</div><div style="font-size:10px;color:var(--muted);flex-shrink:0">${m.is_series?'📚':'📄'}</div></div>`;}).join('');
     const totalPages=Math.ceil(data.total/10);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg+1})">Вперёд →</button>`;
     document.getElementById('edit-pagination').innerHTML=pages;}catch(e){}
 }
@@ -5089,7 +5255,7 @@ async function openEditManga(mangaId){
         </div>
         <div class="result-banner" id="ef-result"></div>`;}catch(e){showToast('❌ Ошибка загрузки');}
 }
-function backToMangaList(){document.getElementById('edit-manga-form-wrap').style.display='none';document.getElementById('manga-edit-list').style.display='flex';document.getElementById('edit-pagination').style.display='flex';document.querySelector('#panel-edit .esearch-row').style.display='flex';}
+function backToMangaList(){document.getElementById('edit-manga-form-wrap').style.display='none';document.getElementById('manga-edit-list').style.display='flex';document.getElementById('manga-edit-list').style.flexDirection='column';document.getElementById('edit-pagination').style.display='flex';document.querySelector('#panel-edit .esearch-row').style.display='flex';}
 async function saveMangaEdit(mangaId){try{
     const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('ef-title').value.trim(),description:document.getElementById('ef-desc').value.trim(),telegraph_url:document.getElementById('ef-link').value.trim(),cover_imgbb_url:document.getElementById('ef-cover').value.trim()})});
     const data=await res.json();
