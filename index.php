@@ -6934,12 +6934,28 @@ function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove(
 
 // ===== ADMIN CHECK =====
 async function checkAdmin(){
-    try{const res=await fetch('/api/check-admin?tg_user_id='+getTgUser());const data=await res.json();if(data.is_admin)document.getElementById('admin-btn').classList.add('visible');}catch(e){}
+    try{
+        const tgId=getTgUser();
+        const url='/api/check-admin'+(tgId?'?tg_user_id='+tgId:'');
+        const res=await fetch(url);
+        const data=await res.json();
+        if(data.is_admin){
+            const btn=document.getElementById('admin-btn');
+            if(btn)btn.classList.add('visible');
+        }
+    }catch(e){}
 }
 
 // ===== CATALOG =====
 let page=0,q='',loading=false,hasMore=true,currentSort='new',activeGenre='',activeTag='';
-const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
+// Lazy DOM refs — объявляем как функции, чтобы не упасть до DOMContentLoaded
+const getGrid=()=>document.getElementById('grid');
+const getMoreBtn=()=>document.getElementById('more');
+const getStatsDiv=()=>document.getElementById('stats');
+// Переопределяем как свойства window для обратной совместимости
+Object.defineProperty(window,'grid',{get:getGrid,configurable:true});
+Object.defineProperty(window,'moreBtn',{get:getMoreBtn,configurable:true});
+Object.defineProperty(window,'statsDiv',{get:getStatsDiv,configurable:true});
 function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
 
 // ===== GENRE/TAG FILTER =====
@@ -7063,14 +7079,16 @@ function onSearch(val){
 }
 
 async function load(reset=false){
+    const grid=getGrid(),moreBtn=getMoreBtn(),statsDiv=getStatsDiv();
+    if(!grid)return;
     if(loading)return;loading=true;
-    if(reset){page=0;grid.innerHTML='';hasMore=true;moreBtn.style.display='none';}
+    if(reset){page=0;grid.innerHTML='';hasMore=true;if(moreBtn)moreBtn.style.display='none';}
     if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">📖 Загрузка...</div>';
     try{
         const _gp=activeGenre?'&genre='+encodeURIComponent(activeGenre):activeTag?'&tag='+encodeURIComponent(activeTag):'';
         const res=await fetch('/api/manga?page='+page+'&q='+encodeURIComponent(q)+'&sort='+currentSort+_gp);
         const data=await res.json();
-        if(page===0){grid.innerHTML='';statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
+        if(page===0){grid.innerHTML='';if(statsDiv)statsDiv.innerHTML=q?`Найдено: <strong>${data.total}</strong>`:`Манг: <strong>${data.total}</strong>`;}
         if(!data.items.length&&page===0){grid.innerHTML='<div class="empty">😔 Ничего не найдено</div>';loading=false;return;}
         const delay=reset?0:0;
         data.items.forEach((m,i)=>{
@@ -7090,9 +7108,9 @@ async function load(reset=false){
             grid.appendChild(el);
         });
         hasMore=data.items.length>=data.limit;
-        moreBtn.style.display=hasMore?'block':'none';
+        if(moreBtn)moreBtn.style.display=hasMore?'block':'none';
         page++;
-    }catch(e){if(page===0)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
+    }catch(e){if(page===0&&grid)grid.innerHTML='<div class="empty">❌ Ошибка загрузки</div>';}
     loading=false;
 }
 
@@ -7607,15 +7625,25 @@ function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style
 let _heroData=[],_heroCur=0,_heroTimer=null;
 async function loadHero(){
     try{
-        const res=await fetch('/api/top-week');const data=await res.json();
-        if(!data.success||!data.items?.length)return;
-        _heroData=data.items.slice(0,6);
+        let items=[];
+        // Сначала пробуем топ недели
+        const res=await fetch('/api/top-week');
+        const data=await res.json();
+        if(data.success&&data.items?.length) items=data.items;
+        // Фолбэк — берём просто последние манги из каталога
+        if(!items.length){
+            const r2=await fetch('/api/manga?page=0&sort=new&q=');
+            const d2=await r2.json();
+            if(d2.items?.length) items=d2.items;
+        }
+        if(!items.length)return;
+        _heroData=items.slice(0,6);
         const track=document.getElementById('hero-track');
         const dots=document.getElementById('hero-dots');
         const thumbs=document.getElementById('hero-thumbs');
         if(!track)return;
         track.innerHTML=_heroData.map((m,i)=>{
-            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';
+            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:(m.cover_imgbb_url&&!m.cover_imgbb_url.startsWith('tg://'))?m.cover_imgbb_url:'';
             const rat=m.avg_rating>0?`<div class="hero-stat">★ <strong>${m.avg_rating}</strong></div>`:'';
             const lk=m.likes>0?`<div class="hero-stat">♥ <strong>${m.likes}</strong></div>`:'';
             const vw=m.weekly_views>0?`<div class="hero-stat">👁 <strong>${m.weekly_views}</strong></div>`:'';
@@ -7638,12 +7666,12 @@ async function loadHero(){
         }).join('');
         if(dots)dots.innerHTML=_heroData.map((_,i)=>`<div class="hero-dot${i===0?' active':''}" onclick="heroGo(${i})"></div>`).join('');
         if(thumbs)thumbs.innerHTML=_heroData.map((m,i)=>{
-            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:'';
+            const src=(m.cover_display&&!m.cover_display.startsWith('tg://'))?m.cover_display:(m.cover_imgbb_url&&!m.cover_imgbb_url.startsWith('tg://'))?m.cover_imgbb_url:'';
             return `<div class="hero-thumb${i===0?' active':''}" onclick="heroGo(${i})">${src?`<img src="${escapeHtml(src)}" alt="">`:''}</div>`;
         }).join('');
         heroGo(0);
-        _heroTimer=setInterval(()=>heroGo((_heroCur+1)%_heroData.length),5500);
-    }catch(e){}
+        if(_heroData.length>1) _heroTimer=setInterval(()=>heroGo((_heroCur+1)%_heroData.length),5500);
+    }catch(e){console.error('loadHero error:',e);}
 }
 function heroGo(idx){
     _heroCur=Math.max(0,Math.min(_heroData.length-1,idx));
