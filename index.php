@@ -5977,184 +5977,927 @@ header{
 </div>
 </div>
 
-<!-- MODAL: ADMIN PANEL -->
-<div class="modal-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
-<div class="modal admin-modal">
-    <button class="modal-x" onclick="closeAdminPanel()">✕</button>
-    <div class="modal-head" style="flex-shrink:0">⚙️ Админ-панель</div>
-    <div class="admin-tabs">
-        <button class="atab active" onclick="switchAdminTab('stats')">📊 Статистика</button>
-        <button class="atab" onclick="switchAdminTab('messages')">📨 Сообщения</button>
-        <button class="atab" onclick="switchAdminTab('edit')">✏️ Редактирование</button>
-        <button class="atab" onclick="switchAdminTab('add-chapter')">📚 Добавить главу</button>
-        <button class="atab" onclick="switchAdminTab('tags')">🏷 Теги/Жанры</button>
+<!-- ===== ADMIN PANEL - НОВЫЙ ДИЗАЙН ===== -->
+<div class="modal-overlay admin-panel-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
+<div class="admin-panel-wrapper">
+    <!-- Sidebar Navigation -->
+    <div class="admin-sidebar">
+        <div class="admin-header">
+            <div class="admin-logo">
+                <span class="admin-logo-icon">⚙️</span>
+                <span class="admin-logo-text">Admin</span>
+            </div>
+            <button class="admin-close-btn" onclick="closeAdminPanel()">✕</button>
+        </div>
+        
+        <nav class="admin-nav">
+            <button class="admin-nav-item active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">
+                <span class="admin-nav-icon">📊</span>
+                <span>Dashboard</span>
+            </button>
+            <button class="admin-nav-item" data-tab="manga" onclick="switchAdminTab('manga')">
+                <span class="admin-nav-icon">📚</span>
+                <span>Манга</span>
+            </button>
+            <button class="admin-nav-item" data-tab="chapters" onclick="switchAdminTab('chapters')">
+                <span class="admin-nav-icon">📑</span>
+                <span>Главы</span>
+            </button>
+            <button class="admin-nav-item" data-tab="tags" onclick="switchAdminTab('tags')">
+                <span class="admin-nav-icon">🏷️</span>
+                <span>Теги</span>
+            </button>
+            <button class="admin-nav-item" data-tab="messages" onclick="switchAdminTab('messages')">
+                <span class="admin-nav-icon">💬</span>
+                <span>Сообщения</span>
+            </button>
+            <button class="admin-nav-item" data-tab="settings" onclick="switchAdminTab('settings')">
+                <span class="admin-nav-icon">⚡</span>
+                <span>Настройки</span>
+            </button>
+        </nav>
+
+        <div class="admin-footer">
+            <button class="admin-theme-btn" onclick="toggleTheme()" title="Смена темы">🌓</button>
+        </div>
     </div>
 
-    <!-- STATS -->
-    <div class="apanel active" id="panel-stats">
-        <div class="stats-layout">
-            <div class="stats-left">
-                <div class="stats-tabs">
-                    <button class="stab active" onclick="showStatsView('grid')">📊 Статистика</button>
-                    <button class="stab" onclick="showStatsView('archive')">🗂 Архив</button>
+    <!-- Main Content -->
+    <div class="admin-content">
+        <!-- Dashboard Tab -->
+        <div class="admin-tab-panel active" id="panel-dashboard">
+            <div class="admin-header-section">
+                <h1 class="admin-title">📊 Dashboard</h1>
+                <p class="admin-subtitle">Общая статистика и управление</p>
+            </div>
+
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <div class="stat-icon">📖</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Всего манги</div>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
                 </div>
-                <div id="stats-grid-view">
-                    <div class="scard-grid" id="stat-grid"><div style="color:var(--muted);grid-column:1/-1;padding:10px 0;font-size:12px">Загрузка...</div></div>
-                    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Топ по лайкам</div>
-                    <div class="top-list" id="top-list"></div>
-                    <button class="edit-manga-btn" onclick="switchAdminTab('edit')">✏️ Редактировать мангу</button>
+                <div class="admin-stat-card">
+                    <div class="stat-icon">❤️</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Всего лайков</div>
+                        <div class="stat-value" id="stat-likes">0</div>
+                    </div>
                 </div>
-                <div id="stats-archive-view" style="display:none">
-                    <div class="archive-list" id="archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-                    <div class="pagination" id="archive-pagination"></div>
+                <div class="admin-stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Активных юзеров</div>
+                        <div class="stat-value" id="stat-users">0</div>
+                    </div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="stat-icon">💬</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Комментариев</div>
+                        <div class="stat-value" id="stat-comments">0</div>
+                    </div>
                 </div>
             </div>
-            <div class="stats-right">
-                <div class="func-title">Функционал</div>
-                <button class="func-btn func-green" onclick="closeAdminPanel();openAddModal()">➕ Добавить мангу<br><small style="font-size:10px;opacity:0.8">ZIP, обложка, описание</small></button>
-                <div class="func-orange-row">
-                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📚 Добавить серию</button>
-                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📑 Добавить главу</button>
+
+            <div class="admin-action-section">
+                <h3 class="admin-section-title">Быстрые действия</h3>
+                <div class="admin-action-grid">
+                    <button class="admin-action-btn admin-action-primary" onclick="closeAdminPanel();openAddModal()">
+                        <span class="action-icon">➕</span>
+                        <span class="action-text">Добавить мангу</span>
+                    </button>
+                    <button class="admin-action-btn admin-action-secondary" onclick="switchAdminTab('chapters')">
+                        <span class="action-icon">📑</span>
+                        <span class="action-text">Добавить главу</span>
+                    </button>
+                    <button class="admin-action-btn admin-action-secondary" onclick="switchAdminTab('messages')">
+                        <span class="action-icon">📨</span>
+                        <span class="action-text">Отправить уведомление</span>
+                    </button>
+                    <button class="admin-action-btn admin-action-danger" onclick="switchAdminTab('settings')">
+                        <span class="action-icon">⚡</span>
+                        <span class="action-text">Администраторы</span>
+                    </button>
                 </div>
-                <button class="func-btn func-purple" onclick="switchAdminTab('messages')">📨 Написать всем <span id="suggest-badge" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
-                <button class="func-btn func-blue" id="suggest-btn" onclick="showStatsView('suggestions')">💡 Предложки <span id="suggest-badge2" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
-                <div class="admins-wrap" style="margin-top:14px">
-                    <div class="admin-lbl">Список админов</div>
-                    <div id="admins-list"><div style="color:var(--muted);font-size:11px">Загрузка...</div></div>
-                    <button onclick="toggleAdminAddPanel()" id="admin-add-toggle-btn" style="width:100%;margin-top:8px;padding:8px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">➕ Добавить нового администратора</button>
-                    <div id="admin-add-panel" style="display:none;margin-top:9px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:12px">
-                        <div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:9px">⚡ Назначить администратора</div>
-                        <input id="ap-admin-input" type="text" placeholder="Email или TG ID" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
-                        <input id="ap-admin-tag" type="text" placeholder="Тег (например: Редактор)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
-                        <div style="display:flex;gap:6px">
-                            <button onclick="submitAddAdmin()" style="flex:1;padding:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:7px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">&#10003; Назначить</button>
-                            <button onclick="toggleAdminAddPanel()" style="padding:8px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">Отмена</button>
+            </div>
+
+            <div class="admin-top-section">
+                <h3 class="admin-section-title">Топ манги</h3>
+                <div id="top-list-dashboard" class="top-manga-list"></div>
+            </div>
+        </div>
+
+        <!-- Manga Management Tab -->
+        <div class="admin-tab-panel" id="panel-manga">
+            <div class="admin-header-section">
+                <h1 class="admin-title">📚 Управление мангой</h1>
+                <p class="admin-subtitle">Редактирование и удаление</p>
+            </div>
+
+            <div class="admin-search-box">
+                <input type="text" id="manga-search" placeholder="Поиск манги..." class="admin-search-input">
+            </div>
+
+            <div class="manga-edit-list" id="manga-edit-list">
+                <div style="text-align:center; color: var(--muted); padding: 20px;">Загрузка...</div>
+            </div>
+        </div>
+
+        <!-- Chapters Tab -->
+        <div class="admin-tab-panel" id="panel-chapters">
+            <div class="admin-header-section">
+                <h1 class="admin-title">📑 Добавить главу</h1>
+                <p class="admin-subtitle">Загрузи главу к существующей манге</p>
+            </div>
+
+            <div class="admin-form-section">
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Выбери мангу</label>
+                    <select id="chapter-manga-select" class="admin-form-input">
+                        <option value="">Загрузка...</option>
+                    </select>
+                </div>
+
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Номер главы</label>
+                    <input type="number" id="chapter-num" class="admin-form-input" placeholder="1.0" step="0.1">
+                </div>
+
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Название главы (опционально)</label>
+                    <input type="text" id="chapter-title" class="admin-form-input" placeholder="Название...">
+                </div>
+
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Загрузи страницы</label>
+                    <div class="admin-upload-zone" id="chapter-upload-zone">
+                        <input type="file" id="chapter-file" accept=".zip,image/*" multiple>
+                        <div class="upload-icon">📦</div>
+                        <div class="upload-text">Загрузи ZIP или выбери фото</div>
+                    </div>
+                </div>
+
+                <button class="admin-btn admin-btn-primary" onclick="submitChapter()">
+                    <span class="btn-spinner" id="ch-spinner" style="display:none">⏳</span>
+                    📤 Загрузить главу
+                </button>
+            </div>
+        </div>
+
+        <!-- Tags Tab -->
+        <div class="admin-tab-panel" id="panel-tags">
+            <div class="admin-header-section">
+                <h1 class="admin-title">🏷️ Теги и Жанры</h1>
+                <p class="admin-subtitle">Управление категориями контента</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <!-- Genres -->
+                <div class="admin-card">
+                    <h3 class="admin-card-title">🎭 Жанры</h3>
+                    
+                    <div class="admin-form-group">
+                        <input type="text" id="new-genre-name" placeholder="Название жанра" class="admin-form-input">
+                        <input type="text" id="new-genre-slug" placeholder="slug" class="admin-form-input" style="margin-top:8px">
+                        <button class="admin-btn admin-btn-secondary" onclick="addGenre()" style="margin-top:8px; width:100%">➕ Добавить</button>
+                    </div>
+
+                    <div id="genres-manage-list" class="tags-list"></div>
+                </div>
+
+                <!-- Tags -->
+                <div class="admin-card">
+                    <h3 class="admin-card-title">🏷️ Теги</h3>
+                    
+                    <div class="admin-form-group">
+                        <input type="text" id="new-tag-name" placeholder="Название тега" class="admin-form-input">
+                        <input type="text" id="new-tag-slug" placeholder="slug" class="admin-form-input" style="margin-top:8px">
+                        <label class="admin-checkbox">
+                            <input type="checkbox" id="new-tag-nsfw">
+                            🔞 NSFW
+                        </label>
+                        <button class="admin-btn admin-btn-secondary" onclick="addTag()" style="margin-top:8px; width:100%">➕ Добавить</button>
+                    </div>
+
+                    <div id="tags-manage-list" class="tags-list"></div>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <button class="admin-btn admin-btn-secondary" onclick="reseedAllTags()">🔄 Загрузить дефолтные</button>
+                <button class="admin-btn admin-btn-danger" onclick="dedupTagsGenres()" style="margin-left:10px">🧹 Удалить дубли</button>
+            </div>
+        </div>
+
+        <!-- Messages Tab -->
+        <div class="admin-tab-panel" id="panel-messages">
+            <div class="admin-header-section">
+                <h1 class="admin-title">💬 Сообщения</h1>
+                <p class="admin-subtitle">Отправь уведомление всем пользователям</p>
+            </div>
+
+            <div class="admin-card">
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Текст сообщения</label>
+                    <textarea id="admin-message-text" class="admin-form-textarea" placeholder="Напиши сообщение..."></textarea>
+                </div>
+
+                <button class="admin-btn admin-btn-primary" onclick="sendAdminMessage()">
+                    📨 Отправить всем
+                </button>
+
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);">
+                    <h3 class="admin-card-title">История сообщений</h3>
+                    <div id="messages-history" class="messages-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="admin-tab-panel" id="panel-settings">
+            <div class="admin-header-section">
+                <h1 class="admin-title">⚡ Настройки и администраторы</h1>
+                <p class="admin-subtitle">Управление правами администраторов</p>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="admin-card-title">👥 Список администраторов</h3>
+                <div id="admins-list" class="admin-list"></div>
+
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+                    <button class="admin-btn admin-btn-secondary" onclick="toggleAdminAddPanel()">➕ Добавить администратора</button>
+                    
+                    <div id="admin-add-panel" class="admin-form-section" style="display:none; margin-top:15px; padding:15px; background:rgba(239,68,68,0.05); border-radius:10px; border:1px solid rgba(239,68,68,0.2)">
+                        <div class="admin-form-group">
+                            <input type="text" id="ap-admin-input" placeholder="Email или TG ID" class="admin-form-input">
                         </div>
-                        <div id="ap-admin-result" style="font-size:11px;margin-top:7px"></div>
+                        <div class="admin-form-group">
+                            <input type="text" id="ap-admin-tag" placeholder="Тег (например: Редактор)" class="admin-form-input">
+                        </div>
+                        <button class="admin-btn admin-btn-danger" onclick="admSubmitAddAdmin()" style="width:100%">⚡ Назначить</button>
                     </div>
                 </div>
             </div>
         </div>
-        <div id="stats-suggestions-view" style="display:none;margin-top:14px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
-                <div style="font-size:12px;font-weight:700">💡 Предложения пользователей</div>
-                <button onclick="showStatsView('grid')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">← Назад</button>
-            </div>
-            <div class="suggest-preview" id="suggest-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            <div class="pagination" id="suggest-pagination"></div>
-        </div>
     </div>
-
-    <!-- MESSAGES panel -->
-    <div class="apanel" id="panel-messages">
-        <div class="msg-compose">
-            <label class="fl" style="margin-bottom:6px">Написать всем пользователям</label>
-            <textarea id="admin-msg-text" placeholder="Введи сообщение..."></textarea>
-            <button class="msg-send-btn" onclick="sendAdminMessage()">📨 Отправить всем</button>
-        </div>
-        <div class="func-title" style="margin-top:14px">Отправленные сообщения</div>
-        <div class="msg-list" id="admin-msg-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Загрузка...</div></div>
-    </div>
-
-    <!-- EDIT -->
-    <div class="apanel" id="panel-edit">
-        <div class="esearch-row">
-            <input class="esearch-inp" id="edit-search-input" type="text" placeholder="🔍 Поиск манги...">
-            <button class="esearch-btn" onclick="searchMangaEdit()">Найти</button>
-        </div>
-        <div class="manga-edit-list" id="manga-edit-list"><div style="color:var(--muted);padding:10px 0;font-size:12px">Введи название или оставь пустым</div></div>
-        <div class="pagination" id="edit-pagination"></div>
-        <div id="edit-manga-form-wrap" style="display:none">
-            <button class="back-edit-btn" onclick="backToMangaList()">← Назад к списку</button>
-            <div class="edit-form-wrap" id="edit-manga-form"></div>
-        </div>
-    </div>
-
-    <!-- ADD CHAPTER -->
-    <div class="apanel" id="panel-add-chapter">        <div class="fg">
-            <label class="fl">Манга / Серия</label>
-            <div class="esearch-row">
-                <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
-                <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
-            </div>
-            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
-        </div>
-        <div id="ch-add-form" style="display:none">
-            <div class="add-ch-form">
-                <h4>➕ Новая глава</h4>
-                <div class="ch-inputs">
-                    <input type="number" id="ch-num" placeholder="Номер (1, 2, 2.5...)" step="0.1" min="0">
-                    <input type="text" id="ch-title-input" placeholder="Название (необязательно)">
-                </div>
-                <div class="file-tabs">
-                    <div class="file-tab active" id="ch-tab-zip" onclick="switchChTab('zip')">📦 ZIP</div>
-                    <div class="file-tab" id="ch-tab-photos" onclick="switchChTab('photos')">📸 Фото</div>
-                </div>
-                <div class="file-panel active" id="ch-panel-zip">
-                    <div class="upload-zone" id="ch-zip-zone" style="padding:13px">
-                        <input type="file" id="ch-zip-input" accept=".zip" onchange="onChZipChange(this)">
-                        <div class="upload-icon" style="font-size:20px">📦</div>
-                        <div class="upload-text" style="font-size:11px">ZIP со страницами</div>
-                        <div class="upload-preview" id="ch-zip-preview"></div>
-                    </div>
-                </div>
-                <div class="file-panel" id="ch-panel-photos">
-                    <div class="upload-zone" id="ch-photos-zone" style="padding:13px">
-                        <input type="file" id="ch-photos-input" accept="image/*" multiple onchange="onChPhotosChange(this)">
-                        <div class="upload-icon" style="font-size:20px">📸</div>
-                        <div class="upload-text" style="font-size:11px">Страницы главы</div>
-                        <div class="upload-preview" id="ch-photos-preview"></div>
-                    </div>
-                </div>
-                <div class="upbar" id="ch-upload-progress"><div class="upbar-fill" id="ch-upload-fill"></div></div>
-                <button class="sbtn" id="ch-submit-btn" onclick="submitChapter()" style="margin-top:7px"><span class="btn-text">📤 Загрузить главу</span><div class="spinner"></div></button>
-                <div class="result-banner" id="ch-result-banner"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PANEL: TAGS & GENRES -->
-    <div class="apanel" id="panel-tags">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-
-            <!-- ЖАНРЫ -->
-            <div>
-                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🎭 Жанры <span id="genre-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
-                <!-- Добавить жанр -->
-                <div style="display:flex;gap:6px;margin-bottom:10px">
-                    <input id="new-genre-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
-                    <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
-                    <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
-                </div>
-                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
-            </div>
-
-            <!-- ТЕГИ -->
-            <div>
-                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🏷 Теги <span id="tag-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
-                <!-- Добавить тег -->
-                <div style="display:flex;gap:6px;margin-bottom:6px">
-                    <input id="new-tag-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
-                    <input id="new-tag-slug" placeholder="slug (isekai)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
-                </div>
-                <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
-                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
-                    <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
-                </div>
-                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
-            </div>
-
-        </div>
-        <!-- Кнопки внизу -->
-        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.2)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
-            <button onclick="dedupTagsGenres()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🧹 Удалить дубли</button>
-            <span style="font-size:11px;color:var(--muted)">Если жанров больше 15 или тегов больше 54 — нажми «Удалить дубли»</span>
-        </div>
-    </div>
-
 </div>
 </div>
+
+<style>
+/* ===== ADMIN PANEL - NEW DESIGN ===== */
+.admin-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 16px;
+}
+
+.admin-panel-wrapper {
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    display: flex;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 80px rgba(0,0,0,0.5);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Sidebar */
+.admin-sidebar {
+    width: 220px;
+    background: linear-gradient(180deg, var(--card2) 0%, rgba(22,22,22,0.8) 100%);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    overflow-y: auto;
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.admin-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+}
+
+.admin-logo-icon {
+    font-size: 18px;
+}
+
+.admin-close-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.admin-close-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+}
+
+/* Navigation */
+.admin-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 12px;
+}
+
+.admin-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    text-align: left;
+}
+
+.admin-nav-item:hover {
+    background: rgba(124,92,255,0.08);
+    color: var(--text);
+}
+
+.admin-nav-item.active {
+    background: rgba(124,92,255,0.15);
+    color: #a78bfa;
+}
+
+.admin-nav-icon {
+    font-size: 16px;
+}
+
+/* Footer */
+.admin-footer {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+    border-top: 1px solid var(--border);
+}
+
+.admin-theme-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: transparent;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.admin-theme-btn:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: var(--border2);
+}
+
+/* Main Content */
+.admin-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background: var(--bg);
+}
+
+.admin-tab-panel {
+    display: none;
+    padding: 28px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.admin-tab-panel.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Header Section */
+.admin-header-section {
+    margin-bottom: 28px;
+}
+
+.admin-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.admin-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* Stats Grid */
+.admin-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.admin-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.admin-stat-card:hover {
+    border-color: rgba(124,92,255,0.3);
+    background: rgba(124,92,255,0.03);
+}
+
+.stat-icon {
+    font-size: 24px;
+}
+
+.stat-info {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+/* Action Section */
+.admin-action-section {
+    margin-bottom: 28px;
+}
+
+.admin-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.admin-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.action-icon {
+    font-size: 20px;
+}
+
+.action-text {
+    text-align: center;
+}
+
+.admin-action-primary {
+    background: linear-gradient(135deg, #4ade80, #22c55e);
+    color: #fff;
+}
+
+.admin-action-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(74,222,128,0.3);
+}
+
+.admin-action-secondary {
+    background: rgba(124,92,255,0.1);
+    color: #a78bfa;
+    border: 1px solid rgba(124,92,255,0.3);
+}
+
+.admin-action-secondary:hover {
+    background: rgba(124,92,255,0.2);
+}
+
+.admin-action-danger {
+    background: rgba(239,68,68,0.1);
+    color: #f87171;
+    border: 1px solid rgba(239,68,68,0.3);
+}
+
+.admin-action-danger:hover {
+    background: rgba(239,68,68,0.2);
+}
+
+/* Card */
+.admin-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.admin-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+}
+
+/* Form */
+.admin-form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.admin-form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-form-input,
+.admin-form-textarea {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.admin-form-input:focus,
+.admin-form-textarea:focus {
+    border-color: rgba(124,92,255,0.5);
+    background: rgba(124,92,255,0.03);
+}
+
+.admin-form-textarea {
+    min-height: 100px;
+    resize: vertical;
+    max-height: 300px;
+}
+
+.admin-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.admin-checkbox input {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+/* Upload Zone */
+.admin-upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-upload-zone:hover {
+    border-color: rgba(124,92,255,0.5);
+    background: rgba(124,92,255,0.03);
+}
+
+.admin-upload-zone input {
+    display: none;
+}
+
+.upload-icon {
+    font-size: 28px;
+}
+
+.upload-text {
+    font-size: 13px;
+    color: var(--text2);
+}
+
+/* Buttons */
+.admin-btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.admin-btn-primary {
+    background: linear-gradient(135deg, #7c5cff, #5a3fa0);
+    color: #fff;
+}
+
+.admin-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(124,92,255,0.3);
+}
+
+.admin-btn-secondary {
+    background: rgba(124,92,255,0.1);
+    color: #a78bfa;
+    border: 1px solid rgba(124,92,255,0.3);
+}
+
+.admin-btn-secondary:hover {
+    background: rgba(124,92,255,0.2);
+}
+
+.admin-btn-danger {
+    background: rgba(239,68,68,0.1);
+    color: #f87171;
+    border: 1px solid rgba(239,68,68,0.3);
+}
+
+.admin-btn-danger:hover {
+    background: rgba(239,68,68,0.2);
+}
+
+/* Search Box */
+.admin-search-box {
+    margin-bottom: 20px;
+}
+
+.admin-search-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.admin-search-input:focus {
+    border-color: rgba(124,92,255,0.5);
+    background: rgba(124,92,255,0.03);
+}
+
+/* Lists */
+.tags-list,
+.admin-list,
+.messages-list,
+.top-manga-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tag-item,
+.admin-item,
+.message-item,
+.manga-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.tag-item:hover,
+.admin-item:hover,
+.message-item:hover,
+.manga-item:hover {
+    background: rgba(124,92,255,0.05);
+    border-color: rgba(124,92,255,0.3);
+}
+
+/* Light Theme */
+body.light {
+    --bg: #f8f9fa;
+    --card: #fff;
+    --card2: #f3f4f6;
+    --border: #e5e7eb;
+    --border2: #d1d5db;
+    --text: #111827;
+    --text2: #4b5563;
+    --muted: #9ca3af;
+}
+
+body.light .admin-sidebar {
+    background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+}
+
+body.light .admin-content {
+    background: #f3f4f6;
+}
+
+@media (max-width: 900px) {
+    .admin-panel-wrapper {
+        flex-direction: column;
+        max-height: 95vh;
+    }
+    
+    .admin-sidebar {
+        width: 100%;
+        flex-direction: row;
+        padding: 16px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: none;
+    }
+    
+    .admin-header {
+        flex: 1;
+        padding: 0;
+        border: none;
+    }
+    
+    .admin-nav {
+        flex-direction: row;
+        gap: 8px;
+        flex: 1;
+        margin: 0 16px;
+        padding: 0;
+    }
+    
+    .admin-nav-item {
+        white-space: nowrap;
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .admin-footer {
+        border: none;
+        padding: 0;
+    }
+    
+    .admin-content {
+        max-height: calc(95vh - 60px);
+    }
+    
+    .admin-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-panel-overlay {
+        padding: 0;
+    }
+    
+    .admin-panel-wrapper {
+        max-height: 100vh;
+        border-radius: 0;
+        max-width: 100%;
+    }
+    
+    .admin-sidebar {
+        flex-direction: column;
+        height: auto;
+    }
+    
+    .admin-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .admin-close-btn {
+        align-self: flex-start;
+    }
+    
+    .admin-nav {
+        gap: 0;
+        flex-direction: row;
+        overflow-x: auto;
+    }
+    
+    .admin-nav-item {
+        flex-shrink: 0;
+        gap: 6px;
+    }
+    
+    .admin-content {
+        padding: 16px;
+    }
+    
+    .admin-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .admin-action-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
 
 <script>
 // ===== THEME =====
@@ -6432,17 +7175,164 @@ async function submitManga(){
 ['cover-zone','zip-zone','photos-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
 
 // ===== ADMIN PANEL =====
-function openAdminPanel(){document.getElementById('admin-modal').classList.add('open');loadAdminStats();loadAdmins();}
-function closeAdminPanel(){document.getElementById('admin-modal').classList.remove('open');}
+function openAdminPanel(){
+    document.getElementById('admin-modal').style.display='flex';
+    loadAdminStats();
+    loadAdmins();
+    setTimeout(()=>loadAdminDashboard(), 100);
+}
+
+function closeAdminPanel(){
+    document.getElementById('admin-modal').style.display='none';
+}
+
 function switchAdminTab(tab){
-    const tabs=['stats','messages','edit','add-chapter','tags'];
-    document.querySelectorAll('.atab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
-    document.querySelectorAll('.apanel').forEach(p=>p.classList.remove('active'));
-    document.getElementById('panel-'+tab).classList.add('active');
-    if(tab==='stats')loadAdminStats();
-    if(tab==='messages')loadAdminMessages();
-    if(tab==='edit')loadMangaEditList('',0);
-    if(tab==='tags')loadTagsPanel();
+    // Скрыть все табы
+    document.querySelectorAll('.admin-tab-panel').forEach(p=>p.classList.remove('active'));
+    // Обновить активность навигации
+    document.querySelectorAll('.admin-nav-item').forEach(item=>{
+        item.classList.remove('active');
+        if(item.dataset.tab===tab) item.classList.add('active');
+    });
+    // Показать нужный таб
+    const panel=document.getElementById('panel-'+tab);
+    if(panel) panel.classList.add('active');
+    
+    // Загрузить данные в зависимости от таба
+    if(tab==='dashboard') loadAdminDashboard();
+    if(tab==='manga') loadMangaEditList();
+    if(tab==='chapters') loadChaptersPanel();
+    if(tab==='tags') loadTagsPanel();
+    if(tab==='messages') loadAdminMessages();
+    if(tab==='settings') loadAdminSettings();
+}
+
+// Загружение dashboard'а
+async function loadAdminDashboard(){
+    try {
+        const res = await fetch('/api/admin/stats?tg_user_id=' + getTgUser());
+        const data = await res.json();
+        if(!data.manga_count) return;
+        
+        document.getElementById('stat-total').textContent = data.manga_count || '0';
+        document.getElementById('stat-likes').textContent = data.votes_count || '0';
+        document.getElementById('stat-users').textContent = data.users_count || '0';
+        document.getElementById('stat-comments').textContent = data.comments_count || '0';
+        
+        // Загрузить топ мангу
+        const topHtml = (data.top_manga || []).slice(0, 10).map(m => `
+            <div class="manga-item">
+                <div style="flex:1">
+                    <div style="font-weight:600; color:var(--text); margin-bottom:4px">${escapeHtml(m.title)}</div>
+                    <div style="font-size:11px; color:var(--muted)">❤️ ${m.likes || 0} лайков</div>
+                </div>
+                <button class="admin-btn admin-btn-secondary" onclick="switchAdminTab('manga')" style="padding:6px 10px; font-size:11px">Редактировать</button>
+            </div>
+        `).join('');
+        
+        const topList = document.getElementById('top-list-dashboard');
+        if(topList) topList.innerHTML = topHtml || '<div style="color:var(--muted); text-align:center; padding:20px">Нет манги</div>';
+    } catch(e) { console.error(e); }
+}
+
+// Загружение панели манги
+async function loadMangaEditList(){
+    try {
+        const res = await fetch('/api/admin/manga-list?tg_user_id=' + getTgUser());
+        const data = await res.json();
+        if(!data.success) return;
+        
+        const list = data.manga || [];
+        const html = list.map(m => `
+            <div class="manga-item">
+                <div>
+                    <div style="font-weight:600; color:var(--text)">${escapeHtml(m.title)}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:4px">ID: ${m.id} | ❤️ ${m.likes || 0}</div>
+                </div>
+                <div style="display:flex; gap:8px">
+                    <button class="admin-btn admin-btn-secondary" style="padding:6px 10px; font-size:11px" onclick="editManga(${m.id})">✏️ Редактировать</button>
+                    <button class="admin-btn admin-btn-danger" style="padding:6px 10px; font-size:11px" onclick="deleteManga(${m.id})">🗑️ Удалить</button>
+                </div>
+            </div>
+        `).join('');
+        
+        document.getElementById('manga-edit-list').innerHTML = html || '<div style="color:var(--muted); text-align:center; padding:20px">Нет манги</div>';
+    } catch(e) { console.error(e); }
+}
+
+// Загружение панели глав
+async function loadChaptersPanel(){
+    try {
+        const res = await fetch('/api/admin/manga-list?tg_user_id=' + getTgUser());
+        const data = await res.json();
+        if(!data.success) return;
+        
+        const select = document.getElementById('chapter-manga-select');
+        if(select) {
+            select.innerHTML = '<option value="">Выберите мангу...</option>' +
+                (data.manga || []).map(m => `<option value="${m.id}">${escapeHtml(m.title)}</option>`).join('');
+        }
+    } catch(e) { console.error(e); }
+}
+
+// Загружение панели тегов
+async function loadTagsPanel(){
+    try {
+        const res = await fetch('/api/genres?tg_user_id=' + getTgUser());
+        const genres = await res.json();
+        
+        const res2 = await fetch('/api/tags?tg_user_id=' + getTgUser());
+        const tags = await res2.json();
+        
+        // Рендер жанров
+        const genreHtml = (genres || []).map(g => `
+            <div class="tag-item">
+                <div>
+                    <div style="font-weight:600">${escapeHtml(g.name)}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:2px">${g.slug}</div>
+                </div>
+                <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px" onclick="deleteGenre(${g.id})">✕</button>
+            </div>
+        `).join('');
+        document.getElementById('genres-manage-list').innerHTML = genreHtml;
+        
+        // Рендер тегов
+        const tagHtml = (tags || []).map(t => `
+            <div class="tag-item">
+                <div>
+                    <div style="font-weight:600">${escapeHtml(t.name)} ${t.is_nsfw ? '🔞' : ''}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:2px">${t.slug}</div>
+                </div>
+                <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px" onclick="deleteTag(${t.id})">✕</button>
+            </div>
+        `).join('');
+        document.getElementById('tags-manage-list').innerHTML = tagHtml;
+    } catch(e) { console.error(e); }
+}
+
+// Загружение сообщений
+async function loadAdminMessages(){
+    try {
+        const res = await fetch('/api/admin/messages?tg_user_id=' + getTgUser());
+        const data = await res.json();
+        if(!data.success) return;
+        
+        const html = (data.messages || []).map(m => `
+            <div class="message-item">
+                <div style="flex:1">
+                    <div style="font-size:13px; color:var(--text); line-height:1.4">${escapeHtml(m.text)}</div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:4px">${new Date(m.created_at).toLocaleString('ru-RU')}</div>
+                </div>
+            </div>
+        `).join('');
+        
+        document.getElementById('messages-history').innerHTML = html || '<div style="color:var(--muted); text-align:center; padding:20px">История пуста</div>';
+    } catch(e) { console.error(e); }
+}
+
+// Загружение настроек
+async function loadAdminSettings(){
+    loadAdmins();
 }
 function showStatsView(view){
     document.getElementById('stats-grid-view').style.display=view==='grid'?'block':'none';
