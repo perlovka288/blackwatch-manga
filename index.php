@@ -2388,8 +2388,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .color-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .color-preset{width:26px;height:26px;border-radius:7px;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
 .color-preset.active{border-color:#fff;transform:scale(1.2)}
-.save-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
-.save-btn:hover{opacity:.88;transform:translateY(-1px)}
+.save-btn{width:100%;padding:12px;background:var(--text);color:var(--bg);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.save-btn:hover{opacity:.88}
 .save-btn:disabled{opacity:.4;cursor:not-allowed}
 .err-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:9px;padding:9px 13px;color:#fca5a5;font-size:12px;margin-bottom:10px;display:none}
 .err-box.show{display:block}
@@ -4214,9 +4214,9 @@ header{
 @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
 
 /* ── MODALS ── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(18px);z-index:800;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(18px);z-index:800;display:none;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.open{display:flex}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;max-width:480px;width:100%;position:relative;animation:modalIn .22s cubic-bezier(.34,1.56,.64,1)}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;max-width:480px;width:100%;position:relative;animation:modalIn .22s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto}
 @keyframes modalIn{from{opacity:0;transform:scale(.94)translateY(10px)}to{opacity:1;transform:scale(1)translateY(0)}}
 .modal-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:.3px;margin-bottom:16px}
 .modal-head{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:.3px;margin-bottom:4px}
@@ -4309,7 +4309,7 @@ header{
 /* ═══════════════════════════════════════
    ADMIN PANEL — MODERN REDESIGN
 ═══════════════════════════════════════ */
-.admin-modal{max-width:960px;width:96vw;padding:0;overflow:visible;border-radius:18px;display:flex;flex-direction:column;margin:auto}
+.admin-modal{max-width:960px;width:96vw;padding:0;overflow:hidden;border-radius:18px;max-height:90vh;display:flex;flex-direction:column}
 .admin-modal .modal-head{padding:20px 24px 0;font-size:19px;flex-shrink:0}
 .admin-modal .modal-x{top:18px;right:18px}
 
@@ -4320,8 +4320,8 @@ header{
 .atab:hover{color:var(--text2)}
 .atab.active{color:var(--text);border-bottom-color:var(--accent)}
 
-/* Panels — no forced scroll, content determines height */
-.apanel{display:none;padding:18px 24px 24px}
+/* Panels — scrollable */
+.apanel{display:none;padding:18px 24px 24px;overflow-y:auto;max-height:calc(90vh - 120px)}
 .apanel.active{display:block}
 
 /* Stats layout — side by side, responsive */
@@ -4351,7 +4351,7 @@ header{
 .edit-manga-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* Archive */
-.archive-list{display:flex;flex-direction:column;gap:5px}
+.archive-list{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;scrollbar-width:thin}
 .aitem{padding:8px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
 .atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:2px}
 .atext{font-size:12px;color:var(--text2);margin-bottom:2px}
@@ -4364,7 +4364,7 @@ header{
 .pag-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 /* Right sidebar — functions, compact */
-.stats-right{background:rgba(255,255,255,.015);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.stats-right{background:rgba(255,255,255,.015);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px}
 .func-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:2px}
 .func-btn{width:100%;padding:9px 11px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;text-align:left;transition:all .18s;border:1px solid;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .func-btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
@@ -4385,7 +4385,7 @@ header{
 .msg-compose textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .msg-send-btn{margin-top:8px;padding:9px 18px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s}
 .msg-send-btn:hover{background:var(--accent2);transform:translateY(-1px)}
-.msg-list{display:flex;flex-direction:column;gap:6px}
+.msg-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
 .msg-item{padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px}
 .msg-text{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.5}
 .msg-meta{font-size:10px;color:var(--muted)}
@@ -4396,7 +4396,7 @@ header{
 .esearch-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .esearch-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s;white-space:nowrap}
 .esearch-btn:hover{background:var(--accent2)}
-.manga-edit-list{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.manga-edit-list{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin;margin-bottom:10px}
 .manga-edit-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
 .manga-edit-item:hover{border-color:var(--border2);background:rgba(255,255,255,.04)}
 .manga-edit-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card2);border:1px solid var(--border);flex-shrink:0}
@@ -4407,19 +4407,13 @@ header{
 .edit-form-wrap{display:flex;flex-direction:column;gap:8px}
 
 /* Suggestions */
-.suggest-preview{display:flex;flex-direction:column;gap:5px}
+.suggest-preview{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
 .suggest-item{padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:flex-start}
 .suggest-text{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
 .suggest-meta{font-size:10px;color:var(--muted);margin-top:3px}
 .suggest-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;text-transform:uppercase}
 .suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
 .suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
-
-/* Chapter admin list in edit panel */
-.ch-admin-list{display:flex;flex-direction:column;gap:4px}
-.ch-admin-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px}
-.del-ch-btn{padding:4px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s}
-.del-ch-btn:hover{background:rgba(239,68,68,0.2)}
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -4803,7 +4797,7 @@ header{
                 <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
                 <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
             </div>
-            <div class="manga-edit-list" id="ch-manga-list"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
+            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
         </div>
         <div id="ch-add-form" style="display:none">
             <div class="add-ch-form">
@@ -4852,7 +4846,7 @@ header{
                     <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
                     <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
                 </div>
-                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px"></div>
+                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
             </div>
 
             <!-- ТЕГИ -->
@@ -4867,7 +4861,7 @@ header{
                     <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
                     <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
                 </div>
-                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px"></div>
+                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
             </div>
 
         </div>
@@ -5245,8 +5239,9 @@ async function openEditManga(mangaId){
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allGenres=gd.genres||[];allTags=gd.tags||[];}catch(e){}
     try{const mgr=await fetch(`/api/manga/${mangaId}/genres`);const mgd=await mgr.json();
     mgd.genres?.forEach(g=>mangaGenreIds.add(g.id));mgd.tags?.forEach(t=>mangaTagIds.add(t.id));}catch(e){}
-    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';    document.getElementById('edit-manga-form').innerHTML=`
+    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:140px;overflow-y:auto;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    document.getElementById('edit-manga-form').innerHTML=`
         <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
         <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
         <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
