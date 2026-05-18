@@ -619,7 +619,7 @@ if ($path === '/admin') {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>⚙️ Админ-панель · BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js" async></script>
 <style>
 /* ═══════════════════════════════════════════
    BLACKWATCH ADMIN — DARK THEME (default)
@@ -4235,7 +4235,7 @@ if (preg_match('#^/view/(\d+)$#',$path,$m)){
 .fallback{position:absolute;text-align:center;display:none;padding:20px}
 .fallback p{margin-bottom:16px;color:#aaa}
 .telegraph-link{background:#7c5cff;color:#fff;padding:12px 24px;border-radius:40px;text-decoration:none;font-weight:600;display:inline-block}
-</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
 <body>
 <a href="/read/<?=$id?>" class="back-btn">← Назад</a>
 <div class="counter"><span id="counter">—</span></div>
@@ -4286,7 +4286,7 @@ if (preg_match('#^/view-chapter/(\d+)$#',$path,$m)){
 .chapter-end h2{font-size:24px;font-weight:800}.chapter-end p{color:#aaa;font-size:14px}
 .end-btn{padding:14px 28px;border-radius:50px;border:none;font-size:15px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;font-family:sans-serif}
 .end-next{background:#7c5cff;color:#fff}.end-back{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2)}
-</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
 <body>
 <div class="top-bar">
     <a href="/read/<?=$chapter['manga_id']?>" class="back-btn">← К манге</a>
@@ -4535,7 +4535,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 .color-opt.sel{border-color:#fff;transform:scale(1.15)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(124,92,255,0.95);color:#fff;padding:10px 22px;border-radius:50px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(124,92,255,0.4);animation:toastIn 0.3s ease;white-space:nowrap}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
 <body>
 <a href="/" class="back">← Каталог</a>
 <div class="manga-page">
@@ -4933,7 +4933,7 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
     .wrap{padding:14px 12px 70px}
     .lib-title{font-size:18px}
 }
-</style><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
+</style><script src="https://telegram.org/js/telegram-web-app.js" async></script></head>
 <body>
 <div id="lib-loader" style="position:fixed;inset:0;z-index:9998;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity 0.4s,visibility 0.4s">
   <div class="loader-ring">
@@ -4983,9 +4983,9 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 // Hide loader after page ready
-(function(){function hideLoader(){var l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},450);}}
+(function(){function hideLoader(){var l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},450);}}
 document.addEventListener('DOMContentLoaded',function(){setTimeout(hideLoader,100);});
-setTimeout(hideLoader,3000);})();
+setTimeout(hideLoader,800);})();
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
 const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
@@ -5083,7 +5083,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 img{display:block;max-width:100%}
 
 /* ── PAGE LOADER ── */
-#page-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .45s ease}
+#page-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .45s ease;animation:loaderAutoHide 0s 2s forwards}@keyframes loaderAutoHide{to{opacity:0;pointer-events:none;display:none}}
 #page-loader.hidden{opacity:0;pointer-events:none}
 .bw-logo-load{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:8px;color:var(--text);opacity:.8}
 .loader-bar{width:140px;height:3px;background:var(--border2);border-radius:3px;overflow:hidden}
@@ -5705,7 +5705,7 @@ header{
 .suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
 .suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
 </style>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
 <body>
 
@@ -7602,10 +7602,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 // ===== INIT =====
 // Hide page loader
 (function(){
-    function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.3s ease';l.style.opacity='0';l.style.visibility='hidden';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},350);}}
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hideLoader);}
-    else{hideLoader();}
-    setTimeout(hideLoader,1500);
+    function hideLoader(){var l=document.getElementById('page-loader');if(l){l.style.transition='opacity 0.3s ease';l.style.opacity='0';l.style.visibility='hidden';l.style.pointerEvents='none';setTimeout(function(){l.style.display='none';if(l.parentNode)l.parentNode.removeChild(l);},350);}}
+    hideLoader();
+    setTimeout(hideLoader,500);
 })();
 
 // ===== HERO CAROUSEL =====
