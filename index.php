@@ -6,7 +6,7 @@ ini_set('log_errors', 1);
 
 $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
 try {
-    $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+    $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_TIMEOUT => 10]);
 } catch (PDOException $e) { die("DB Error: " . $e->getMessage()); }
 
 try {
@@ -5018,10 +5018,10 @@ load();
 # ========================= HOME =========================
 
 # ========================= HOME =========================
-$total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
+try { $total = $pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn(); } catch(Exception $e) { $total = 0; }
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 // Count unread admin messages
-$msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();
+try { $msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn(); } catch(Exception $e) { $msgCount = 0; }
 ?>
 <!DOCTYPE html>
 <html lang="ru">
