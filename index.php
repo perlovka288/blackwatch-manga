@@ -470,7 +470,7 @@ function sendBrevoEmail(string $toEmail, string $toName, string $subject, string
 
 function sendVerificationEmail(string $email, string $username, string $code): bool {
     $html = "
-    <div style='font-family:'Outfit',sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
+    <div style='font-family:Outfit,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
       <div style='font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div>
       <h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Подтверждение email</h2>
       <p style='color:#aaa;font-size:14px;margin-bottom:20px'>Привет, <strong style='color:#f2f2f2'>{$username}</strong>! Введи этот код для подтверждения аккаунта:</p>
@@ -1230,7 +1230,7 @@ if ($path==='/api/profile/change-email' && $_SERVER['REQUEST_METHOD']==='POST') 
         // Store pending email in session data (we use a temp column approach)
         $pdo->prepare("UPDATE accounts SET verify_code=?, verify_expires=? WHERE id=?")->execute([$code,$expires,(int)$account['id']]);
         // send code to NEW email
-        $html = "<div style='font-family:'Outfit',sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Смена email</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Код подтверждения для смены email:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center;margin-bottom:20px'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 15 минут</div></div></div>";
+        $html = "<div style='font-family:Outfit,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Смена email</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Код подтверждения для смены email:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center;margin-bottom:20px'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 15 минут</div></div></div>";
         sendBrevoEmail($newEmail, $account['username'], 'Смена email | BLACKWATCH', $html);
         // Store new_email pending in session
         $_SESSION['pending_email_change'] = $newEmail;
@@ -1353,7 +1353,7 @@ if ($path==='/api/auth/reauth-confirm' && $_SERVER['REQUEST_METHOD']==='POST') {
         $code = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
         $_SESSION['reauth_code'] = $code;
         $_SESSION['reauth_code_expires'] = time()+600;
-        $html = "<div style='font-family:'Outfit',sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Подтверждение входа</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Ежемесячное подтверждение аккаунта. Твой код:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 10 минут</div></div></div>";
+        $html = "<div style='font-family:Outfit,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'><div style='font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div><h2 style='color:#f2f2f2;font-size:18px;margin-bottom:16px'>Подтверждение входа</h2><p style='color:#aaa;font-size:14px;margin-bottom:20px'>Ежемесячное подтверждение аккаунта. Твой код:</p><div style='background:#161616;border:1px solid #242424;border-radius:12px;padding:24px;text-align:center'><div style='font-size:36px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace'>{$code}</div><div style='color:#666;font-size:12px;margin-top:8px'>Действителен 10 минут</div></div></div>";
         sendBrevoEmail($account['email'],$account['username'],'Подтверждение сессии | BLACKWATCH',$html);
         echo json_encode(['success'=>true,'message'=>'Код отправлен на email']);
     } else {
@@ -1448,7 +1448,7 @@ if ($path==='/api/admin/assign' && $_SERVER['REQUEST_METHOD']==='POST') {
         $pdo->prepare("UPDATE accounts SET is_admin=TRUE, admin_tag=? WHERE id=?")->execute([$tagName, $targetAccountId]);
         // Send email notification
         $html = "
-        <div style='font-family:'Outfit',sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
+        <div style='font-family:Outfit,sans-serif;background:#0c0c0c;padding:40px;border-radius:16px;max-width:480px;margin:auto'>
           <div style='font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f2f2f2;letter-spacing:2px;margin-bottom:8px'>⚫ BLACKWATCH</div>
           <h2 style='color:#ef4444;font-size:18px;margin-bottom:16px'>⚡ Ты назначен администратором</h2>
           <p style='color:#aaa;font-size:14px;margin-bottom:20px'>Привет, <strong style='color:#f2f2f2'>{$target['username']}</strong>! Тебе выдан тег администратора:</p>
@@ -2639,7 +2639,7 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag FROM accounts WHERE username=?");
     $stmt->execute([$targetUsername]);
     $target = $stmt->fetch();
-    if (!$target) { http_response_code(404); echo '<!DOCTYPE html><html><body style="background:#0c0c0c;color:#f2f2f2;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">😔</div><h1 style="font-size:22px">Пользователь не найден</h1><a href="/" style="color:#7c5cff;text-decoration:none;margin-top:16px;display:block">← В каталог</a></div></body></html>'; exit; }
+    if (!$target) { http_response_code(404); echo '<!DOCTYPE html><html><body style="background:#0c0c0c;color:#f2f2f2;font-family:Outfit,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">😔</div><h1 style="font-size:22px">Пользователь не найден</h1><a href="/" style="color:#7c5cff;text-decoration:none;margin-top:16px;display:block">← В каталог</a></div></body></html>'; exit; }
     $tid = (int)$target['id'];
     $privacy = $target['profile_privacy'] ?? 'public';
     $viewer = $currentAccount;
@@ -5836,7 +5836,7 @@ document.addEventListener('click', function(e) {
         💬 Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
     </div>
     <div id="comments-form" style="margin-bottom:16px;display:<?php echo isset($currentAccount) && $currentAccount ? 'block' : 'none'; ?>">
-        <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:'Outfit',sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
+        <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:Outfit,sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
         <button onclick="submitComment()" style="margin-top:8px;padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s" onmouseover="this.style.transform='translateY(-1px)';this.style.opacity='0.9'" onmouseout="this.style.transform='translateY(0)';this.style.opacity='1'">
             📤 Отправить комментарий
         </button>
