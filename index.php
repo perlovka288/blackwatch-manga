@@ -2112,7 +2112,7 @@ if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
         if(!$title){echo json_encode(['success'=>false,'error'=>'Название обязательно']);exit;}
         $telegraphLink=null;if(!empty($pageUrls)&&!$isSeries)$telegraphLink=createTelegraphPage('♥ '.$title,$pageUrls);
         $insertStmt=$pdo->prepare("INSERT INTO manga (title,telegraph_url,description,cover_imgbb_url,added_by,is_series) VALUES (?,?,?,?,?,?) RETURNING id");
-        $insertStmt->execute(['♥ '.$title,$telegraphLink,$description,$coverUrl?:null,$userId,$isSeries ? 'true' : 'false']);
+        $insertStmt->execute(['♥ '.$title,$telegraphLink,$description,$coverUrl?:null,$userId,$isSeries]);
         $row=$insertStmt->fetch(PDO::FETCH_ASSOC);$newMangaId=(int)($row['id']??0);
         if(!$newMangaId)$newMangaId=(int)$pdo->lastInsertId();
         if(!$newMangaId){echo json_encode(['success'=>false,'error'=>'Не удалось получить ID']);exit;}
@@ -2812,19 +2812,32 @@ if (preg_match('#^/api/profile/view/([a-zA-Z0-9_]+)$#',$path,$m) && $_SERVER['RE
         'privacy'=>$privacy,'can_view_library'=>$canView,'is_friend'=>$isFriend,'is_self'=>$isSelf,
         'custom'=>$custom
     ];
+    // Get tg_user_id for target to also count bot-added statuses
+    $tgIdForTarget = (int)($target['tg_user_id'] ?? 0);
+    $acWhereTarget = $tgIdForTarget
+        ? "(account_id={$tid} OR user_id={$tgIdForTarget})"
+        : "account_id={$tid}";
     if ($canView) {
-        // Stats — всегда публичные
-        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
-        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
-        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
-        // Library items
-        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
-        $libStmt->execute([$tid]);$data['library']=$libStmt->fetchAll();
+        // Stats — с учётом tg_user_id и всех вариантов статусов
+        $data['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereTarget}")->fetchColumn();
+        $data['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereTarget}")->fetchColumn();
+        $data['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereTarget}")->fetchColumn();
+        $data['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereTarget}")->fetchColumn();
+        $data['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereTarget}")->fetchColumn();
+        $data['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereTarget}")->fetchColumn();
+        // Chapters and pages read
+        $data['chapters_read'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM reading_progress WHERE user_id={$tgIdForTarget}"  .($tgIdForTarget ? "" : " AND 1=0"))->fetchColumn();
+        // Library items (account_id only for join)
+        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE {$acWhereTarget} ORDER BY s.manga_id DESC LIMIT 30");
+        $libStmt->execute();$data['library']=$libStmt->fetchAll();
     } else {
         // Даже для приватных профилей — показываем базовую статистику
-        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
-        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
-        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
+        $data['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereTarget}")->fetchColumn();
+        $data['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereTarget}")->fetchColumn();
+        $data['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereTarget}")->fetchColumn();
+        $data['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereTarget}")->fetchColumn();
+        $data['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereTarget}")->fetchColumn();
+        $data['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereTarget}")->fetchColumn();
         $data['library'] = []; // библиотека скрыта
     }
     // Friends list (only if can_view or public)
@@ -4185,11 +4198,18 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $targetIsAdmin = in_array($tgid,$hardcodedAdmins) || (!empty($target['is_admin'])&&$target['is_admin']);
     $adminTag = $target['admin_tag'] ?? null;
     $libItems = [];
-    $libStats = ['total'=>0,'read'=>0,'now'=>0];
-    // Stats always public - everyone can see counts
-    $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$libStats['total']=(int)$stTotal->fetchColumn();
-    $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$libStats['read']=(int)$stRead->fetchColumn();
-    $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$libStats['now']=(int)$stNow->fetchColumn();
+    $libStats = ['total'=>0,'read'=>0,'now'=>0,'will'=>0,'drop'=>0,'pause'=>0];
+    // Stats with tg_user_id support and all status variants
+    $tgIdTarget = (int)($target['tg_user_id'] ?? 0);
+    $acWhereU = $tgIdTarget
+        ? "(account_id={$tid} OR user_id={$tgIdTarget})"
+        : "account_id={$tid}";
+    $libStats['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereU}")->fetchColumn();
+    $libStats['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereU}")->fetchColumn();
+    $libStats['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereU}")->fetchColumn();
+    $libStats['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereU}")->fetchColumn();
+    $libStats['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereU}")->fetchColumn();
+    $libStats['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereU}")->fetchColumn();
     if ($canView) {
         $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
         $libStmt->execute([$tid]);$libItems=$libStmt->fetchAll();
@@ -4310,9 +4330,12 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card">
         <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row">
-            <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">Всего</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">Читает</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">Прочитано</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">📖 Всего</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">✅ Прочитано</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">▶ Читает</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['will']?></div><div class="stat-l">📋 В планах</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['drop']?></div><div class="stat-l">❌ Брошено</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['pause']?></div><div class="stat-l">⏸ На паузе</div></div>
         </div>
         <?php if (!empty($libItems)): ?>
         <div class="lib-grid">
@@ -5423,20 +5446,26 @@ header{
 }
 .light .sidebar-rail{background:rgba(255,255,255,.98)}
 .sidebar-icon-btn{
-    width:38px;height:38px;border-radius:8px;
+    min-width:38px;height:38px;border-radius:8px;
     border:1px solid var(--border);background:transparent;
-    color:var(--muted);font-size:17px;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-size:13px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+    padding:0 10px 0 8px;
     transition:all var(--t);position:relative;text-decoration:none;
+    white-space:nowrap;
 }
 .sidebar-icon-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
 .light .sidebar-icon-btn:hover{background:rgba(232,25,44,.06)}
+.sib-icon{font-size:16px;flex-shrink:0;line-height:1}
+.sib-label{font-size:11px;font-weight:600;letter-spacing:.2px}
 .sidebar-badge{position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#f87171;border:2px solid var(--bg);animation:pulse-red 2s infinite}
 @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.5)}50%{box-shadow:0 0 0 5px rgba(248,113,113,0)}}
 @media(max-width:600px){
     .sidebar-icons{display:flex;bottom:0;top:auto;right:0;left:0;transform:none;z-index:400}
-    .sidebar-rail{flex-direction:row;border-radius:0;border:none;border-top:1px solid var(--border);width:100%;padding:7px 16px;justify-content:space-around;backdrop-filter:blur(28px);background:rgba(6,6,8,.97)}
-    .sidebar-icon-btn{width:44px;height:44px;font-size:20px}
+    .sidebar-rail{flex-direction:row;border-radius:0;border:none;border-top:1px solid var(--border);width:100%;padding:7px 6px;justify-content:space-around;backdrop-filter:blur(28px);background:rgba(6,6,8,.97)}
+    .sidebar-icon-btn{min-width:0;width:auto;height:48px;flex-direction:column;gap:2px;padding:4px 8px;font-size:10px}
+    .sib-icon{font-size:20px}
+    .sib-label{font-size:9px}
 }
 .light .sidebar-rail{background:rgba(250,250,250,.98)}
 
@@ -5990,20 +6019,29 @@ header{
 <!-- SIDEBAR ICONS -->
 <div class="sidebar-icons">
     <div class="sidebar-rail">
-        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
-        <a href="/messages" class="sidebar-icon-btn" title="Чаты" style="text-decoration:none">💬</a>
-        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Быстрые сообщения" id="messages-btn" style="position:relative">
-            💬
+        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">
+            <span class="sib-icon">📚</span><span class="sib-label">Библиотека</span>
+        </a>
+        <a href="/messages" class="sidebar-icon-btn" title="Чаты" style="text-decoration:none" id="sidebar-messages-link">
+            <span class="sib-icon">💬</span><span class="sib-label">Чаты</span>
             <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
             <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
-        </button>
+        </a>
         <?php if ($currentAccount): ?>
-        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">👤</a>
+        <button class="sidebar-icon-btn" onclick="openAdminMessagesModal()" title="Уведомления от администрации" id="bell-btn" style="position:relative">
+            <span class="sib-icon">🔔</span><span class="sib-label">Новости</span>
+            <?php if ($msgCount > 0): ?><span class="sidebar-badge" style="background:var(--accent)"><?=$msgCount?></span><?php endif; ?>
+        </button>
+        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">
+            <span class="sib-icon">👤</span><span class="sib-label">Профиль</span>
+        </a>
         <?php endif; ?>
-        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">🤖</a>
-        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">🛟</button>
-        <div style="width:100%;height:1px;background:var(--border);margin:2px 0"></div>
-        <button class="sidebar-icon-btn theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn-side">🌙</button>
+        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">
+            <span class="sib-icon">🤖</span><span class="sib-label">Telegram</span>
+        </a>
+        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
+            <span class="sib-icon">🛟</span><span class="sib-label">Поддержка</span>
+        </button>
     </div>
 </div>
 
@@ -6241,14 +6279,12 @@ header{
     if(saved==='light')document.body.classList.add('light');
     const icon = saved==='light'?'🌙':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
-    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 })();
 function toggleTheme(){
     const isLight=document.body.classList.toggle('light');
     localStorage.setItem('bw_theme',isLight?'light':'dark');
     const icon=isLight?'🌙':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
-    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 }
 
 // ===== TG =====
