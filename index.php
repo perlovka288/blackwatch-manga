@@ -1791,8 +1791,17 @@ async function openEdit(mangaId){
       <div class="field"><label class="label">Название</label><input class="input" id="ef-title" value="${esc(manga.title)}"></div>
       <div class="field"><label class="label">Описание</label><textarea class="input textarea" id="ef-desc">${esc(manga.description||'')}</textarea></div>
       <div class="field"><label class="label">Ссылка Telegraph</label><input class="input" id="ef-link" value="${esc(manga.telegraph_url||'')}"></div>
-      <div class="field"><label class="label">URL обложки</label><input class="input" id="ef-cover" value="${esc(manga.cover_imgbb_url||'')}">
-        ${manga.cover_imgbb_url?`<img src="${esc(manga.cover_imgbb_url)}" style="width:60px;height:82px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid var(--border)">`:''}</div>
+      <div class="field"><label class="label">Обложка</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+          ${manga.cover_imgbb_url?`<img id="ef-cover-preview" src="${esc(manga.cover_imgbb_url)}" style="width:60px;height:82px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`:'<div id="ef-cover-preview" style="width:60px;height:82px;border-radius:8px;border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text3);flex-shrink:0">🖼</div>'}
+          <div style="flex:1;min-width:120px">
+            <div style="position:relative;border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .2s;text-align:center;font-size:11px;color:var(--text3);background:var(--surface2)" id="ef-cover-dropzone" onclick="document.getElementById('ef-cover-file').click()" onmouseover="this.style.borderColor='var(--border3)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="file" id="ef-cover-file" accept="image/*" style="display:none" onchange="uploadEditCover(this, ${mangaId})">
+              <div id="ef-cover-upload-status">📷 Нажми чтобы загрузить новую обложку</div>
+            </div>
+            <input class="input" id="ef-cover" value="${esc(manga.cover_imgbb_url||'')}" placeholder="или вставь URL обложки" style="margin-top:6px;font-size:11px">
+          </div>
+        </div></div>
       ${genHtml}${tagHtml}${chapHtml}
       <div style="display:flex;gap:8px;margin-top:16px">
         <button class="btn btn-red" style="flex:1" onclick="saveManga(${mangaId})">💾 Сохранить</button>
@@ -2020,7 +2029,7 @@ async function amSubmitManga(){
   const desc=($id('am-desc').value||'').trim();
   const isSeries=_amType==='series';
   if(!title){showResult('am-result',false,'❌ Введи название!');return;}
-  if(!isSeries&&!_amPhotoFiles.length&&!_amCoverFile){showResult('am-result',false,'❌ Загрузи обложку или страницы!');return;}
+  if(!isSeries&&!_amPhotoFiles.length&&!_amCoverFile){showResult('am-result',false,'❌ Загрузи хотя бы обложку!');return;}
   const btn=$id('am-submit');btn.disabled=true;
   const spinner=$id('am-spinner');spinner.style.display='inline-block';
   btn.querySelector('.btn-text').textContent='Загрузка...';
@@ -2058,6 +2067,35 @@ function resetAddMangaForm(){
 // Drag & drop for add-manga zones
 ['am-cover-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
 
+
+// Upload cover in edit form
+async function uploadEditCover(input, mangaId) {
+    if (!input.files[0]) return;
+    const statusEl = document.getElementById('ef-cover-upload-status');
+    const previewEl = document.getElementById('ef-cover-preview');
+    if (statusEl) statusEl.textContent = '⏳ Загружаю на imgbb...';
+    try {
+        const kr = await fetch('/api/imgbb-keys?tg_user_id=' + getTgUser());
+        const kd = await kr.json();
+        if (!kd.success || !kd.keys?.length) {
+            if (statusEl) statusEl.textContent = '❌ Нет доступа к ключам';
+            return;
+        }
+        const url = await uploadOneToImgbb(input.files[0], kd.keys);
+        if (url) {
+            document.getElementById('ef-cover').value = url;
+            if (previewEl) { previewEl.src = url; previewEl.style.display = 'block'; }
+            if (statusEl) statusEl.textContent = '✅ Обложка загружена!';
+            // Auto-save cover
+            showResult('ef-result', true, '✅ Обложка загружена! Нажми Сохранить.');
+        } else {
+            if (statusEl) statusEl.textContent = '❌ Ошибка загрузки';
+        }
+    } catch(e) {
+        if (statusEl) statusEl.textContent = '❌ ' + e.message;
+    }
+}
+
 /* ══ INIT ══ */
 loadStats();
 </script>
@@ -2070,11 +2108,11 @@ if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
     try{
         if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);
         $input=json_decode(file_get_contents('php://input'),true);
-        $title=trim($input['title']??'');$description=trim($input['description']??'');$coverUrl=trim($input['cover_url']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));$isSeries=!empty($input['is_series']);
+        $title=trim($input['title']??'');$description=trim($input['description']??'');$coverUrl=trim($input['cover_url']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));$isSeries=!empty($input['is_series']) && $input['is_series'] !== false && $input['is_series'] !== '' ? true : false;
         if(!$title){echo json_encode(['success'=>false,'error'=>'Название обязательно']);exit;}
         $telegraphLink=null;if(!empty($pageUrls)&&!$isSeries)$telegraphLink=createTelegraphPage('♥ '.$title,$pageUrls);
         $insertStmt=$pdo->prepare("INSERT INTO manga (title,telegraph_url,description,cover_imgbb_url,added_by,is_series) VALUES (?,?,?,?,?,?) RETURNING id");
-        $insertStmt->execute(['♥ '.$title,$telegraphLink,$description,$coverUrl?:null,$userId,$isSeries]);
+        $insertStmt->execute(['♥ '.$title,$telegraphLink,$description,$coverUrl?:null,$userId,$isSeries ? 'true' : 'false']);
         $row=$insertStmt->fetch(PDO::FETCH_ASSOC);$newMangaId=(int)($row['id']??0);
         if(!$newMangaId)$newMangaId=(int)$pdo->lastInsertId();
         if(!$newMangaId){echo json_encode(['success'=>false,'error'=>'Не удалось получить ID']);exit;}
@@ -2315,7 +2353,7 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
-    $isNsfw=!empty($input['is_nsfw']);
+    $isNsfw = isset($input['is_nsfw']) && $input['is_nsfw'] ? true : false;
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
     try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?1:0]);
@@ -2361,7 +2399,7 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
         $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
         $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name, is_nsfw=EXCLUDED.is_nsfw");
-        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
+        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
         $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
         foreach($genresData as $g)$gIns->execute($g);
         $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
@@ -2403,7 +2441,7 @@ if ($path==='/api/genres'){
         if(empty($tags)){
             $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
             $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING");
-            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
             $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
             $tags=array_map(function($t){$t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);return $t;},$tagsRaw);
         }
@@ -4148,10 +4186,11 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $adminTag = $target['admin_tag'] ?? null;
     $libItems = [];
     $libStats = ['total'=>0,'read'=>0,'now'=>0];
+    // Stats always public - everyone can see counts
+    $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$libStats['total']=(int)$stTotal->fetchColumn();
+    $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$libStats['read']=(int)$stRead->fetchColumn();
+    $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$libStats['now']=(int)$stNow->fetchColumn();
     if ($canView) {
-        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$libStats['total']=(int)$stTotal->fetchColumn();
-        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$libStats['read']=(int)$stRead->fetchColumn();
-        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$libStats['now']=(int)$stNow->fetchColumn();
         $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
         $libStmt->execute([$tid]);$libItems=$libStmt->fetchAll();
     }
@@ -5934,6 +5973,7 @@ header{
         <button class="hbtn hbtn-ghost" onclick="openRandom()" title="Случайная манга">🎲</button>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
+        <a href="/messages" class="hbtn" title="Чаты" style="gap:5px">💬 <span>Чаты</span></a>
         <a href="/profile" class="hbtn" style="gap:6px">
             👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span>
         </a>
@@ -5951,7 +5991,8 @@ header{
 <div class="sidebar-icons">
     <div class="sidebar-rail">
         <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
-        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
+        <a href="/messages" class="sidebar-icon-btn" title="Чаты" style="text-decoration:none">💬</a>
+        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Быстрые сообщения" id="messages-btn" style="position:relative">
             💬
             <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
             <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
