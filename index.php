@@ -598,9 +598,11 @@ if ($path === '/admin') {
     if (!isAdminCombined($pdo, $hardcodedAdmins)) {
         http_response_code(403);
         ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>403</title>
-        <style>body{background:#0a0a0e;color:#f2f2f2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
-        a{color:#e8192c;text-decoration:none}</style></head><body>
-        <div style="font-size:48px">🔒</div><h2>Нет доступа</h2><a href="/">← На главную</a>
+        <style>body{background:#0a0a0a;color:#f0f0f0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px}
+        .lock{font-size:64px;filter:grayscale(1)}h2{font-size:20px;font-weight:600;color:#fff}p{color:#666;font-size:14px}
+        a{color:#e8192c;text-decoration:none;font-weight:600;border:1px solid rgba(232,25,44,.3);padding:8px 20px;border-radius:8px;transition:.2s}
+        a:hover{background:rgba(232,25,44,.08)}</style></head><body>
+        <div class="lock">🔒</div><h2>Доступ закрыт</h2><p>У тебя нет прав для просмотра этой страницы.</p><a href="/">← На главную</a>
         </body></html><?php exit;
     }
     $bodyClass = isset($_COOKIE['bw_theme']) && $_COOKIE['bw_theme'] === 'light' ? 'light' : '';
@@ -609,939 +611,1257 @@ if ($path === '/admin') {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>⚙️ Админ-панель · BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<title>Admin · BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
+/* ══════════════════════════════════════
+   RESET & ROOT TOKENS
+══════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+button,input,textarea,select{font-family:inherit;outline:none}
+button{cursor:pointer;border:none;background:none}
+img{display:block}
 :root{
-    --bg:#0a0a0e;--bg2:#111116;--card:#161620;--card2:#1e1e2a;--card3:#252535;
-    --border:#2a2a3a;--border2:#3a3a50;
-    --text:#f0f0f8;--text2:#8888a0;--muted:#4a4a60;
-    --accent:#e8192c;--accent2:#ff2d42;--accent-glow:rgba(232,25,44,.22);
-    --green:#22c55e;--green-glow:rgba(34,197,94,.18);
-    --amber:#f59e0b;--amber-glow:rgba(245,158,11,.18);
-    --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.18);
-    --blue:#3b82f6;--blue-glow:rgba(59,130,246,.18);
-    --red:#ef4444;--red-glow:rgba(239,68,68,.18);
-    --t:.2s ease;
-    --sidebar:220px;
-    --r:10px;
-    --shadow:0 4px 24px rgba(0,0,0,.6);
-    --inset:inset 0 1px 0 rgba(255,255,255,.05),0 4px 12px rgba(0,0,0,.4);
+  /* Palette */
+  --bg:       #0a0a0a;
+  --bg2:      #111111;
+  --surface:  #161616;
+  --surface2: #1c1c1c;
+  --surface3: #222222;
+  --border:   rgba(255,255,255,.07);
+  --border2:  rgba(255,255,255,.13);
+  --border3:  rgba(255,255,255,.20);
+  --text:     #f4f4f4;
+  --text2:    #a0a0a0;
+  --text3:    #606060;
+  --red:      #e8192c;
+  --red2:     #ff2d42;
+  --red-dim:  rgba(232,25,44,.12);
+  --red-glow: rgba(232,25,44,.25);
+  --green:    #22c55e;
+  --green-dim:rgba(34,197,94,.12);
+  --amber:    #f59e0b;
+  --amber-dim:rgba(245,158,11,.12);
+  --blue:     #3b82f6;
+  --blue-dim: rgba(59,130,246,.12);
+  --purple:   #8b5cf6;
+  --purple-dim:rgba(139,92,246,.12);
+  /* Layout */
+  --sidebar:  240px;
+  --topbar:   56px;
+  --radius:   10px;
+  --radius-lg:14px;
+  --t:        .18s ease;
+  --shadow:   0 4px 24px rgba(0,0,0,.5);
+  --glow-red: 0 0 20px rgba(232,25,44,.18);
 }
 .light{
-    --bg:#ebebf0;--bg2:#e0e0e8;--card:#f8f8fc;--card2:#efeff5;--card3:#e6e6ef;
-    --border:#d0d0e0;--border2:#b8b8cc;
-    --text:#0a0a14;--text2:#505068;--muted:#9090a8;
-    --shadow:0 4px 24px rgba(0,0,0,.12);
-    --inset:inset 0 1px 0 rgba(255,255,255,.8),0 4px 12px rgba(0,0,0,.08);
-}
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-a{text-decoration:none;color:inherit}
-button{font-family:inherit;cursor:pointer}
-input,textarea,select{font-family:inherit}
-
-/* ── LAYOUT ── */
-.adm-layout{display:flex;min-height:100vh}
-
-/* ── SIDEBAR ── */
-.adm-sidebar{
-    width:var(--sidebar);flex-shrink:0;
-    background:var(--card);
-    border-right:1px solid var(--border);
-    display:flex;flex-direction:column;
-    position:fixed;top:0;left:0;height:100vh;
-    z-index:100;transition:transform var(--t);
-}
-.adm-logo{
-    padding:20px 18px 16px;
-    border-bottom:1px solid var(--border);
-    display:flex;align-items:center;gap:10px;
-    flex-shrink:0;
-}
-.adm-logo-icon{
-    width:34px;height:34px;border-radius:9px;
-    background:var(--accent);
-    display:flex;align-items:center;justify-content:center;
-    font-size:16px;flex-shrink:0;
-    box-shadow:0 0 14px var(--accent-glow);
-}
-.adm-logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--text)}
-.adm-logo-sub{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
-
-.adm-nav{flex:1;padding:10px 10px;overflow-y:auto;scrollbar-width:none}
-.adm-nav::-webkit-scrollbar{display:none}
-.adm-nav-section{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;padding:10px 8px 5px}
-.adm-nav-item{
-    display:flex;align-items:center;gap:10px;
-    padding:9px 10px;border-radius:var(--r);
-    color:var(--text2);font-size:12px;font-weight:500;
-    cursor:pointer;transition:all var(--t);margin-bottom:2px;
-    border:1px solid transparent;
-    position:relative;
-}
-.adm-nav-item:hover{background:var(--card2);color:var(--text);border-color:var(--border)}
-.adm-nav-item.active{
-    background:rgba(232,25,44,.1);color:var(--accent);
-    border-color:rgba(232,25,44,.25);
-    box-shadow:0 0 0 1px rgba(232,25,44,.1);
-}
-.adm-nav-item.active .adm-nav-icon{color:var(--accent)}
-.adm-nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
-.adm-nav-badge{
-    margin-left:auto;min-width:18px;height:18px;
-    background:var(--accent);color:#fff;
-    font-size:9px;font-weight:700;
-    border-radius:9px;padding:0 5px;
-    display:flex;align-items:center;justify-content:center;
+  --bg:#f0f0f0;--bg2:#e8e8e8;--surface:#ffffff;--surface2:#f5f5f5;--surface3:#ededed;
+  --border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.13);--border3:rgba(0,0,0,.20);
+  --text:#0a0a0a;--text2:#505050;--text3:#a0a0a0;
+  --red-dim:rgba(232,25,44,.08);--red-glow:rgba(232,25,44,.18);
+  --shadow:0 4px 24px rgba(0,0,0,.1);
 }
 
-.adm-sidebar-footer{
-    padding:12px 10px;border-top:1px solid var(--border);flex-shrink:0;
-    display:flex;flex-direction:column;gap:6px;
-}
-.adm-theme-btn{
-    display:flex;align-items:center;gap:8px;
-    padding:8px 10px;border-radius:8px;
-    background:var(--card2);border:1px solid var(--border);
-    color:var(--text2);font-size:11px;font-weight:600;
-    cursor:pointer;transition:all var(--t);width:100%;
-}
-.adm-theme-btn:hover{border-color:var(--border2);color:var(--text)}
-.adm-back-btn{
-    display:flex;align-items:center;gap:8px;
-    padding:8px 10px;border-radius:8px;
-    background:transparent;border:1px solid var(--border);
-    color:var(--muted);font-size:11px;font-weight:600;
-    cursor:pointer;transition:all var(--t);width:100%;text-decoration:none;
-}
-.adm-back-btn:hover{border-color:var(--border2);color:var(--text2)}
+/* ══════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════ */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--border3)}
 
-/* ── MAIN CONTENT ── */
-.adm-main{margin-left:var(--sidebar);flex:1;min-height:100vh;background:var(--bg)}
-.adm-topbar{
-    height:56px;background:var(--card);border-bottom:1px solid var(--border);
-    display:flex;align-items:center;padding:0 24px;gap:14px;
-    position:sticky;top:0;z-index:50;
-}
-.adm-topbar-title{font-size:15px;font-weight:700;flex:1}
-.adm-topbar-sub{font-size:11px;color:var(--muted)}
+/* ══════════════════════════════════════
+   LAYOUT SHELL
+══════════════════════════════════════ */
+.app{display:flex;height:100vh;overflow:hidden;background:var(--bg)}
 
-/* ── PANELS ── */
-.adm-panel{display:none;padding:24px;animation:fadeIn .18s ease}
-.adm-panel.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-
-/* ── STAT CARDS ── */
-.scard-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
-.scard{
-    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
-    padding:14px 16px;
-    box-shadow:var(--inset);
-    transition:border-color var(--t),transform var(--t);
-}
-.scard:hover{border-color:var(--border2);transform:translateY(-1px)}
-.scard-val{font-family:'Bebas Neue',sans-serif;font-size:36px;line-height:1;margin-bottom:4px}
-.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
-
-/* ── SECTION HEADER ── */
-.adm-section-head{
-    display:flex;align-items:center;justify-content:space-between;
-    margin-bottom:14px;padding-bottom:10px;
-    border-bottom:1px solid var(--border);
-}
-.adm-section-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
-.adm-section-badge{
-    background:var(--card2);border:1px solid var(--border);
-    border-radius:20px;padding:2px 9px;font-size:10px;color:var(--muted);font-weight:600;
+/* ══════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════ */
+.sidebar{
+  width:var(--sidebar);flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  height:100vh;overflow:hidden;
+  position:relative;z-index:200;
+  transition:transform var(--t);
 }
 
-/* ── BUTTONS ── */
+/* Logo area */
+.s-logo{
+  padding:20px 18px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;
+  flex-shrink:0;
+}
+.s-logo-badge{
+  width:36px;height:36px;border-radius:10px;
+  background:var(--red);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;
+  box-shadow:var(--glow-red);
+}
+.s-logo-name{font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text)}
+.s-logo-tag{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
+
+/* Nav */
+.s-nav{flex:1;padding:12px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.s-section{
+  font-size:9px;font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:1.2px;
+  padding:10px 8px 4px;margin-top:4px;
+}
+.s-section:first-child{margin-top:0}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;border-radius:8px;
+  color:var(--text2);font-size:12px;font-weight:500;
+  cursor:pointer;transition:all var(--t);
+  border:1px solid transparent;
+  position:relative;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text);border-color:var(--border)}
+.nav-item.active{
+  background:var(--red-dim);color:var(--red);
+  border-color:var(--red-glow);
+}
+.nav-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.nav-label{flex:1}
+.nav-badge{
+  min-width:18px;height:18px;padding:0 5px;
+  background:var(--red);color:#fff;
+  font-size:9px;font-weight:800;
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+}
+
+/* Sidebar footer */
+.s-footer{
+  padding:12px 10px;border-top:1px solid var(--border);
+  flex-shrink:0;display:flex;flex-direction:column;gap:6px;
+}
+.s-footer-btn{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 10px;border-radius:8px;
+  font-size:12px;font-weight:600;
+  cursor:pointer;transition:all var(--t);
+  border:1px solid var(--border);
+  color:var(--text2);background:var(--surface2);
+  width:100%;
+}
+.s-footer-btn:hover{border-color:var(--border2);color:var(--text)}
+
+/* ══════════════════════════════════════
+   MAIN CONTENT AREA
+══════════════════════════════════════ */
+.main{
+  flex:1;display:flex;flex-direction:column;
+  overflow:hidden;min-width:0;
+}
+
+/* Topbar */
+.topbar{
+  height:var(--topbar);flex-shrink:0;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:12px;
+  position:relative;z-index:100;
+}
+.topbar-hamburger{
+  display:none;width:32px;height:32px;border-radius:7px;
+  border:1px solid var(--border);background:var(--surface2);
+  align-items:center;justify-content:center;font-size:14px;
+  color:var(--text2);cursor:pointer;
+}
+.topbar-title{font-size:15px;font-weight:700;color:var(--text);flex:1}
+.topbar-sub{font-size:11px;color:var(--text3)}
+.topbar-actions{display:flex;align-items:center;gap:8px}
+
+/* Content area */
+.content{flex:1;overflow-y:auto;background:var(--bg)}
+.panel{display:none;padding:24px;animation:panelIn .2s ease}
+.panel.active{display:block}
+@keyframes panelIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ══════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════ */
 .btn{
-    display:inline-flex;align-items:center;gap:6px;
-    padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;
-    cursor:pointer;border:1px solid;transition:all var(--t);
-    font-family:inherit;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:8px;
+  font-size:12px;font-weight:700;
+  cursor:pointer;transition:all var(--t);
+  border:1px solid;white-space:nowrap;
+  font-family:inherit;
 }
-.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
-.btn:active{transform:translateY(0)}
-.btn-primary{background:var(--accent);border-color:var(--accent2);color:#fff;box-shadow:0 0 12px var(--accent-glow)}
-.btn-green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--green);box-shadow:0 0 8px var(--green-glow)}
-.btn-amber{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--amber)}
-.btn-purple{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:var(--purple)}
-.btn-blue{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:var(--blue)}
-.btn-red{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red)}
-.btn-ghost{background:transparent;border-color:var(--border);color:var(--text2)}
+.btn:active{transform:scale(.97)}
+.btn-red{background:var(--red);border-color:var(--red2);color:#fff;box-shadow:var(--glow-red)}
+.btn-red:hover{filter:brightness(1.1)}
+.btn-ghost{background:var(--surface2);border-color:var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--border2);color:var(--text)}
-.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
-.btn-wide{width:100%;justify-content:center}
+.btn-green{background:var(--green-dim);border-color:rgba(34,197,94,.3);color:var(--green)}
+.btn-green:hover{background:rgba(34,197,94,.18)}
+.btn-amber{background:var(--amber-dim);border-color:rgba(245,158,11,.3);color:var(--amber)}
+.btn-blue{background:var(--blue-dim);border-color:rgba(59,130,246,.3);color:var(--blue)}
+.btn-purple{background:var(--purple-dim);border-color:rgba(139,92,246,.3);color:var(--purple)}
+.btn-sm{padding:6px 12px;font-size:11px;border-radius:7px}
+.btn-xs{padding:4px 9px;font-size:10px;border-radius:6px}
 .btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:8px}
+.btn-wide{width:100%;justify-content:center}
+.btn-loading .btn-text{display:none}
+.btn-loading .spinner{display:inline-block}
 
-/* ── INPUT ── */
-.adm-inp{
-    width:100%;background:var(--card2);border:1px solid var(--border);
-    border-radius:8px;color:var(--text);font-size:12px;
-    padding:9px 12px;outline:none;transition:border-color var(--t);
+/* ══════════════════════════════════════
+   STAT CARDS ROW
+══════════════════════════════════════ */
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;margin-bottom:24px;
 }
-.adm-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
-.adm-inp::placeholder{color:var(--muted)}
-.adm-textarea{resize:none;min-height:80px;line-height:1.5}
-.adm-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px}
-.adm-field{margin-bottom:12px}
-
-/* ── CARD CONTAINER ── */
-.adm-card{
-    background:var(--card);border:1px solid var(--border);
-    border-radius:var(--r);padding:16px;
-    box-shadow:var(--inset);
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:18px 20px;
+  transition:border-color var(--t),transform var(--t);
+  position:relative;overflow:hidden;
 }
-.adm-card+.adm-card{margin-top:10px}
-
-/* ── TOP MANGA LIST ── */
-.top-list{display:flex;flex-direction:column;gap:4px}
-.top-row{
-    display:flex;align-items:center;gap:10px;
-    padding:8px 12px;background:var(--card2);
-    border:1px solid var(--border);border-radius:8px;
-    transition:border-color var(--t);
+.stat-card::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,transparent 50%);
+  pointer-events:none;
 }
-.top-row:hover{border-color:var(--border2)}
-.top-idx{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);width:22px;flex-shrink:0;text-align:center}
-.top-name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top-likes{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
-
-/* ── ADMIN LIST ── */
-.admin-row{
-    display:flex;align-items:center;gap:10px;
-    padding:9px 12px;background:var(--card2);
-    border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
-    transition:border-color var(--t);
+.stat-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.stat-accent{border-color:rgba(232,25,44,.25)!important;background:rgba(232,25,44,.04)!important}
+.stat-num{
+  font-size:38px;font-weight:900;line-height:1;
+  letter-spacing:-1px;margin-bottom:6px;
+  font-variant-numeric:tabular-nums;
 }
-.admin-row:hover{border-color:var(--border2)}
-.admin-av{
-    width:30px;height:30px;border-radius:8px;
-    background:rgba(232,25,44,.12);border:1px solid rgba(232,25,44,.2);
-    display:flex;align-items:center;justify-content:center;
-    font-size:13px;flex-shrink:0;
+.stat-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.stat-icon{
+  position:absolute;top:16px;right:16px;
+  font-size:20px;opacity:.4;
 }
-.admin-info{flex:1;min-width:0}
-.admin-name{font-size:12px;font-weight:600;color:var(--text)}
-.admin-id{font-size:10px;color:var(--muted);font-family:monospace}
 
-/* ── ARCHIVE ── */
-.aitem{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px}
-.atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
-.atext{font-size:12px;color:var(--text2);margin-bottom:3px}
-.adate{font-size:10px;color:var(--muted)}
-
-/* ── MSG ── */
-.amsg-item{padding:11px 13px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;position:relative}
-.amsg-text{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:5px}
-.amsg-meta{font-size:10px;color:var(--muted)}
-.amsg-del{position:absolute;top:8px;right:8px}
-
-/* ── MANGA EDIT LIST ── */
-.me-item{
-    display:flex;align-items:center;gap:10px;
-    padding:9px 12px;background:var(--card2);
-    border:1px solid var(--border);border-radius:8px;
-    cursor:pointer;transition:all var(--t);margin-bottom:5px;
+/* ══════════════════════════════════════
+   CARDS / PANELS
+══════════════════════════════════════ */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);overflow:hidden;
 }
-.me-item:hover{border-color:var(--border2);background:var(--card3)}
-.me-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card3);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
-.me-title{font-size:12px;color:var(--text);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.me-badge{font-size:10px;color:var(--muted);flex-shrink:0}
+.card-head{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.card-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.card-body{padding:16px 20px}
+.card-body-flush{padding:0}
+.card+.card{margin-top:14px}
 
-/* ── CHAPTER ITEM ── */
+/* ══════════════════════════════════════
+   GRID LAYOUTS
+══════════════════════════════════════ */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ══════════════════════════════════════
+   FORM ELEMENTS
+══════════════════════════════════════ */
+.field{margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.label{
+  display:block;font-size:10px;font-weight:700;
+  color:var(--text3);text-transform:uppercase;letter-spacing:.7px;
+  margin-bottom:6px;
+}
+.input{
+  width:100%;background:var(--surface2);
+  border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-size:12px;
+  padding:9px 12px;transition:border-color var(--t);
+}
+.input:focus{border-color:rgba(232,25,44,.5);box-shadow:0 0 0 3px rgba(232,25,44,.08)}
+.input::placeholder{color:var(--text3)}
+.textarea{resize:none;min-height:90px;line-height:1.5}
+select.input{cursor:pointer}
+.input-row{display:flex;gap:8px}
+.input-row .input{flex:1}
+
+/* ══════════════════════════════════════
+   LISTS / TABLE ROWS
+══════════════════════════════════════ */
+.list{display:flex;flex-direction:column;gap:6px}
+.list-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:9px;
+  transition:border-color var(--t);
+}
+.list-row:hover{border-color:var(--border2)}
+.list-row-click{cursor:pointer}
+.list-row-click:hover{background:var(--surface3)}
+.row-icon{
+  width:34px;height:34px;border-radius:8px;
+  background:var(--surface3);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;
+}
+.row-icon-red{background:var(--red-dim);border-color:var(--red-glow);color:var(--red)}
+.row-main{flex:1;min-width:0}
+.row-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:10px;color:var(--text3);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.row-end{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* cover thumbnail */
+.cover-thumb{
+  width:30px;height:42px;border-radius:5px;
+  object-fit:cover;border:1px solid var(--border);flex-shrink:0;
+}
+.cover-placeholder{
+  width:30px;height:42px;border-radius:5px;
+  background:var(--surface3);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;flex-shrink:0;
+}
+
+/* ══════════════════════════════════════
+   TOP MANGA LIST
+══════════════════════════════════════ */
+.top-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:9px;
+  margin-bottom:5px;transition:border-color var(--t);
+}
+.top-item:hover{border-color:var(--border2)}
+.top-num{
+  font-size:20px;font-weight:900;color:var(--text3);
+  width:24px;text-align:center;flex-shrink:0;
+  font-variant-numeric:tabular-nums;
+}
+.top-num.gold{color:#f59e0b}
+.top-num.silver{color:#94a3b8}
+.top-num.bronze{color:#a16207}
+.top-name{flex:1;font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-likes{font-size:11px;font-weight:700;color:var(--red)}
+
+/* ══════════════════════════════════════
+   QUICK ACTIONS GRID
+══════════════════════════════════════ */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qa-card{
+  padding:16px;border-radius:var(--radius-lg);border:1px solid;
+  cursor:pointer;transition:all var(--t);text-align:left;
+  display:flex;flex-direction:column;gap:6px;
+  background:var(--surface2);
+  font-family:inherit;
+}
+.qa-card:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.qa-card:active{transform:scale(.98)}
+.qa-card-icon{font-size:22px;line-height:1}
+.qa-card-title{font-size:13px;font-weight:700}
+.qa-card-sub{font-size:11px;opacity:.6}
+.qa-red{border-color:var(--red-glow);color:var(--red)}
+.qa-green{border-color:rgba(34,197,94,.25);color:var(--green)}
+.qa-amber{border-color:rgba(245,158,11,.25);color:var(--amber)}
+.qa-purple{border-color:rgba(139,92,246,.25);color:var(--purple)}
+.qa-blue{border-color:rgba(59,130,246,.25);color:var(--blue)}
+
+/* ══════════════════════════════════════
+   ARCHIVE / LOG
+══════════════════════════════════════ */
+.log-item{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;gap:12px;
+}
+.log-item:last-child{border-bottom:none}
+.log-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--border2);margin-top:5px;flex-shrink:0;
+}
+.log-dot-add{background:var(--green)}
+.log-dot-edit{background:var(--amber)}
+.log-dot-del{background:var(--red)}
+.log-type{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.log-text{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:3px}
+.log-time{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+/* ══════════════════════════════════════
+   TAGS / CHIPS
+══════════════════════════════════════ */
+.chip-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chip{
+  padding:4px 11px;border-radius:20px;font-size:11px;
+  cursor:pointer;border:1px solid var(--border);color:var(--text2);
+  transition:all var(--t);
+}
+.chip:hover{border-color:var(--border2);color:var(--text)}
+.chip.on{background:var(--purple-dim);border-color:rgba(139,92,246,.4);color:var(--purple)}
+.chip.nsfw{border-color:rgba(232,25,44,.25);color:var(--red)}
+.chip.nsfw.on{background:var(--red-dim)}
+.tg-row{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 10px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:8px;margin-bottom:4px;
+}
+.tg-name{flex:1;font-size:12px;color:var(--text);font-weight:500}
+.tg-slug{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+/* ══════════════════════════════════════
+   MESSAGES / SUGGESTIONS
+══════════════════════════════════════ */
+.msg-item{
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  position:relative;
+}
+.msg-item:last-child{border-bottom:none}
+.msg-text{font-size:13px;color:var(--text);line-height:1.6;margin-bottom:6px;padding-right:80px}
+.msg-meta{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.msg-del{position:absolute;top:12px;right:12px}
+
+.sug-item{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.sug-item:last-child{border-bottom:none}
+.sug-text{flex:1;font-size:12px;color:var(--text);line-height:1.6}
+.sug-meta{font-size:10px;color:var(--text3);margin-top:4px;font-family:'JetBrains Mono',monospace}
+
+/* ══════════════════════════════════════
+   CHAPTER ROWS
+══════════════════════════════════════ */
 .ch-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:8px 11px;background:var(--card2);
-    border:1px solid var(--border);border-radius:7px;margin-bottom:4px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
 }
 .ch-row-label{font-size:12px;font-weight:600;color:var(--text)}
 
-/* ── SUGGEST ── */
-.sug-item{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;display:flex;gap:10px;align-items:flex-start}
-.sug-text{font-size:12px;color:var(--text);flex:1;line-height:1.5}
-.sug-meta{font-size:10px;color:var(--muted);margin-top:3px}
-.sug-read-btn{padding:4px 10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:5px;color:var(--green);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all var(--t)}
-.sug-read-btn:hover{background:rgba(34,197,94,.2)}
-
-/* ── TAGS / GENRES ── */
-.tg-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card2);border:1px solid var(--border);border-radius:7px;margin-bottom:4px}
-.tg-name{flex:1;font-size:12px;color:var(--text)}
-.tg-slug{font-size:10px;color:var(--muted);font-family:monospace}
-
-/* ── FILE UPLOAD ZONE ── */
-.adm-upload-zone{
-    border:2px dashed var(--border2);border-radius:10px;
-    padding:20px;text-align:center;cursor:pointer;
-    transition:all var(--t);background:var(--card2);
-    position:relative;overflow:hidden;
+/* ══════════════════════════════════════
+   FILE UPLOAD
+══════════════════════════════════════ */
+.upload-zone{
+  border:2px dashed var(--border2);border-radius:var(--radius-lg);
+  padding:28px 20px;text-align:center;cursor:pointer;
+  transition:all var(--t);background:var(--surface2);
+  position:relative;overflow:hidden;
 }
-.adm-upload-zone:hover{border-color:var(--accent);background:rgba(232,25,44,.04)}
-.adm-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.adm-upload-icon{font-size:24px;margin-bottom:6px}
-.adm-upload-text{font-size:11px;color:var(--muted)}
-.adm-upload-hint{font-size:10px;color:var(--muted);margin-top:4px}
-.adm-preview-count{font-size:12px;font-weight:700;color:var(--green);margin-top:6px}
+.upload-zone:hover{border-color:rgba(232,25,44,.4);background:rgba(232,25,44,.03)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.upload-icon{font-size:28px;margin-bottom:8px}
+.upload-text{font-size:12px;color:var(--text2);font-weight:500}
+.upload-hint{font-size:10px;color:var(--text3);margin-top:4px}
+.upload-count{font-size:12px;font-weight:700;color:var(--green);margin-top:8px}
 
-/* ── FILE TABS ── */
-.adm-file-tabs{display:flex;gap:4px;margin-bottom:10px}
-.adm-ftab{
-    padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;
-    cursor:pointer;transition:all var(--t);
-    background:var(--card2);border:1px solid var(--border);color:var(--text2);
+.file-tabs{display:flex;gap:5px;margin-bottom:12px}
+.ftab{
+  padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;
+  cursor:pointer;transition:all var(--t);
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
 }
-.adm-ftab.active{background:rgba(232,25,44,.1);border-color:rgba(232,25,44,.3);color:var(--accent)}
-.adm-fpanel{display:none}
-.adm-fpanel.active{display:block}
+.ftab.active{background:var(--red-dim);border-color:var(--red-glow);color:var(--red)}
+.fpanel{display:none}
+.fpanel.active{display:block}
 
-/* ── PROGRESS BAR ── */
-.adm-upbar{height:4px;background:var(--card2);border-radius:2px;margin:10px 0;display:none;overflow:hidden}
-.adm-upbar.active{display:block}
-.adm-upbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
+/* ══════════════════════════════════════
+   PROGRESS BAR
+══════════════════════════════════════ */
+.prog-bar{height:3px;background:var(--surface3);border-radius:2px;margin:12px 0;display:none;overflow:hidden}
+.prog-bar.show{display:block}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
 
-/* ── RESULT BANNER ── */
-.adm-result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:10px}
-.adm-result.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green)}
-.adm-result.error{display:block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red)}
+/* ══════════════════════════════════════
+   RESULT BANNERS
+══════════════════════════════════════ */
+.result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:12px}
+.result.ok{display:block;background:var(--green-dim);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.result.err{display:block;background:var(--red-dim);border:1px solid var(--red-glow);color:var(--red)}
 
-/* ── SPINNER ── */
-.adm-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
-.loading .adm-spinner{display:inline-block}
-.loading .btn-label{display:none}
+/* ══════════════════════════════════════
+   SPINNER
+══════════════════════════════════════ */
+.spinner{
+  width:13px;height:13px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;
+  animation:spin .7s linear infinite;display:none;
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── PAGINATION ── */
-.page-row{display:flex;gap:5px;align-items:center;margin-top:10px;flex-wrap:wrap}
+/* ══════════════════════════════════════
+   PAGINATION
+══════════════════════════════════════ */
+.pages{display:flex;gap:5px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .page-btn{
-    padding:5px 11px;background:var(--card2);border:1px solid var(--border);
-    border-radius:6px;color:var(--text2);font-size:11px;font-weight:600;
-    cursor:pointer;font-family:inherit;transition:all var(--t);
+  padding:5px 12px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:6px;
+  color:var(--text2);font-size:11px;font-weight:600;
+  cursor:pointer;transition:all var(--t);font-family:inherit;
 }
 .page-btn:hover{border-color:var(--border2);color:var(--text)}
-.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.page-btn.active{background:var(--red);border-color:var(--red2);color:#fff}
+.page-info{font-size:11px;color:var(--text3)}
 
-/* ── GRID 2 COL ── */
-.adm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.adm-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+/* ══════════════════════════════════════
+   DIVIDER
+══════════════════════════════════════ */
+.divider{height:1px;background:var(--border);margin:16px 0}
 
-/* ── QUICK ACTIONS ── */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-.qa-btn{
-    display:flex;flex-direction:column;align-items:flex-start;gap:3px;
-    padding:12px 14px;border-radius:var(--r);border:1px solid;
-    cursor:pointer;transition:all var(--t);text-align:left;
-    font-family:inherit;
+/* ══════════════════════════════════════
+   EMPTY STATE
+══════════════════════════════════════ */
+.empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:12px}
+.empty-icon{font-size:36px;margin-bottom:10px}
+
+/* ══════════════════════════════════════
+   ADMIN BADGE
+══════════════════════════════════════ */
+.admin-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;
+  background:var(--red-dim);border:1px solid var(--red-glow);color:var(--red);
 }
-.qa-btn:hover{transform:translateY(-2px);filter:brightness(1.08)}
-.qa-btn-icon{font-size:20px;margin-bottom:3px}
-.qa-btn-label{font-size:12px;font-weight:700}
-.qa-btn-sub{font-size:10px;opacity:.7}
-.qa-green{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:var(--green)}
-.qa-amber{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:var(--amber)}
-.qa-purple{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--purple)}
-.qa-blue{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:var(--blue)}
-.qa-red{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.25);color:var(--red)}
 
-/* ── ADD ADMIN FORM ── */
-.add-admin-box{
-    display:none;margin-top:10px;
-    padding:14px;background:rgba(239,68,68,.04);
-    border:1px solid rgba(239,68,68,.18);border-radius:10px;
+/* ══════════════════════════════════════
+   ACTIVITY MINI CHART (fake bars)
+══════════════════════════════════════ */
+.mini-bars{display:flex;align-items:flex-end;gap:3px;height:40px}
+.mini-bar{flex:1;background:var(--surface3);border-radius:3px 3px 0 0;transition:height .5s ease,background .2s}
+.mini-bar:hover{background:var(--red)}
+
+/* ══════════════════════════════════════
+   MOBILE OVERLAY
+══════════════════════════════════════ */
+.overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.7);z-index:150;
+  backdrop-filter:blur(4px);
 }
-.add-admin-box.open{display:block}
+.overlay.open{display:block}
 
-/* ── TAGS CHIP ── */
-.tag-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-.tag-chip{
-    padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;
-    border:1px solid var(--border);color:var(--text2);
-    transition:all var(--t);display:inline-flex;align-items:center;gap:3px;
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
+@media(max-width:900px){
+  .grid-2{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr 1fr}
 }
-.tag-chip.checked{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.4);color:var(--purple)}
-.tag-chip.nsfw{border-color:rgba(239,68,68,.3);color:var(--red)}
-.tag-chip.nsfw.checked{background:rgba(239,68,68,.12)}
-
-/* ── MOBILE MENU TOGGLE ── */
-.adm-menu-toggle{display:none;padding:8px;margin-right:4px;border-radius:7px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:16px}
-
-/* ── RESPONSIVE ── */
 @media(max-width:768px){
-    .adm-sidebar{transform:translateX(-100%)}
-    .adm-sidebar.open{transform:translateX(0)}
-    .adm-main{margin-left:0}
-    .adm-menu-toggle{display:flex;align-items:center;justify-content:center}
-    .scard-row{grid-template-columns:1fr 1fr}
-    .adm-grid2{grid-template-columns:1fr}
-    .qa-grid{grid-template-columns:1fr 1fr}
+  .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .topbar-hamburger{display:flex}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .qa-grid{grid-template-columns:1fr}
+  .panel{padding:16px}
 }
 @media(max-width:480px){
-    .scard-row{grid-template-columns:1fr 1fr}
-    .qa-grid{grid-template-columns:1fr}
-    .adm-panel{padding:14px}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .panel{padding:12px}
 }
-
-/* ── OVERLAY for mobile ── */
-.adm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;backdrop-filter:blur(4px)}
-.adm-overlay.open{display:block}
 </style>
 </head>
 <body class="<?=htmlspecialchars($bodyClass)?>">
 
-<div class="adm-layout">
+<div class="app">
 
-<!-- SIDEBAR -->
-<aside class="adm-sidebar" id="adm-sidebar">
-    <div class="adm-logo">
-        <div class="adm-logo-icon">⚙️</div>
-        <div>
-            <div class="adm-logo-text">BLACKWATCH</div>
-            <div class="adm-logo-sub">Admin Panel</div>
-        </div>
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="s-logo">
+    <div class="s-logo-badge">⚙</div>
+    <div>
+      <div class="s-logo-name">BLACKWATCH</div>
+      <div class="s-logo-tag">Admin Panel</div>
+    </div>
+  </div>
+
+  <nav class="s-nav">
+    <div class="s-section">Обзор</div>
+    <div class="nav-item active" onclick="nav('dashboard',this)">
+      <span class="nav-icon">◈</span>
+      <span class="nav-label">Дашборд</span>
+    </div>
+    <div class="nav-item" onclick="nav('archive',this)">
+      <span class="nav-icon">◷</span>
+      <span class="nav-label">Журнал действий</span>
     </div>
 
-    <nav class="adm-nav">
-        <div class="adm-nav-section">Обзор</div>
-        <div class="adm-nav-item active" onclick="admNav('stats',this)">
-            <span class="adm-nav-icon">📊</span> Статистика
-        </div>
-        <div class="adm-nav-item" onclick="admNav('archive',this)">
-            <span class="adm-nav-icon">🗂</span> Архив действий
-        </div>
-
-        <div class="adm-nav-section">Контент</div>
-        <div class="adm-nav-item" onclick="admNav('edit',this)">
-            <span class="adm-nav-icon">✏️</span> Редактирование
-        </div>
-        <div class="adm-nav-item" onclick="admNav('add-chapter',this)">
-            <span class="adm-nav-icon">📚</span> Добавить главу
-        </div>
-        <div class="adm-nav-item" onclick="admNav('tags',this)">
-            <span class="adm-nav-icon">🏷</span> Теги и жанры
-        </div>
-
-        <div class="adm-nav-section">Пользователи</div>
-        <div class="adm-nav-item" onclick="admNav('messages',this)">
-            <span class="adm-nav-icon">📨</span> Сообщения
-            <span class="adm-nav-badge" id="msg-nav-badge" style="display:none"></span>
-        </div>
-        <div class="adm-nav-item" onclick="admNav('suggestions',this)">
-            <span class="adm-nav-icon">💡</span> Предложения
-            <span class="adm-nav-badge" id="sug-nav-badge" style="display:none"></span>
-        </div>
-        <div class="adm-nav-item" onclick="admNav('admins',this)">
-            <span class="adm-nav-icon">🛡</span> Администраторы
-        </div>
-    </nav>
-
-    <div class="adm-sidebar-footer">
-        <button class="adm-theme-btn" onclick="admToggleTheme()">
-            <span id="adm-theme-icon">🌙</span>
-            <span id="adm-theme-label">Тёмная тема</span>
-        </button>
-        <a href="/" class="adm-back-btn">← На главную</a>
+    <div class="s-section">Контент</div>
+    <div class="nav-item" onclick="nav('edit',this)">
+      <span class="nav-icon">✎</span>
+      <span class="nav-label">Редактирование</span>
     </div>
+    <div class="nav-item" onclick="nav('add-chapter',this)">
+      <span class="nav-icon">＋</span>
+      <span class="nav-label">Добавить главу</span>
+    </div>
+    <div class="nav-item" onclick="nav('tags',this)">
+      <span class="nav-icon">⊞</span>
+      <span class="nav-label">Теги и жанры</span>
+    </div>
+
+    <div class="s-section">Пользователи</div>
+    <div class="nav-item" onclick="nav('messages',this)">
+      <span class="nav-icon">✉</span>
+      <span class="nav-label">Рассылка</span>
+      <span class="nav-badge" id="msg-badge" style="display:none"></span>
+    </div>
+    <div class="nav-item" onclick="nav('suggestions',this)">
+      <span class="nav-icon">☆</span>
+      <span class="nav-label">Предложения</span>
+      <span class="nav-badge" id="sug-badge" style="display:none"></span>
+    </div>
+    <div class="nav-item" onclick="nav('admins',this)">
+      <span class="nav-icon">◈</span>
+      <span class="nav-label">Администраторы</span>
+    </div>
+  </nav>
+
+  <div class="s-footer">
+    <button class="s-footer-btn" onclick="toggleTheme()">
+      <span id="theme-icon">🌙</span>
+      <span id="theme-label">Сменить тему</span>
+    </button>
+    <a href="/" class="s-footer-btn" style="text-decoration:none">
+      <span>←</span>
+      <span>На главную</span>
+    </a>
+  </div>
 </aside>
 
-<!-- MOBILE OVERLAY -->
-<div class="adm-overlay" id="adm-overlay" onclick="closeSidebar()"></div>
+<!-- ═══════════ OVERLAY ═══════════ -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
-<!-- MAIN -->
-<main class="adm-main">
+<!-- ═══════════ MAIN ═══════════ -->
+<div class="main">
 
-    <!-- TOPBAR -->
-    <div class="adm-topbar">
-        <button class="adm-menu-toggle" onclick="openSidebar()">☰</button>
-        <div style="flex:1">
-            <div class="adm-topbar-title" id="topbar-title">📊 Статистика</div>
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="topbar-hamburger" id="hamburger" onclick="openSidebar()">☰</button>
+    <div style="flex:1">
+      <div class="topbar-title" id="topbar-title">Дашборд</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">＋ Глава</button>
+      <button class="btn btn-red btn-sm" onclick="window.location.href='/'">＋ Манга</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ═══ PANEL: DASHBOARD ═══ -->
+    <div class="panel active" id="panel-dashboard">
+
+      <!-- Stat cards -->
+      <div class="stats-grid" id="stat-cards">
+        <?php for($i=0;$i<6;$i++): ?>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--text3)">—</div>
+          <div class="stat-label">Загрузка...</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-green btn-sm" onclick="admNav('add-chapter', document.querySelector('.adm-nav-item:nth-child(5)'))">
-                + Глава
+        <?php endfor; ?>
+      </div>
+
+      <div class="grid-2" style="gap:16px">
+
+        <!-- Top Manga -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">♥ Топ по лайкам</div>
+            <button class="btn btn-ghost btn-xs" onclick="nav('edit',null)">Редактировать →</button>
+          </div>
+          <div class="card-body-flush">
+            <div id="top-manga-list" style="padding:12px 16px">
+              <div class="empty"><div class="empty-icon">📚</div>Загрузка...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">⚡ Быстрые действия</div>
+          </div>
+          <div class="card-body">
+            <div class="qa-grid">
+              <button class="qa-card qa-green" onclick="window.location.href='/'">
+                <div class="qa-card-icon">＋</div>
+                <div class="qa-card-title">Новая манга</div>
+                <div class="qa-card-sub">ZIP, обложка, описание</div>
+              </button>
+              <button class="qa-card qa-amber" onclick="nav('add-chapter',null)">
+                <div class="qa-card-icon">📚</div>
+                <div class="qa-card-title">Новая глава</div>
+                <div class="qa-card-sub">Загрузить страницы</div>
+              </button>
+              <button class="qa-card qa-purple" onclick="nav('messages',null)">
+                <div class="qa-card-icon">✉</div>
+                <div class="qa-card-title">Написать всем</div>
+                <div class="qa-card-sub">Уведомление</div>
+              </button>
+              <button class="qa-card qa-blue" onclick="nav('suggestions',null)">
+                <div class="qa-card-icon">☆</div>
+                <div class="qa-card-title">Предложения</div>
+                <div class="qa-card-sub" id="qa-sug-count">—</div>
+              </button>
+            </div>
+            <div style="margin-top:10px">
+              <button class="qa-card qa-red" onclick="nav('admins',null)" style="width:100%;flex-direction:row;align-items:center;gap:12px;padding:13px 16px">
+                <div class="qa-card-icon" style="font-size:18px">🛡</div>
+                <div>
+                  <div class="qa-card-title">Управление администраторами</div>
+                  <div class="qa-card-sub">Добавить или удалить</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /panel-dashboard -->
+
+    <!-- ═══ PANEL: ARCHIVE ═══ -->
+    <div class="panel" id="panel-archive">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">◷ Журнал действий</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadArchive(0)">↺ Обновить</button>
+        </div>
+        <div class="card-body-flush" id="archive-list">
+          <div class="empty"><div class="empty-icon">⏳</div>Загрузка...</div>
+        </div>
+        <div class="card-body" style="padding-top:0">
+          <div class="pages" id="archive-pages"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PANEL: EDIT ═══ -->
+    <div class="panel" id="panel-edit">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">✎ Редактирование манги</div>
+        </div>
+        <div class="card-body">
+          <div id="edit-search-row" style="display:flex;gap:8px;margin-bottom:14px">
+            <input class="input" id="edit-search" type="text" placeholder="🔍 Поиск по названию..." onkeydown="if(event.key==='Enter')searchManga()">
+            <button class="btn btn-red" onclick="searchManga()">Найти</button>
+          </div>
+          <div id="manga-list">
+            <div class="empty"><div class="empty-icon">🔍</div>Введите название для поиска</div>
+          </div>
+          <div class="pages" id="edit-pages"></div>
+          <div id="edit-form-wrap" style="display:none">
+            <button class="btn btn-ghost btn-sm" onclick="backToList()" style="margin-bottom:16px">← Назад</button>
+            <div id="edit-form"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PANEL: ADD CHAPTER ═══ -->
+    <div class="panel" id="panel-add-chapter">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">📚 Добавить главу</div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label class="label">Серия / Манга</label>
+            <div class="input-row" style="margin-bottom:10px">
+              <input class="input" id="ch-search" type="text" placeholder="Поиск серии..." onkeydown="if(event.key==='Enter')searchForChapter()">
+              <button class="btn btn-red" onclick="searchForChapter()">Найти</button>
+            </div>
+            <div id="ch-manga-list">
+              <div style="color:var(--text3);font-size:12px">Введите название и нажмите «Найти»</div>
+            </div>
+          </div>
+
+          <div id="ch-form" style="display:none">
+            <div class="divider"></div>
+            <div class="field">
+              <label class="label">Номер и название главы</label>
+              <div style="display:grid;grid-template-columns:130px 1fr;gap:8px">
+                <input class="input" type="number" id="ch-num" placeholder="№ главы (1, 2.5...)" step="0.1" min="0">
+                <input class="input" type="text" id="ch-title" placeholder="Название (необязательно)">
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label">Страницы</label>
+              <div class="file-tabs">
+                <div class="ftab active" id="ftab-zip" onclick="switchTab('zip')">📦 ZIP-архив</div>
+                <div class="ftab" id="ftab-photos" onclick="switchTab('photos')">📸 Изображения</div>
+              </div>
+              <div class="fpanel active" id="fpanel-zip">
+                <div class="upload-zone">
+                  <input type="file" id="ch-zip" accept=".zip" onchange="chZipChange(this)">
+                  <div class="upload-icon">📦</div>
+                  <div class="upload-text">ZIP со страницами главы</div>
+                  <div class="upload-hint">Нажмите или перетащите файл</div>
+                  <div class="upload-count" id="ch-zip-count"></div>
+                </div>
+              </div>
+              <div class="fpanel" id="fpanel-photos">
+                <div class="upload-zone">
+                  <input type="file" id="ch-photos" accept="image/*" multiple onchange="chPhotosChange(this)">
+                  <div class="upload-icon">📸</div>
+                  <div class="upload-text">Выберите страницы (несколько файлов)</div>
+                  <div class="upload-hint">Нажмите или перетащите файлы</div>
+                  <div class="upload-count" id="ch-photos-count"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="prog-bar" id="ch-progress"><div class="prog-fill" id="ch-progress-fill"></div></div>
+
+            <button class="btn btn-red btn-wide" id="ch-submit" onclick="submitChapter()">
+              <span class="spinner" id="ch-spinner"></span>
+              <span class="btn-text">📤 Загрузить главу</span>
             </button>
-            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">
-                ➕ Манга
-            </button>
+            <div class="result" id="ch-result"></div>
+          </div>
         </div>
+      </div>
     </div>
 
-    <!-- ══ PANEL: STATS ══ -->
-    <div class="adm-panel active" id="adm-panel-stats">
-        <div class="scard-row" id="adm-stat-cards">
-            <?php for($i=0;$i<6;$i++): ?>
-            <div class="scard"><div class="scard-val" style="color:var(--muted)">—</div><div class="scard-label">Загрузка...</div></div>
-            <?php endfor; ?>
-        </div>
-
-        <div class="adm-grid2" style="gap:14px">
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">♥ Топ по лайкам</div>
-                    <button class="btn btn-ghost btn-sm" onclick="admNav('edit',document.querySelector('[onclick*=edit]'))">Ред-ть →</button>
-                </div>
-                <div class="top-list" id="adm-top-list">
-                    <div style="color:var(--muted);font-size:12px;padding:8px 0">Загрузка...</div>
-                </div>
+    <!-- ═══ PANEL: TAGS ═══ -->
+    <div class="panel" id="panel-tags">
+      <div class="grid-2">
+        <!-- Genres -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">🎭 Жанры <span id="genre-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <div class="input-row">
+                <input class="input" id="new-genre-name" placeholder="Название">
+                <input class="input" id="new-genre-slug" placeholder="slug">
+                <button class="btn btn-purple btn-sm" onclick="addGenre()">+</button>
+              </div>
             </div>
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">⚡ Быстрые действия</div>
-                </div>
-                <div class="qa-grid">
-                    <button class="qa-btn qa-green" onclick="window.location.href='/'">
-                        <div class="qa-btn-icon">➕</div>
-                        <div class="qa-btn-label">Добавить мангу</div>
-                        <div class="qa-btn-sub">ZIP, обложка, описание</div>
-                    </button>
-                    <button class="qa-btn qa-amber" onclick="admNav('add-chapter',null)">
-                        <div class="qa-btn-icon">📚</div>
-                        <div class="qa-btn-label">Новая глава</div>
-                        <div class="qa-btn-sub">Загрузить страницы</div>
-                    </button>
-                    <button class="qa-btn qa-purple" onclick="admNav('messages',null)">
-                        <div class="qa-btn-icon">📨</div>
-                        <div class="qa-btn-label">Написать всем</div>
-                        <div class="qa-btn-sub">Уведомление</div>
-                    </button>
-                    <button class="qa-btn qa-blue" onclick="admNav('suggestions',null)">
-                        <div class="qa-btn-icon">💡</div>
-                        <div class="qa-btn-label">Предложки</div>
-                        <div class="qa-btn-sub" id="qa-sug-sub">0 новых</div>
-                    </button>
-                    <button class="qa-btn qa-red" onclick="admNav('admins',null)" style="grid-column:1/-1">
-                        <div class="qa-btn-icon">🛡</div>
-                        <div class="qa-btn-label">Управление админами</div>
-                        <div class="qa-btn-sub">Добавить / удалить</div>
-                    </button>
-                </div>
-            </div>
+            <div id="genres-list"><div class="empty" style="padding:20px 0"><div class="empty-icon">🎭</div>Загрузка...</div></div>
+          </div>
         </div>
+        <!-- Tags -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">🏷 Теги <span id="tag-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <div class="input-row">
+                <input class="input" id="new-tag-name" placeholder="Название">
+                <input class="input" id="new-tag-slug" placeholder="slug">
+                <button class="btn btn-purple btn-sm" onclick="addTag()">+</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer">
+                <input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW тег
+              </label>
+            </div>
+            <div id="tags-list"><div class="empty" style="padding:20px 0"><div class="empty-icon">🏷</div>Загрузка...</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-ghost" onclick="reseedTags()">↺ Загрузить стандартные теги</button>
+        <button class="btn btn-ghost" onclick="dedupTags()">🧹 Удалить дубли</button>
+        <span style="font-size:11px;color:var(--text3)">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
+      </div>
     </div>
 
-    <!-- ══ PANEL: ARCHIVE ══ -->
-    <div class="adm-panel" id="adm-panel-archive">
-        <div class="adm-card">
-            <div class="adm-section-head">
-                <div class="adm-section-title">🗂 Архив действий</div>
-                <button class="btn btn-ghost btn-sm" onclick="loadAdmArchive(0)">↺ Обновить</button>
+    <!-- ═══ PANEL: MESSAGES ═══ -->
+    <div class="panel" id="panel-messages">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">✉ Рассылка пользователям</div>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Текст сообщения</label>
+              <textarea class="input textarea" id="msg-text" placeholder="Введите текст сообщения для всех пользователей..."></textarea>
             </div>
-            <div id="adm-archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            <div class="page-row" id="adm-archive-pages"></div>
+            <button class="btn btn-red btn-wide" onclick="sendMessage()">📨 Отправить всем</button>
+            <div class="result" id="msg-result"></div>
+          </div>
         </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">📋 Отправленные</div>
+            <button class="btn btn-ghost btn-xs" onclick="loadMessages()">↺</button>
+          </div>
+          <div class="card-body-flush" id="msg-list">
+            <div class="empty"><div class="empty-icon">✉</div>Загрузка...</div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- ══ PANEL: EDIT ══ -->
-    <div class="adm-panel" id="adm-panel-edit">
-        <div class="adm-card">
-            <div class="adm-section-head">
-                <div class="adm-section-title">✏️ Редактирование манги</div>
-            </div>
-            <div id="adm-edit-search-row" style="display:flex;gap:8px;margin-bottom:12px">
-                <input class="adm-inp" id="adm-edit-search" type="text" placeholder="🔍 Поиск манги..." onkeydown="if(event.key==='Enter')admSearchManga()">
-                <button class="btn btn-primary" onclick="admSearchManga()">Найти</button>
-            </div>
-            <div id="adm-manga-list"><div style="color:var(--muted);font-size:12px;padding:8px 0">Введи название или оставь пустым</div></div>
-            <div class="page-row" id="adm-edit-pages"></div>
-            <div id="adm-edit-form-wrap" style="display:none">
-                <button class="btn btn-ghost btn-sm" onclick="admBackToList()" style="margin-bottom:14px">← Назад к списку</button>
-                <div id="adm-edit-form"></div>
-            </div>
+    <!-- ═══ PANEL: SUGGESTIONS ═══ -->
+    <div class="panel" id="panel-suggestions">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">☆ Предложения пользователей</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadSuggestions(0)">↺ Обновить</button>
         </div>
+        <div class="card-body-flush" id="sug-list">
+          <div class="empty"><div class="empty-icon">☆</div>Загрузка...</div>
+        </div>
+        <div class="card-body" style="padding-top:0">
+          <div class="pages" id="sug-pages"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- ══ PANEL: ADD CHAPTER ══ -->
-    <div class="adm-panel" id="adm-panel-add-chapter">
-        <div class="adm-card">
-            <div class="adm-section-head">
-                <div class="adm-section-title">📚 Добавить главу</div>
-            </div>
-            <div class="adm-field">
-                <label class="adm-label">Манга / Серия</label>
-                <div style="display:flex;gap:8px;margin-bottom:8px">
-                    <input class="adm-inp" id="adm-ch-search" type="text" placeholder="Поиск серии..." onkeydown="if(event.key==='Enter')admSearchForChapter()">
-                    <button class="btn btn-primary" onclick="admSearchForChapter()">Найти</button>
-                </div>
-                <div id="adm-ch-manga-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Найдите серию выше</div></div>
-            </div>
-            <div id="adm-ch-form" style="display:none">
-                <div style="height:1px;background:var(--border);margin:12px 0"></div>
-                <div class="adm-field">
-                    <label class="adm-label">Новая глава</label>
-                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
-                        <input class="adm-inp" type="number" id="adm-ch-num" placeholder="№ (1, 2, 2.5...)" step="0.1" min="0">
-                        <input class="adm-inp" type="text" id="adm-ch-title" placeholder="Название (необязательно)">
-                    </div>
-                </div>
-                <div class="adm-field">
-                    <div class="adm-file-tabs">
-                        <div class="adm-ftab active" id="adm-ch-tab-zip" onclick="admSwitchChTab('zip')">📦 ZIP</div>
-                        <div class="adm-ftab" id="adm-ch-tab-photos" onclick="admSwitchChTab('photos')">📸 Фото</div>
-                    </div>
-                    <div class="adm-fpanel active" id="adm-ch-panel-zip">
-                        <div class="adm-upload-zone">
-                            <input type="file" id="adm-ch-zip" accept=".zip" onchange="admChZipChange(this)">
-                            <div class="adm-upload-icon">📦</div>
-                            <div class="adm-upload-text">ZIP архив со страницами</div>
-                            <div class="adm-upload-hint">Нажмите или перетащите файл</div>
-                            <div class="adm-preview-count" id="adm-ch-zip-preview"></div>
-                        </div>
-                    </div>
-                    <div class="adm-fpanel" id="adm-ch-panel-photos">
-                        <div class="adm-upload-zone">
-                            <input type="file" id="adm-ch-photos" accept="image/*" multiple onchange="admChPhotosChange(this)">
-                            <div class="adm-upload-icon">📸</div>
-                            <div class="adm-upload-text">Страницы главы (несколько файлов)</div>
-                            <div class="adm-upload-hint">Нажмите или перетащите файлы</div>
-                            <div class="adm-preview-count" id="adm-ch-photos-preview"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="adm-upbar" id="adm-ch-upbar"><div class="adm-upbar-fill" id="adm-ch-upbar-fill"></div></div>
-                <button class="btn btn-primary btn-wide" id="adm-ch-submit" onclick="admSubmitChapter()">
-                    <span class="adm-spinner"></span>
-                    <span class="btn-label">📤 Загрузить главу</span>
-                </button>
-                <div class="adm-result" id="adm-ch-result"></div>
-            </div>
+    <!-- ═══ PANEL: ADMINS ═══ -->
+    <div class="panel" id="panel-admins">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">🛡 Список администраторов</div>
+            <button class="btn btn-ghost btn-xs" onclick="loadAdmins()">↺</button>
+          </div>
+          <div class="card-body-flush" id="admins-list">
+            <div class="empty"><div class="empty-icon">🛡</div>Загрузка...</div>
+          </div>
         </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">⚡ Назначить администратора</div>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Email или Telegram ID</label>
+              <input class="input" id="ap-input" type="text" placeholder="admin@example.com или 123456789">
+            </div>
+            <div class="field">
+              <label class="label">Роль / Тег</label>
+              <input class="input" id="ap-tag" type="text" placeholder="Редактор, Модератор...">
+            </div>
+            <button class="btn btn-red btn-wide" onclick="submitAddAdmin()">✓ Назначить администратором</button>
+            <div class="result" id="ap-result"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- ══ PANEL: TAGS ══ -->
-    <div class="adm-panel" id="adm-panel-tags">
-        <div class="adm-grid2">
-            <!-- GENRES -->
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">🎭 Жанры <span class="adm-section-badge" id="adm-genre-count">0</span></div>
-                </div>
-                <div style="display:flex;gap:6px;margin-bottom:10px">
-                    <input class="adm-inp" id="adm-new-genre-name" placeholder="Название">
-                    <input class="adm-inp" id="adm-new-genre-slug" placeholder="slug">
-                    <button class="btn btn-purple btn-sm" onclick="admAddGenre()">+</button>
-                </div>
-                <div id="adm-genres-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            </div>
-            <!-- TAGS -->
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">🏷 Теги <span class="adm-section-badge" id="adm-tag-count">0</span></div>
-                </div>
-                <div style="display:flex;gap:6px;margin-bottom:6px">
-                    <input class="adm-inp" id="adm-new-tag-name" placeholder="Название">
-                    <input class="adm-inp" id="adm-new-tag-slug" placeholder="slug">
-                    <button class="btn btn-purple btn-sm" onclick="admAddTag()">+</button>
-                </div>
-                <div style="margin-bottom:10px">
-                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px">
-                        <input type="checkbox" id="adm-new-tag-nsfw"> 🔞 NSFW тег
-                    </label>
-                </div>
-                <div id="adm-tags-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            </div>
-        </div>
-        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-purple" onclick="admReseedTags()">🔄 Загрузить дефолтные теги и жанры</button>
-            <button class="btn btn-red" onclick="admDedupTags()">🧹 Удалить дубли</button>
-            <span style="font-size:11px;color:var(--muted);align-self:center">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
-        </div>
-    </div>
-
-    <!-- ══ PANEL: MESSAGES ══ -->
-    <div class="adm-panel" id="adm-panel-messages">
-        <div class="adm-grid2">
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">📨 Написать всем пользователям</div>
-                </div>
-                <div class="adm-field">
-                    <label class="adm-label">Сообщение</label>
-                    <textarea class="adm-inp adm-textarea" id="adm-msg-text" placeholder="Введи текст сообщения..."></textarea>
-                </div>
-                <button class="btn btn-primary btn-wide" onclick="admSendMessage()">📨 Отправить всем</button>
-                <div class="adm-result" id="adm-msg-result"></div>
-            </div>
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">📋 Отправленные сообщения</div>
-                    <button class="btn btn-ghost btn-sm" onclick="admLoadMessages()">↺</button>
-                </div>
-                <div id="adm-msg-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ══ PANEL: SUGGESTIONS ══ -->
-    <div class="adm-panel" id="adm-panel-suggestions">
-        <div class="adm-card">
-            <div class="adm-section-head">
-                <div class="adm-section-title">💡 Предложения пользователей</div>
-                <button class="btn btn-ghost btn-sm" onclick="admLoadSuggestions(0)">↺ Обновить</button>
-            </div>
-            <div id="adm-sug-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            <div class="page-row" id="adm-sug-pages"></div>
-        </div>
-    </div>
-
-    <!-- ══ PANEL: ADMINS ══ -->
-    <div class="adm-panel" id="adm-panel-admins">
-        <div class="adm-grid2">
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">🛡 Список администраторов</div>
-                    <button class="btn btn-ghost btn-sm" onclick="admLoadAdmins()">↺</button>
-                </div>
-                <div id="adm-admins-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
-            </div>
-            <div class="adm-card">
-                <div class="adm-section-head">
-                    <div class="adm-section-title">⚡ Назначить администратора</div>
-                </div>
-                <div class="adm-field">
-                    <label class="adm-label">Email или TG ID</label>
-                    <input class="adm-inp" id="adm-ap-input" type="text" placeholder="admin@example.com или 123456789">
-                </div>
-                <div class="adm-field">
-                    <label class="adm-label">Тег (роль)</label>
-                    <input class="adm-inp" id="adm-ap-tag" type="text" placeholder="Редактор, Модератор...">
-                </div>
-                <button class="btn btn-red btn-wide" onclick="admSubmitAddAdmin()">✓ Назначить администратора</button>
-                <div class="adm-result" id="adm-ap-result"></div>
-            </div>
-        </div>
-    </div>
-
-</main><!-- /adm-main -->
-</div><!-- /adm-layout -->
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
 
 <script>
+/* ══ HELPERS ══ */
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
-function escH(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function $id(id){return document.getElementById(id);}
+function showResult(id,ok,msg){const el=$id(id);el.className='result '+(ok?'ok':'err');el.textContent=msg;}
 
-// ── THEME ──
-function admToggleTheme(){
-    const isLight=document.body.classList.toggle('light');
-    document.documentElement.classList.toggle('light',isLight);
-    document.cookie='bw_theme='+(isLight?'light':'dark')+';max-age='+(86400*365)+';path=/';
-    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
-    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
+/* ══ THEME ══ */
+function toggleTheme(){
+  const light=document.body.classList.toggle('light');
+  document.documentElement.classList.toggle('light',light);
+  document.cookie='bw_theme='+(light?'light':'dark')+';max-age='+(86400*365)+';path=/';
+  $id('theme-icon').textContent=light?'☀️':'🌙';
 }
-// Init theme
-(function(){
-    const isLight=document.body.classList.contains('light');
-    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
-    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
-})();
+(function(){const l=document.body.classList.contains('light');$id('theme-icon').textContent=l?'☀️':'🌙';})();
 
-// ── MOBILE SIDEBAR ──
-function openSidebar(){document.getElementById('adm-sidebar').classList.add('open');document.getElementById('adm-overlay').classList.add('open');}
-function closeSidebar(){document.getElementById('adm-sidebar').classList.remove('open');document.getElementById('adm-overlay').classList.remove('open');}
+/* ══ SIDEBAR ══ */
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('open');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
 
-// ── NAV ──
-const panelTitles={stats:'📊 Статистика',archive:'🗂 Архив действий',edit:'✏️ Редактирование',['add-chapter']:'📚 Добавить главу',tags:'🏷 Теги и жанры',messages:'📨 Сообщения',suggestions:'💡 Предложения',admins:'🛡 Администраторы'};
-function admNav(tab,el){
-    document.querySelectorAll('.adm-panel').forEach(p=>p.classList.remove('active'));
-    document.querySelectorAll('.adm-nav-item').forEach(i=>i.classList.remove('active'));
-    const panel=document.getElementById('adm-panel-'+tab);
-    if(panel)panel.classList.add('active');
-    if(el)el.classList.add('active');
-    else{// find nav item by onclick
-        document.querySelectorAll('.adm-nav-item').forEach(i=>{if(i.getAttribute('onclick')&&i.getAttribute('onclick').includes("'"+tab+"'"))i.classList.add('active');});
-    }
-    document.getElementById('topbar-title').textContent=panelTitles[tab]||tab;
-    closeSidebar();
-    if(tab==='stats')admLoadStats();
-    if(tab==='archive')admLoadArchive(0);
-    if(tab==='edit')admLoadMangaList('',0);
-    if(tab==='tags')admLoadTagsPanel();
-    if(tab==='messages')admLoadMessages();
-    if(tab==='suggestions')admLoadSuggestions(0);
-    if(tab==='admins')admLoadAdmins();
+/* ══ NAVIGATION ══ */
+const titles={dashboard:'Дашборд',archive:'Журнал действий',edit:'Редактирование манги','add-chapter':'Добавить главу',tags:'Теги и жанры',messages:'Рассылка',suggestions:'Предложения пользователей',admins:'Администраторы'};
+function nav(tab,el){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  const p=$id('panel-'+tab);if(p)p.classList.add('active');
+  if(el)el.classList.add('active');
+  else{document.querySelectorAll('.nav-item').forEach(i=>{if(i.getAttribute('onclick')?.includes("'"+tab+"'"))i.classList.add('active');});}
+  $id('topbar-title').textContent=titles[tab]||tab;
+  closeSidebar();
+  const loaders={dashboard:loadStats,archive:()=>loadArchive(0),edit:()=>loadMangaList('',0),tags:loadTagsPanel,messages:loadMessages,suggestions:()=>loadSuggestions(0),admins:loadAdmins};
+  loaders[tab]?.();
 }
 
-// ── STATS ──
-async function admLoadStats(){
-    try{const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const d=await r.json();
-    if(d.error){document.getElementById('adm-stat-cards').innerHTML='<div style="color:var(--muted)">Нет прав</div>';return;}
+/* ══ STATS ══ */
+async function loadStats(){
+  try{
+    const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());
+    const d=await r.json();
+    if(d.error){$id('stat-cards').innerHTML='<div class="empty"><div class="empty-icon">🔒</div>Нет прав доступа</div>';return;}
     const cards=[
-        {val:d.manga_count,label:'📚 Манг',color:'var(--text)'},
-        {val:d.users_count,label:'👤 Юзеров',color:'var(--green)'},
-        {val:d.votes_count,label:'👍 Голосов',color:'var(--amber)'},
-        {val:d.chapters_count,label:'📖 Глав',color:'var(--text)'},
-        {val:d.new_today,label:'🔥 Сегодня',color:'var(--accent)'},
-        {val:d.suggest_count,label:'💡 Предложек',color:'var(--blue)'},
+      {num:d.manga_count,label:'Всего манги',icon:'📚',color:'var(--text)'},
+      {num:d.users_count,label:'Пользователей',icon:'👤',color:'var(--green)'},
+      {num:d.votes_count,label:'Голосований',icon:'♥',color:'var(--red)',accent:true},
+      {num:d.chapters_count,label:'Глав загружено',icon:'📖',color:'var(--text)'},
+      {num:d.new_today,label:'Новых сегодня',icon:'🔥',color:'var(--amber)'},
+      {num:d.suggest_count,label:'Предложений',icon:'☆',color:'var(--blue)'},
     ];
-    document.getElementById('adm-stat-cards').innerHTML=cards.map(c=>`<div class="scard"><div class="scard-val" style="color:${c.color}">${c.val}</div><div class="scard-label">${c.label}</div></div>`).join('');
-    document.getElementById('adm-top-list').innerHTML=(d.top_manga||[]).map((m,i)=>`<div class="top-row"><div class="top-idx">${i+1}</div><div class="top-name">${escH(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Нет данных</div>';
-    const sb=d.suggest_count>0;if(sb){const b=document.getElementById('sug-nav-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
-    const qa=document.getElementById('qa-sug-sub');if(qa)qa.textContent=d.suggest_count+' новых';
-    }catch(e){}
+    $id('stat-cards').innerHTML=cards.map(c=>`
+      <div class="stat-card${c.accent?' stat-accent':''}">
+        <div class="stat-icon">${c.icon}</div>
+        <div class="stat-num" style="color:${c.color}">${c.num}</div>
+        <div class="stat-label">${c.label}</div>
+      </div>`).join('');
+
+    // Top manga
+    const top=(d.top_manga||[]);
+    $id('top-manga-list').innerHTML=top.length?top.map((m,i)=>{
+      const cls=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      return`<div class="top-item"><div class="top-num ${cls}">${i+1}</div><div class="top-name">${esc(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`;
+    }).join(''):'<div class="empty"><div class="empty-icon">📚</div>Нет данных</div>';
+
+    // Suggestion count
+    if(d.suggest_count>0){const b=$id('sug-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
+    const qs=$id('qa-sug-count');if(qs)qs.textContent=d.suggest_count+' новых';
+  }catch(e){}
 }
 
-// ── ARCHIVE ──
-async function admLoadArchive(pg){
-    try{const r=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
-    document.getElementById('adm-archive-list').innerHTML=d.items.map(a=>`<div class="aitem"><div class="atype">${escH(a.action_type)}</div><div class="atext">${escH(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Пусто</div>';
-    const tp=Math.ceil(d.total/20);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadArchive(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadArchive(${pg+1})">Вперёд →</button>`;
-    document.getElementById('adm-archive-pages').innerHTML=p;}catch(e){}
+/* ══ ARCHIVE ══ */
+async function loadArchive(pg){
+  try{
+    const r=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());
+    const d=await r.json();
+    const dotClass=t=>t.includes('add')?'log-dot-add':t.includes('del')?'log-dot-del':'log-dot-edit';
+    $id('archive-list').innerHTML=d.items?.length
+      ?'<div>'+d.items.map(a=>`<div class="log-item"><div class="log-dot ${dotClass(a.action_type)}"></div><div style="flex:1"><div class="log-type">${esc(a.action_type)}</div><div class="log-text">${esc(a.action_text)}</div><div class="log-time">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div></div>`).join('')+'</div>'
+      :'<div class="empty"><div class="empty-icon">◷</div>Журнал пуст</div>';
+    pager('archive-pages',pg,d.total,20,n=>`loadArchive(${n})`);
+  }catch(e){}
 }
 
-// ── EDIT ──
-let admEditQ='',admEditPg=0;
-async function admLoadMangaList(q='',pg=0){
-    admEditQ=q;admEditPg=pg;
-    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
-    if(!d.items?.length){document.getElementById('adm-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Ничего не найдено</div>';document.getElementById('adm-edit-pages').innerHTML='';return;}
-    document.getElementById('adm-manga-list').innerHTML=d.items.map(m=>{const src=m.cover_imgbb_url||'';return`<div class="me-item" onclick="admOpenEdit(${m.id})">${src?`<img class="me-cover" src="${escH(src)}" alt="" onerror="this.style.display='none'">`:''}<div class="me-cover" style="${src?'display:none':'display:flex'}">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`;}).join('');
-    const tp=Math.ceil(d.total/10);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg+1})">Вперёд →</button>`;
-    document.getElementById('adm-edit-pages').innerHTML=p;}catch(e){}
+/* ══ PAGER ══ */
+function pager(id,pg,total,limit,fn){
+  const tp=Math.ceil(total/limit);
+  let h='';
+  if(pg>0)h+=`<button class="page-btn" onclick="${fn(pg-1)}">← Назад</button>`;
+  if(tp>1)h+=`<span class="page-info">${pg+1} / ${tp}</span>`;
+  if(pg+1<tp)h+=`<button class="page-btn" onclick="${fn(pg+1)}">Вперёд →</button>`;
+  $id(id).innerHTML=h;
 }
-function admSearchManga(){admLoadMangaList(document.getElementById('adm-edit-search').value.trim(),0);}
-document.getElementById('adm-edit-search').addEventListener('keydown',e=>{if(e.key==='Enter')admSearchManga();});
-async function admOpenEdit(mangaId){
-    try{const r=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await r.json();
-    document.getElementById('adm-manga-list').style.display='none';document.getElementById('adm-edit-pages').style.display='none';document.getElementById('adm-edit-search-row').style.display='none';
-    document.getElementById('adm-edit-form-wrap').style.display='block';
+
+/* ══ EDIT MANGA ══ */
+let _editQ='',_editPg=0;
+async function loadMangaList(q='',pg=0){
+  _editQ=q;_editPg=pg;
+  try{
+    const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());
+    const d=await r.json();
+    if(!d.items?.length){
+      $id('manga-list').innerHTML='<div class="empty"><div class="empty-icon">🔍</div>Ничего не найдено</div>';
+      $id('edit-pages').innerHTML='';return;
+    }
+    $id('manga-list').innerHTML='<div class="list">'+d.items.map(m=>{
+      const src=m.cover_imgbb_url||'';
+      return`<div class="list-row list-row-click" onclick="openEdit(${m.id})">
+        ${src?`<img class="cover-thumb" src="${esc(src)}" onerror="this.style.display='none'">`:``}
+        <div class="${src?'cover-placeholder':'cover-placeholder'}" style="${src?'display:none':''}">📖</div>
+        <div class="row-main"><div class="row-title">${esc(m.title)}</div></div>
+        <div class="row-end"><span style="font-size:11px;color:var(--text3)">${m.is_series?'📚 Серия':'📄 Манга'}</span></div>
+      </div>`;
+    }).join('')+'</div>';
+    pager('edit-pages',pg,d.total,10,n=>`loadMangaList('${esc(_editQ)}',${n})`);
+  }catch(e){}
+}
+function searchManga(){loadMangaList($id('edit-search').value.trim(),0);}
+$id('edit-search').addEventListener('keydown',e=>{if(e.key==='Enter')searchManga();});
+async function openEdit(mangaId){
+  try{
+    const r=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());
+    const manga=await r.json();
+    $id('manga-list').style.display='none';
+    $id('edit-pages').style.display='none';
+    $id('edit-search-row').style.display='none';
+    $id('edit-form-wrap').style.display='block';
     let chapHtml='';
-    if(manga.is_series&&manga.chapters?.length){chapHtml=`<div class="adm-field" style="margin-top:14px"><label class="adm-label">Главы</label>${manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+escH(ch.title):''}</div><button class="btn btn-red btn-sm" onclick="admDelChapter(${ch.id},this)">🗑 Удалить</button></div>`).join('')}</div>`;}
+    if(manga.is_series&&manga.chapters?.length){
+      chapHtml=`<div class="field" style="margin-top:16px"><label class="label">Главы</label><div class="list">`+manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+esc(ch.title):''}</div><button class="btn btn-ghost btn-xs" onclick="delChapter(${ch.id},this)">🗑 Удалить</button></div>`).join('')+`</div></div>`;
+    }
     let allG=[],allT=[],mgIds=new Set(),mtIds=new Set();
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allG=gd.genres||[];allT=gd.tags||[];}catch(e){}
     try{const mr=await fetch(`/api/manga/${mangaId}/genres`);const md=await mr.json();md.genres?.forEach(g=>mgIds.add(g.id));md.tags?.forEach(t=>mtIds.add(t.id));}catch(e){}
-    const genHtml=allG.length?`<div class="adm-field"><label class="adm-label">🎭 Жанры</label><div class="tag-chip-list">${allG.map(g=>`<label class="tag-chip${mgIds.has(g.id)?' checked':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagHtml=allT.length?`<div class="adm-field"><label class="adm-label">🏷 Теги</label><div class="tag-chip-list">${allT.map(t=>`<label class="tag-chip${mtIds.has(t.id)?' checked':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
-    document.getElementById('adm-edit-form').innerHTML=`
-        <div class="adm-field"><label class="adm-label">Название</label><input class="adm-inp" type="text" id="aef-title" value="${escH(manga.title)}"></div>
-        <div class="adm-field"><label class="adm-label">Описание</label><textarea class="adm-inp adm-textarea" id="aef-desc">${escH(manga.description||'')}</textarea></div>
-        <div class="adm-field"><label class="adm-label">Ссылка Telegraph</label><input class="adm-inp" type="text" id="aef-link" value="${escH(manga.telegraph_url||'')}"></div>
-        <div class="adm-field"><label class="adm-label">URL обложки</label><input class="adm-inp" type="text" id="aef-cover" value="${escH(manga.cover_imgbb_url||'')}">
-        ${manga.cover_imgbb_url?`<img src="${escH(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-top:8px">`:''}</div>
-        ${genHtml}${tagHtml}${chapHtml}
-        <div style="display:flex;gap:8px;margin-top:14px">
-            <button class="btn btn-primary" style="flex:1" onclick="admSaveManga(${mangaId})">💾 Сохранить изменения</button>
-            <button class="btn btn-red" onclick="admDelManga(${mangaId})">🗑 Удалить</button>
-        </div>
-        <div class="adm-result" id="aef-result"></div>`;
-    }catch(e){alert('❌ Ошибка загрузки');}
+    const genHtml=allG.length?`<div class="field"><label class="label">🎭 Жанры</label><div class="chip-wrap">${allG.map(g=>`<label class="chip${mgIds.has(g.id)?' on':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagHtml=allT.length?`<div class="field"><label class="label">🏷 Теги</label><div class="chip-wrap">${allT.map(t=>`<label class="chip${mtIds.has(t.id)?' on':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    $id('edit-form').innerHTML=`
+      <div class="field"><label class="label">Название</label><input class="input" id="ef-title" value="${esc(manga.title)}"></div>
+      <div class="field"><label class="label">Описание</label><textarea class="input textarea" id="ef-desc">${esc(manga.description||'')}</textarea></div>
+      <div class="field"><label class="label">Ссылка Telegraph</label><input class="input" id="ef-link" value="${esc(manga.telegraph_url||'')}"></div>
+      <div class="field"><label class="label">URL обложки</label><input class="input" id="ef-cover" value="${esc(manga.cover_imgbb_url||'')}">
+        ${manga.cover_imgbb_url?`<img src="${esc(manga.cover_imgbb_url)}" style="width:60px;height:82px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid var(--border)">`:''}</div>
+      ${genHtml}${tagHtml}${chapHtml}
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-red" style="flex:1" onclick="saveManga(${mangaId})">💾 Сохранить</button>
+        <button class="btn btn-ghost" onclick="delManga(${mangaId})">🗑 Удалить</button>
+      </div>
+      <div class="result" id="ef-result"></div>`;
+  }catch(e){alert('❌ Ошибка загрузки');}
 }
-function admBackToList(){document.getElementById('adm-edit-form-wrap').style.display='none';document.getElementById('adm-manga-list').style.display='block';document.getElementById('adm-edit-pages').style.display='flex';document.getElementById('adm-edit-search-row').style.display='flex';}
-async function admSaveManga(id){
-    try{const res=await fetch(`/api/admin/manga/${id}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('aef-title').value.trim(),description:document.getElementById('aef-desc').value.trim(),telegraph_url:document.getElementById('aef-link').value.trim(),cover_imgbb_url:document.getElementById('aef-cover').value.trim()})});
+function backToList(){$id('edit-form-wrap').style.display='none';$id('manga-list').style.display='block';$id('edit-pages').style.display='flex';$id('edit-search-row').style.display='flex';}
+async function saveManga(id){
+  try{
+    const res=await fetch(`/api/admin/manga/${id}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$id('ef-title').value.trim(),description:$id('ef-desc').value.trim(),telegraph_url:$id('ef-link').value.trim(),cover_imgbb_url:$id('ef-cover').value.trim()})});
     const data=await res.json();
-    const gIds=[...document.querySelectorAll('#adm-edit-form input[data-gid]:checked')].map(el=>+el.dataset.gid);
-    const tIds=[...document.querySelectorAll('#adm-edit-form input[data-tid]:checked')].map(el=>+el.dataset.tid);
+    const gIds=[...$id('edit-form').querySelectorAll('input[data-gid]:checked')].map(el=>+el.dataset.gid);
+    const tIds=[...$id('edit-form').querySelectorAll('input[data-tid]:checked')].map(el=>+el.dataset.tid);
     try{await fetch(`/api/admin/manga/${id}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:gIds,tag_ids:tIds})});}catch(e){}
-    const b=document.getElementById('aef-result');
-    if(data.success){b.className='adm-result success';b.textContent='✅ Сохранено!';}else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
+    showResult('ef-result',data.success,data.success?'✅ Сохранено!':'❌ Ошибка сохранения');
+  }catch(e){}
 }
-async function admDelManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){admBackToList();admLoadMangaList(admEditQ,admEditPg);}}catch(e){}}
-async function admDelChapter(id,btn){if(!confirm('Удалить главу?'))return;try{const r=await fetch(`/api/admin/chapter/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){btn.closest('.ch-row').remove();}}catch(e){}}
+async function delManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){backToList();loadMangaList(_editQ,_editPg);}}catch(e){}}
+async function delChapter(id,btn){if(!confirm('Удалить главу?'))return;try{const r=await fetch(`/api/admin/chapter/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)btn.closest('.ch-row').remove();}catch(e){}}
 
-// ── ADD CHAPTER ──
-let admChMangaId=null,admChFiles=[];
-async function admSearchForChapter(){
-    const q=document.getElementById('adm-ch-search').value.trim();
-    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const d=await r.json();
-    if(!d.items?.length){document.getElementById('adm-ch-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px">Не найдено</div>';return;}
-    document.getElementById('adm-ch-manga-list').innerHTML=d.items.map(m=>`<div class="me-item" onclick="admSelectChManga(${m.id},'${escH(m.title).replace(/'/g,"\\'")}')"><div class="me-cover" style="display:flex">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`).join('');}catch(e){}
+/* ══ ADD CHAPTER ══ */
+let _chMangaId=null,_chFiles=[];
+async function searchForChapter(){
+  const q=$id('ch-search').value.trim();
+  try{
+    const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());
+    const d=await r.json();
+    if(!d.items?.length){$id('ch-manga-list').innerHTML='<div style="color:var(--text3);font-size:12px">Не найдено</div>';return;}
+    $id('ch-manga-list').innerHTML='<div class="list">'+d.items.map(m=>`<div class="list-row list-row-click" onclick="selectChManga(${m.id},'${esc(m.title).replace(/'/g,"\\'")}')"><div class="cover-placeholder">📖</div><div class="row-main"><div class="row-title">${esc(m.title)}</div></div><div class="row-end" style="color:var(--text3);font-size:11px">${m.is_series?'📚 Серия':'📄 Манга'}</div></div>`).join('')+'</div>';
+  }catch(e){}
 }
-function admSelectChManga(id,title){admChMangaId=id;document.getElementById('adm-ch-form').style.display='block';document.getElementById('adm-ch-manga-list').innerHTML=`<div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.22);border-radius:8px;padding:9px 12px;font-weight:600;color:var(--purple);font-size:12px">✅ ${escH(title)}</div>`;}
-function admSwitchChTab(tab){['zip','photos'].forEach(t=>{document.getElementById('adm-ch-tab-'+t).classList.toggle('active',t===tab);document.getElementById('adm-ch-panel-'+t).classList.toggle('active',t===tab);});}
-function admChPhotosChange(input){admChFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));document.getElementById('adm-ch-photos-preview').textContent=`📸 ${admChFiles.length} стр. выбрано`;}
-async function admChZipChange(input){if(!input.files[0])return;const prev=document.getElementById('adm-ch-zip-preview');prev.textContent='⏳ Распаковка...';try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}admChFiles=blobs;prev.textContent=`📦 ${blobs.length} стр. распаковано`;}catch(e){prev.textContent='❌ '+e.message;}}
-async function admSubmitChapter(){
-    if(!admChMangaId){alert('❌ Выбери серию!');return;}
-    const chNum=parseFloat(document.getElementById('adm-ch-num').value);const chTitle=document.getElementById('adm-ch-title').value.trim();
-    if(!chNum||chNum<0){alert('❌ Укажи номер!');return;}if(!admChFiles.length){alert('❌ Загрузи страницы!');return;}
-    const btn=document.getElementById('adm-ch-submit');btn.disabled=true;btn.classList.add('loading');
-    const pb=document.getElementById('adm-ch-upbar'),pf=document.getElementById('adm-ch-upbar-fill');pb.classList.add('active');pf.style.width='2%';
-    const rb=document.getElementById('adm-ch-result');rb.className='adm-result';rb.textContent='';
-    try{const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();if(!kd.success){alert('❌ Нет доступа');btn.disabled=false;btn.classList.remove('loading');return;}
-    const keys=kd.keys,urls=[],total=admChFiles.length;
-    for(let i=0;i<total;i++){pf.style.width=(2+Math.round(i/total*90))+'%';const u=await uploadOneToImgbb(admChFiles[i],keys);if(u)urls.push(u);}
-    pf.style.width='95%';
-    const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:admChMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
-    const data=await res.json();pf.style.width='100%';
-    if(data.success){rb.className='adm-result success';rb.textContent=`✅ Глава ${chNum} добавлена! ${urls.length} стр.`;}
-    else{rb.className='adm-result error';rb.textContent='❌ '+(data.error||'Ошибка');}
-    }catch(e){rb.className='adm-result error';rb.textContent='❌ '+e.message;}
-    btn.disabled=false;btn.classList.remove('loading');
+function selectChManga(id,title){
+  _chMangaId=id;
+  $id('ch-form').style.display='block';
+  $id('ch-manga-list').innerHTML=`<div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:9px;padding:10px 14px;font-weight:700;color:var(--green);font-size:12px">✅ ${esc(title)}</div>`;
 }
-
-// ── TAGS ──
-async function admLoadTagsPanel(){
-    try{const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
-    document.getElementById('adm-genre-count').textContent=d.genres?.length||0;
-    document.getElementById('adm-tag-count').textContent=d.tags?.length||0;
-    const gl=document.getElementById('adm-genres-list');
-    gl.innerHTML=d.genres?.length?d.genres.map(g=>`<div class="tg-item"><div class="tg-name">${escH(g.name)}</div><div class="tg-slug">${escH(g.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelGenre(${g.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет жанров</div>';
-    const tl=document.getElementById('adm-tags-list');
-    tl.innerHTML=d.tags?.length?d.tags.map(t=>`<div class="tg-item" style="${t.is_nsfw?'border-color:rgba(239,68,68,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${escH(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${escH(t.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelTag(${t.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет тегов</div>';
-    }catch(e){}
+function switchTab(tab){
+  ['zip','photos'].forEach(t=>{
+    $id('ftab-'+t).classList.toggle('active',t===tab);
+    $id('fpanel-'+t).classList.toggle('active',t===tab);
+  });
 }
-async function admAddGenre(){const name=document.getElementById('adm-new-genre-name').value.trim();const slug=document.getElementById('adm-new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){document.getElementById('adm-new-genre-name').value='';document.getElementById('adm-new-genre-slug').value='';admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function admDelGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
-async function admAddTag(){const name=document.getElementById('adm-new-tag-name').value.trim();const slug=document.getElementById('adm-new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=document.getElementById('adm-new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){document.getElementById('adm-new-tag-name').value='';document.getElementById('adm-new-tag-slug').value='';document.getElementById('adm-new-tag-nsfw').checked=false;admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function admDelTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
-async function admReseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function admDedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-
-// ── MESSAGES ──
-async function admLoadMessages(){
-    try{const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
-    document.getElementById('adm-msg-list').innerHTML=d.items?.length?d.items.map(m=>`<div class="amsg-item" id="amsg-${m.id}"><div class="amsg-del"><button class="btn btn-red btn-sm" onclick="admDelMessage(${m.id})">Удалить</button></div><div class="amsg-text">${escH(m.text)}</div><div class="amsg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Сообщений нет</div>';
-    }catch(e){}
+function chPhotosChange(input){_chFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));$id('ch-photos-count').textContent=`📸 ${_chFiles.length} стр. выбрано`;}
+async function chZipChange(input){
+  if(!input.files[0])return;
+  const prev=$id('ch-zip-count');prev.textContent='⏳ Распаковка...';
+  try{
+    const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);
+    const allowed=['jpg','jpeg','png','webp','gif'];const files=[];
+    zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
+    files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
+    const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
+    _chFiles=blobs;prev.textContent=`📦 ${blobs.length} стр. распаковано`;
+  }catch(e){prev.textContent='❌ '+e.message;}
 }
-async function admSendMessage(){
-    const text=document.getElementById('adm-msg-text').value.trim();
-    if(!text){alert('Введи сообщение');return;}
-    try{const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await r.json();
-    const b=document.getElementById('adm-msg-result');
-    if(d.success){b.className='adm-result success';b.textContent='✅ Сообщение отправлено!';document.getElementById('adm-msg-text').value='';admLoadMessages();}
-    else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
-}
-async function admDelMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=document.getElementById('amsg-'+id);if(el)el.remove();}catch(e){}}
-
-// ── SUGGESTIONS ──
-async function admLoadSuggestions(pg){
-    try{const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
-    document.getElementById('adm-sug-list').innerHTML=d.items?.length?d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${escH(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="sug-read-btn" onclick="admMarkSug(${s.id},this)">✓ Прочитано</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Новых предложений нет</div>';
-    const tp=Math.ceil(d.total/15);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg+1})">Вперёд →</button>`;
-    document.getElementById('adm-sug-pages').innerHTML=p;}catch(e){}
-}
-async function admMarkSug(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
-
-// ── ADMINS ──
-async function admLoadAdmins(){
-    try{const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
-    document.getElementById('adm-admins-list').innerHTML=d.admins?.length?d.admins.map(a=>`<div class="admin-row"><div class="admin-av">🛡</div><div class="admin-info"><div class="admin-name">${escH(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText?.('${a.user_id}');alert('📋 Скопировано')">Копировать</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет данных</div>';
-    }catch(e){}
-}
-async function admSubmitAddAdmin(){
-    const input=document.getElementById('adm-ap-input').value.trim();const tag=document.getElementById('adm-ap-tag').value.trim()||'Администратор';
-    const rb=document.getElementById('adm-ap-result');
-    if(!input){rb.className='adm-result error';rb.textContent='❌ Введи email или TG ID';return;}
-    let endpoint='/api/admin/assign',body={tag,action:'add'};
-    if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}
-    try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();
-    if(d.success){rb.className='adm-result success';rb.textContent='✅ '+d.message;document.getElementById('adm-ap-input').value='';document.getElementById('adm-ap-tag').value='';setTimeout(()=>admLoadAdmins(),1500);}
-    else{rb.className='adm-result error';rb.textContent='❌ '+d.error;}}catch(e){rb.className='adm-result error';rb.textContent='❌ Ошибка сети';}
+async function submitChapter(){
+  if(!_chMangaId){alert('❌ Выберите серию!');return;}
+  const chNum=parseFloat($id('ch-num').value);const chTitle=$id('ch-title').value.trim();
+  if(!chNum||chNum<0){alert('❌ Укажи номер главы!');return;}
+  if(!_chFiles.length){alert('❌ Загрузи страницы!');return;}
+  const btn=$id('ch-submit');btn.disabled=true;
+  const spinner=$id('ch-spinner');spinner.style.display='inline-block';
+  btn.querySelector('.btn-text').style.display='none';
+  const prog=$id('ch-progress'),fill=$id('ch-progress-fill');prog.classList.add('show');fill.style.width='2%';
+  const rb=$id('ch-result');rb.className='result';rb.textContent='';
+  try{
+    const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
+    if(!kd.success){alert('❌ Нет доступа к ключам');return;}
+    const keys=kd.keys,urls=[],total=_chFiles.length;
+    for(let i=0;i<total;i++){fill.style.width=(2+Math.round(i/total*90))+'%';const u=await uploadOneToImgbb(_chFiles[i],keys);if(u)urls.push(u);}
+    fill.style.width='95%';
+    const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:_chMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
+    const data=await res.json();fill.style.width='100%';
+    showResult('ch-result',data.success,data.success?`✅ Глава ${chNum} добавлена! ${urls.length} стр.`:'❌ '+(data.error||'Ошибка'));
+  }catch(e){showResult('ch-result',false,'❌ '+e.message);}
+  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').style.display='';
 }
 
-// ── AUTO SLUG ──
-function autoSlug(nameId,slugId){const n=document.getElementById(nameId),s=document.getElementById(slugId);if(n&&s)n.addEventListener('input',()=>{if(!s.dataset.manual)s.value=n.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});if(s)s.addEventListener('input',()=>s.dataset.manual='1');}
-autoSlug('adm-new-genre-name','adm-new-genre-slug');
-autoSlug('adm-new-tag-name','adm-new-tag-slug');
+/* ══ TAGS ══ */
+async function loadTagsPanel(){
+  try{
+    const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
+    $id('genre-count').textContent=d.genres?.length||0;
+    $id('tag-count').textContent=d.tags?.length||0;
+    $id('genres-list').innerHTML=d.genres?.length
+      ?d.genres.map(g=>`<div class="tg-row"><div class="tg-name">${esc(g.name)}</div><div class="tg-slug">${esc(g.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delGenre(${g.id},this)">🗑</button></div>`).join('')
+      :'<div class="empty" style="padding:16px 0"><div class="empty-icon">🎭</div>Нет жанров</div>';
+    $id('tags-list').innerHTML=d.tags?.length
+      ?d.tags.map(t=>`<div class="tg-row" style="${t.is_nsfw?'border-color:rgba(232,25,44,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${esc(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${esc(t.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delTag(${t.id},this)">🗑</button></div>`).join('')
+      :'<div class="empty" style="padding:16px 0"><div class="empty-icon">🏷</div>Нет тегов</div>';
+  }catch(e){}
+}
+async function addGenre(){const name=$id('new-genre-name').value.trim();const slug=$id('new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){$id('new-genre-name').value='';$id('new-genre-slug').value='';loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function delGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function addTag(){const name=$id('new-tag-name').value.trim();const slug=$id('new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=$id('new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){$id('new-tag-name').value='';$id('new-tag-slug').value='';$id('new-tag-nsfw').checked=false;loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function delTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function reseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function dedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
 
-// ── IMGBB HELPERS (from main page) ──
+/* ══ MESSAGES ══ */
+async function loadMessages(){
+  try{
+    const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
+    $id('msg-list').innerHTML=d.items?.length
+      ?'<div>'+d.items.map(m=>`<div class="msg-item" id="amsg-${m.id}"><div class="msg-del"><button class="btn btn-ghost btn-xs" onclick="delMessage(${m.id})">Удалить</button></div><div class="msg-text">${esc(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('')+'</div>'
+      :'<div class="empty"><div class="empty-icon">✉</div>Сообщений нет</div>';
+  }catch(e){}
+}
+async function sendMessage(){
+  const text=$id('msg-text').value.trim();
+  if(!text){alert('Введи сообщение');return;}
+  try{
+    const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});
+    const d=await r.json();
+    showResult('msg-result',d.success,d.success?'✅ Сообщение отправлено!':'❌ Ошибка');
+    if(d.success){$id('msg-text').value='';loadMessages();}
+  }catch(e){}
+}
+async function delMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=$id('amsg-'+id);if(el)el.remove();}catch(e){}}
+
+/* ══ SUGGESTIONS ══ */
+async function loadSuggestions(pg){
+  try{
+    const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    $id('sug-list').innerHTML=d.items?.length
+      ?'<div>'+d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${esc(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="btn btn-green btn-xs" onclick="markSug(${s.id},this)">✓ Прочитано</button></div>`).join('')+'</div>'
+      :'<div class="empty"><div class="empty-icon">☆</div>Новых предложений нет</div>';
+    pager('sug-pages',pg,d.total,15,n=>`loadSuggestions(${n})`);
+  }catch(e){}
+}
+async function markSug(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
+
+/* ══ ADMINS ══ */
+async function loadAdmins(){
+  try{
+    const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
+    $id('admins-list').innerHTML=d.admins?.length
+      ?'<div>'+d.admins.map(a=>`<div class="list-row"><div class="row-icon row-icon-red">🛡</div><div class="row-main"><div class="row-title">${esc(a.tag)}</div><div class="row-sub">ID: ${a.user_id}</div></div><div class="row-end"><button class="btn btn-ghost btn-xs" onclick="navigator.clipboard?.writeText?.('${a.user_id}')">Копировать</button></div></div>`).join('')+'</div>'
+      :'<div class="empty"><div class="empty-icon">🛡</div>Нет данных</div>';
+  }catch(e){}
+}
+async function submitAddAdmin(){
+  const input=$id('ap-input').value.trim();const tag=$id('ap-tag').value.trim()||'Администратор';
+  if(!input){showResult('ap-result',false,'❌ Введи email или TG ID');return;}
+  let endpoint='/api/admin/assign',body={tag,action:'add'};
+  if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}
+  try{
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    showResult('ap-result',d.success,d.success?'✅ '+d.message:'❌ '+d.error);
+    if(d.success){$id('ap-input').value='';$id('ap-tag').value='';setTimeout(loadAdmins,1500);}
+  }catch(e){showResult('ap-result',false,'❌ Ошибка сети');}
+}
+
+/* ══ AUTO SLUG ══ */
+function autoSlug(nameId,slugId){const n=$id(nameId),s=$id(slugId);if(n&&s)n.addEventListener('input',()=>{if(!s.dataset.manual)s.value=n.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});if(s)s.addEventListener('input',()=>s.dataset.manual='1');}
+autoSlug('new-genre-name','new-genre-slug');
+autoSlug('new-tag-name','new-tag-slug');
+
+/* ══ IMGBB HELPERS ══ */
 let _jszip=null;
 async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
-async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read error'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
+async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
 
-// ── INIT ──
-admLoadStats();
+/* ══ INIT ══ */
+loadStats();
 </script>
 </body></html>
 <?php exit;
@@ -6969,4 +7289,3 @@ document.addEventListener('click', function(e) {
 
 </body>
 </html>
-
