@@ -1246,7 +1246,7 @@ select.input{cursor:pointer}
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">＋ Глава</button>
-      <button class="btn btn-red btn-sm" onclick="window.location.href='/'">＋ Манга</button>
+      <button class="btn btn-red btn-sm" onclick="window.location.href='/?add=1'">＋ Манга</button>
     </div>
   </div>
 
@@ -1288,7 +1288,7 @@ select.input{cursor:pointer}
           </div>
           <div class="card-body">
             <div class="qa-grid">
-              <button class="qa-card qa-green" onclick="window.location.href='/'">
+              <button class="qa-card qa-green" onclick="window.location.href='/?add=1'">
                 <div class="qa-card-icon">＋</div>
                 <div class="qa-card-title">Новая манга</div>
                 <div class="qa-card-sub">ZIP, обложка, описание</div>
@@ -5743,6 +5743,7 @@ header{
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn hbtn-accent">Регистрация</a>
         <?php endif; ?>
+        <button class="hbtn hbtn-admin hbtn-accent" id="add-manga-btn" onclick="openAddModal()" style="display:none">＋ <span>Манга</span></button>
         <a href="/admin" class="hbtn hbtn-admin" id="admin-btn" style="text-decoration:none">⚙️ <span>Админ</span></a>
     </div>
 </div>
@@ -6025,6 +6026,8 @@ async function checkAdmin(){
         if(data.is_admin){
             const btn=document.getElementById('admin-btn');
             if(btn)btn.classList.add('visible');
+            const addBtn=document.getElementById('add-manga-btn');
+            if(addBtn)addBtn.classList.add('visible');
             // Add admin icon to sidebar
             const rail=document.querySelector('.sidebar-rail');
             if(rail && !document.getElementById('sidebar-admin-btn')){
@@ -6363,6 +6366,12 @@ function heroSlide(dir){
 })();
 
 load();loadNew();loadContinue();checkAdmin();
+// Auto-open add manga modal if redirected from admin panel
+if(new URLSearchParams(location.search).get('add')==='1'){
+    checkAdmin().then(()=>{setTimeout(openAddModal,400);});
+    // Clean URL without reload
+    history.replaceState(null,'',location.pathname);
+}
 document.addEventListener('DOMContentLoaded',function(){loadHero();loadTopWeek();setInterval(loadTopWeek,30*60*1000);});
 
 
