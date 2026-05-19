@@ -1198,6 +1198,10 @@ select.input{cursor:pointer}
       <span class="nav-icon">＋</span>
       <span class="nav-label">Добавить главу</span>
     </div>
+    <div class="nav-item" onclick="nav('add-manga',this)">
+      <span class="nav-icon">📖</span>
+      <span class="nav-label">Добавить мангу</span>
+    </div>
     <div class="nav-item" onclick="nav('tags',this)">
       <span class="nav-icon">⊞</span>
       <span class="nav-label">Теги и жанры</span>
@@ -1246,7 +1250,7 @@ select.input{cursor:pointer}
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">＋ Глава</button>
-      <button class="btn btn-red btn-sm" onclick="window.location.href='/?add=1'">＋ Манга</button>
+      <button class="btn btn-red btn-sm" onclick="nav('add-manga',null)">＋ Манга</button>
     </div>
   </div>
 
@@ -1288,7 +1292,7 @@ select.input{cursor:pointer}
           </div>
           <div class="card-body">
             <div class="qa-grid">
-              <button class="qa-card qa-green" onclick="window.location.href='/?add=1'">
+              <button class="qa-card qa-green" onclick="nav('add-manga',null)">
                 <div class="qa-card-icon">＋</div>
                 <div class="qa-card-title">Новая манга</div>
                 <div class="qa-card-sub">ZIP, обложка, описание</div>
@@ -1551,6 +1555,101 @@ select.input{cursor:pointer}
       </div>
     </div>
 
+    <!-- ═══ PANEL: ADD MANGA ═══ -->
+    <div class="panel" id="panel-add-manga">
+      <div class="card" style="max-width:680px">
+        <div class="card-head">
+          <div class="card-title">📖 Добавить мангу</div>
+          <button class="btn btn-ghost btn-xs" onclick="resetAddMangaForm()">↺ Сбросить</button>
+        </div>
+        <div class="card-body">
+
+          <!-- Тип -->
+          <div class="field">
+            <label class="label">Тип</label>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-red btn-sm" id="am-type-single" onclick="amSetType('single')" style="flex:1">📄 Обычная</button>
+              <button class="btn btn-ghost btn-sm" id="am-type-series" onclick="amSetType('series')" style="flex:1">📚 Серия глав</button>
+            </div>
+          </div>
+
+          <!-- Название -->
+          <div class="field">
+            <label class="label">Название</label>
+            <input class="input" type="text" id="am-title" placeholder="Название манги...">
+          </div>
+
+          <!-- Описание -->
+          <div class="field">
+            <label class="label">Описание</label>
+            <textarea class="input textarea" id="am-desc" placeholder="Краткое описание..." style="min-height:80px"></textarea>
+          </div>
+
+          <!-- Жанры -->
+          <div class="field" id="am-genres-wrap" style="display:none">
+            <label class="label">Жанры</label>
+            <div id="am-genres-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+          </div>
+
+          <!-- Теги -->
+          <div class="field" id="am-tags-wrap" style="display:none">
+            <label class="label">Теги</label>
+            <div id="am-tags-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+          </div>
+
+          <!-- Обложка -->
+          <div class="field">
+            <label class="label">Обложка</label>
+            <div class="upload-zone" id="am-cover-zone">
+              <input type="file" id="am-cover-input" accept="image/*" onchange="amOnCoverChange(this)">
+              <div class="upload-icon">🖼</div>
+              <div class="upload-text">Загрузить обложку</div>
+              <div class="upload-hint">JPG, PNG, WebP • Нажмите или перетащите</div>
+              <div class="upload-count" id="am-cover-count"></div>
+            </div>
+          </div>
+
+          <!-- Страницы (только для обычной) -->
+          <div id="am-pages-section">
+            <div class="field">
+              <label class="label">Страницы</label>
+              <div class="file-tabs">
+                <div class="ftab active" id="am-ftab-zip" onclick="amSwitchTab('zip')">📦 ZIP-архив</div>
+                <div class="ftab" id="am-ftab-photos" onclick="amSwitchTab('photos')">📸 Изображения</div>
+              </div>
+              <div class="fpanel active" id="am-fpanel-zip">
+                <div class="upload-zone">
+                  <input type="file" id="am-zip" accept=".zip" onchange="amOnZipChange(this)">
+                  <div class="upload-icon">📦</div>
+                  <div class="upload-text">ZIP со страницами</div>
+                  <div class="upload-hint">Сортировка по дате • Нажмите или перетащите</div>
+                  <div class="upload-count" id="am-zip-count"></div>
+                </div>
+              </div>
+              <div class="fpanel" id="am-fpanel-photos">
+                <div class="upload-zone">
+                  <input type="file" id="am-photos" accept="image/*" multiple onchange="amOnPhotosChange(this)">
+                  <div class="upload-icon">📸</div>
+                  <div class="upload-text">Выберите страницы</div>
+                  <div class="upload-hint">001.jpg, 002.jpg... • Нажмите или перетащите</div>
+                  <div class="upload-count" id="am-photos-count"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="prog-bar" id="am-progress"><div class="prog-fill" id="am-progress-fill"></div></div>
+
+          <button class="btn btn-red btn-wide" id="am-submit" onclick="amSubmitManga()">
+            <span class="spinner" id="am-spinner"></span>
+            <span class="btn-text">🚀 Опубликовать</span>
+          </button>
+          <div class="result" id="am-result"></div>
+
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 </div><!-- /app -->
@@ -1576,7 +1675,7 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
 
 /* ══ NAVIGATION ══ */
-const titles={dashboard:'Дашборд',archive:'Журнал действий',edit:'Редактирование манги','add-chapter':'Добавить главу',tags:'Теги и жанры',messages:'Рассылка',suggestions:'Предложения пользователей',admins:'Администраторы'};
+const titles={dashboard:'Дашборд',archive:'Журнал действий',edit:'Редактирование манги','add-chapter':'Добавить главу','add-manga':'Добавить мангу',tags:'Теги и жанры',messages:'Рассылка',suggestions:'Предложения пользователей',admins:'Администраторы'};
 function nav(tab,el){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
@@ -1585,7 +1684,7 @@ function nav(tab,el){
   else{document.querySelectorAll('.nav-item').forEach(i=>{if(i.getAttribute('onclick')?.includes("'"+tab+"'"))i.classList.add('active');});}
   $id('topbar-title').textContent=titles[tab]||tab;
   closeSidebar();
-  const loaders={dashboard:loadStats,archive:()=>loadArchive(0),edit:()=>loadMangaList('',0),tags:loadTagsPanel,messages:loadMessages,suggestions:()=>loadSuggestions(0),admins:loadAdmins};
+  const loaders={dashboard:loadStats,archive:()=>loadArchive(0),edit:()=>loadMangaList('',0),'add-manga':amLoadGenresAndTags,tags:loadTagsPanel,messages:loadMessages,suggestions:()=>loadSuggestions(0),admins:loadAdmins};
   loaders[tab]?.();
 }
 
@@ -1859,6 +1958,105 @@ autoSlug('new-tag-name','new-tag-slug');
 let _jszip=null;
 async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
 async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
+
+/* ══ ADD MANGA PANEL ══ */
+let _amType='single', _amCoverFile=null, _amPhotoFiles=[];
+let _amGenresLoaded=false;
+
+function amSetType(t){
+  _amType=t;
+  $id('am-type-single').className='btn btn-sm '+(t==='single'?'btn-red':'btn-ghost');
+  $id('am-type-series').className='btn btn-sm '+(t==='series'?'btn-red':'btn-ghost');
+  const ps=$id('am-pages-section');
+  if(ps)ps.style.display=t==='single'?'block':'none';
+}
+function amSwitchTab(tab){
+  ['zip','photos'].forEach(t=>{
+    $id('am-ftab-'+t).classList.toggle('active',t===tab);
+    $id('am-fpanel-'+t).classList.toggle('active',t===tab);
+  });
+}
+function amOnCoverChange(input){
+  if(!input.files[0])return;
+  _amCoverFile=input.files[0];
+  $id('am-cover-count').textContent='🖼 '+_amCoverFile.name;
+}
+function amOnPhotosChange(input){
+  _amPhotoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
+  $id('am-photos-count').textContent='📸 '+_amPhotoFiles.length+' файлов';
+}
+async function amOnZipChange(input){
+  if(!input.files[0])return;
+  $id('am-zip-count').textContent='⏳ Распаковка...';
+  try{
+    const{JSZip}=await loadJSZip();
+    const zip=await JSZip.loadAsync(input.files[0]);
+    const allowed=['jpg','jpeg','png','webp','gif'];const files=[];
+    zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
+    files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
+    const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
+    _amPhotoFiles=blobs;$id('am-zip-count').textContent='📦 '+blobs.length+' стр. распаковано';
+  }catch(e){$id('am-zip-count').textContent='❌ '+e.message;}
+}
+async function amLoadGenresAndTags(){
+  if(_amGenresLoaded)return;
+  try{
+    const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
+    const gl=$id('am-genres-list'),tl=$id('am-tags-list');
+    const gw=$id('am-genres-wrap'),tw=$id('am-tags-wrap');
+    if(d.genres?.length){
+      gw.style.display='block';
+      gl.innerHTML=d.genres.map(g=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid var(--border);border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s;color:var(--text2)"><input type="checkbox" data-am-gid="${g.id}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--surface3)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border3)':'var(--border)'">${esc(g.name)}</label>`).join('');
+    }
+    if(d.tags?.length){
+      tw.style.display='block';
+      tl.innerHTML=d.tags.map(t=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid ${t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s;color:var(--text2)"><input type="checkbox" data-am-tid="${t.id}" data-nsfw="${t.is_nsfw?1:0}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--surface3)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border3)':(this.dataset.nsfw==='1'?'rgba(239,68,68,0.3)':'var(--border)')">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('');
+    }
+    _amGenresLoaded=true;
+  }catch(e){}
+}
+async function amSubmitManga(){
+  const title=($id('am-title').value||'').trim();
+  const desc=($id('am-desc').value||'').trim();
+  const isSeries=_amType==='series';
+  if(!title){showResult('am-result',false,'❌ Введи название!');return;}
+  if(!isSeries&&!_amPhotoFiles.length&&!_amCoverFile){showResult('am-result',false,'❌ Загрузи обложку или страницы!');return;}
+  const btn=$id('am-submit');btn.disabled=true;
+  const spinner=$id('am-spinner');spinner.style.display='inline-block';
+  btn.querySelector('.btn-text').textContent='Загрузка...';
+  const prog=$id('am-progress'),fill=$id('am-progress-fill');prog.classList.add('show');fill.style.width='2%';
+  showResult('am-result',true,'');$id('am-result').className='result';
+  try{
+    const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
+    if(!kd.success||!kd.keys?.length){showResult('am-result',false,'❌ Нет доступа к ключам');btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='🚀 Опубликовать';return;}
+    const keys=kd.keys;let coverUrl=null;
+    if(_amCoverFile){fill.style.width='5%';coverUrl=await uploadOneToImgbb(_amCoverFile,keys);}
+    const pageUrls=[];
+    if(!isSeries&&_amPhotoFiles.length){const total=_amPhotoFiles.length;for(let i=0;i<total;i++){fill.style.width=(5+Math.round(i/total*88))+'%';btn.querySelector('.btn-text').textContent=`⬆️ ${i+1}/${total}`;const u=await uploadOneToImgbb(_amPhotoFiles[i],keys);if(u)pageUrls.push(u);}}
+    fill.style.width='95%';
+    const genreIds=[...document.querySelectorAll('#am-genres-list input[data-am-gid]:checked')].map(e=>parseInt(e.dataset.amGid));
+    const tagIds=[...document.querySelectorAll('#am-tags-list input[data-am-tid]:checked')].map(e=>parseInt(e.dataset.amTid));
+    const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:genreIds,tag_ids:tagIds})});
+    const data=await res.json();fill.style.width='100%';
+    if(data.success){showResult('am-result',true,`✅ <strong>Манга добавлена!</strong>${isSeries?' 📚 Серия создана':''}${data.pages>0?' · '+data.pages+' стр.':''}`);$id('am-result').className='result ok';}
+    else{showResult('am-result',false,'❌ '+(data.error||'Неизвестная ошибка'));$id('am-result').className='result err';}
+  }catch(e){showResult('am-result',false,'❌ '+e.message);$id('am-result').className='result err';}
+  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='🚀 Опубликовать';
+}
+function resetAddMangaForm(){
+  $id('am-title').value='';$id('am-desc').value='';
+  _amCoverFile=null;_amPhotoFiles=[];
+  $id('am-cover-count').textContent='';$id('am-zip-count').textContent='';$id('am-photos-count').textContent='';
+  if($id('am-cover-input'))$id('am-cover-input').value='';
+  if($id('am-zip'))$id('am-zip').value='';
+  if($id('am-photos'))$id('am-photos').value='';
+  document.querySelectorAll('#am-genres-list input,#am-tags-list input').forEach(cb=>{cb.checked=false;if(cb.closest('label')){cb.closest('label').style.background='transparent';cb.closest('label').style.borderColor=cb.dataset.nsfw==='1'?'rgba(239,68,68,0.3)':'var(--border)';}});
+  const p=$id('am-progress'),f=$id('am-progress-fill');if(p)p.classList.remove('show');if(f)f.style.width='0%';
+  const r=$id('am-result');if(r){r.className='result';r.textContent='';}
+  amSetType('single');
+}
+// Drag & drop for add-manga zones
+['am-cover-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
 
 /* ══ INIT ══ */
 loadStats();
