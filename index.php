@@ -193,23 +193,9 @@ if ($path === '/api/debug-session') {
 require_once __DIR__ . '/functions.php';
 
 // ===== ОБРАБОТКА ПАРАМЕТРА tg_user_id =====
-// Если пришёл параметр ?tg_user_id=TELEGRAM_ID, редиректим на профиль /u/username
+// Если пришёл параметр ?tg_user_id=TELEGRAM_ID, просто сохраняем в сессии и остаёмся на главной
 if (!empty($_GET["tg_user_id"]) && is_numeric($_GET["tg_user_id"]) && $path === "/") {
-    $tgUserId = (int)$_GET["tg_user_id"];
-    try {
-        $tgStmt = $pdo->prepare("SELECT id FROM accounts WHERE tg_user_id=?");
-        $tgStmt->execute([$tgUserId]);
-        $tgAccount = $tgStmt->fetch();
-        if ($tgAccount) {
-            $idStmt = $pdo->prepare("SELECT username FROM accounts WHERE id=?");
-            $idStmt->execute([(int)$tgAccount["id"]]);
-            $accData = $idStmt->fetch();
-            if ($accData) {
-                header("Location: /u/" . urlencode($accData["username"]), true, 302);
-                exit;
-            }
-        }
-    } catch (Exception $e) {}
+    $_SESSION['tg_user_id'] = (int)$_GET["tg_user_id"];
 }
 
 require_once __DIR__ . '/profile_page.php';
@@ -4216,7 +4202,6 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
         $viewerIsAdmin = in_array($vtg,$hardcodedAdmins) || (!empty($viewer['is_admin'])&&$viewer['is_admin']);
     }
     $isSelf = $viewer && (int)$viewer['id'] === $tid;
-    if ($isSelf) { header('Location: /profile'); exit; }
     $isFriend = false;
     $friendshipId = null;
     $friendshipStatus = null;
