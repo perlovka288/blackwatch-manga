@@ -85,11 +85,32 @@ try {
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_nsfw BOOLEAN DEFAULT FALSE");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_nsfw BOOLEAN DEFAULT FALSE");
     $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS uploaded_by INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS views INT DEFAULT 0");
+    // manga_comments: новые поля
     $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE");
+    // user_messages: мигрируем на схему from_account_id/to_account_id
     $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS from_account_id INT DEFAULT NULL");
     $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS to_account_id INT DEFAULT NULL");
     $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL");
     $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS reply_to_id INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_sender BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_receiver BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE");
+    // user_stats: недостающие поля
+    $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS last_read_date DATE DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    // user_online: флаг скрытия
+    $pdo->exec("ALTER TABLE user_online ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE");
+    // user_achievements: прогресс и статус
+    $pdo->exec("ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0");
+    // achievements: поля для новой схемы
+    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_type VARCHAR(50) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_value INT DEFAULT 1");
+    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''");
+    // comment_likes — алиас для manga_comment_likes
+    $pdo->exec("CREATE TABLE IF NOT EXISTS comment_likes (account_id INT NOT NULL, comment_id INT NOT NULL, PRIMARY KEY (account_id, comment_id))");
 
     // ===== ТАБЛИЦЫ ДЛЯ functions.php =====
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_xp (
@@ -292,15 +313,11 @@ if (!empty($_GET["tg_user_id"]) && is_numeric($_GET["tg_user_id"]) && $path === 
     $_SESSION['tg_user_id'] = (int)$_GET["tg_user_id"];
 }
 
-require_once __DIR__ . '/profile_page.php';
-require_once __DIR__ . '/new_api_endpoints.php';
-
 $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
     foreach ($stmtAdmins as $row) { if (!in_array((int)$row['user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['user_id']; }
 } catch (Exception $e) {}
-// Add TG IDs of account-based admins
 try {
     $accAdmStmt = $pdo->query("SELECT tg_user_id FROM accounts WHERE is_admin=TRUE AND tg_user_id IS NOT NULL");
     foreach ($accAdmStmt as $row) { if (!in_array((int)$row['tg_user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['tg_user_id']; }
@@ -310,7 +327,6 @@ function isAdmin($userId, $admins) { return $userId > 0 && in_array((int)$userId
 
 function isAdminFull($pdo, $userId, $admins) {
     if (isAdmin($userId, $admins)) return true;
-    // Check account-based admin flag
     try {
         $s = $pdo->prepare("SELECT is_admin FROM accounts WHERE tg_user_id=? AND is_admin=TRUE");
         $s->execute([$userId]); if ($s->fetch()) return true;
@@ -318,8 +334,6 @@ function isAdminFull($pdo, $userId, $admins) {
     return false;
 }
 
-
-// ===== РАСЧЕТ УРОВНЯ ПОЛЬЗОВАТЕЛЯ =====
 function calculateUserLevel(&$pdo, $account_id) {
     try {
         $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
@@ -327,12 +341,8 @@ function calculateUserLevel(&$pdo, $account_id) {
         $user = $stmt->fetch();
         if (!$user) return;
         $xp = $user['user_xp'];
-        $level = 1;
-        $xp_needed = 0;
-        while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
-            $xp_needed += 100 + ($level - 1) * 50;
-            $level++;
-        }
+        $level = 1; $xp_needed = 0;
+        while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) { $xp_needed += 100 + ($level - 1) * 50; $level++; }
         $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
     } catch (Exception $e) {}
 }
@@ -344,28 +354,26 @@ function isAccountAdmin($pdo, $accountId) {
     } catch(Exception $e) { return false; }
 }
 
-/**
- * Универсальная проверка прав админа — проверяет ВСЕ способы авторизации:
- * 1) Веб-аккаунт с is_admin=TRUE
- * 2) TG ID веб-аккаунта в hardcodedAdmins
- * 3) TG ID из куки/GET-параметра в hardcodedAdmins
- */
 function isAdminCombined(PDO $pdo, array $hardcodedAdmins): bool {
-    // 1. Веб-сессия (аккаунт)
     $acc = getCurrentAccount($pdo);
     if ($acc) {
         if (!empty($acc['is_admin'])) return true;
         if (!empty($acc['tg_user_id']) && in_array((int)$acc['tg_user_id'], $hardcodedAdmins)) return true;
     }
-    // 2. TG из куки / сессии
     $userId = getEffectiveUserId($pdo);
     if ($userId && in_array((int)$userId, $hardcodedAdmins)) return true;
-    // 3. Прямой GET-параметр tg_user_id (совместимость с JS ?tg_user_id=...)
     if (!empty($_GET['tg_user_id']) && is_numeric($_GET['tg_user_id'])) {
         if (in_array((int)$_GET['tg_user_id'], $hardcodedAdmins)) return true;
     }
     return false;
 }
+
+// ===== ПОДКЛЮЧАЕМ РОУТЫ (после всех определений функций) =====
+require_once __DIR__ . '/profile_page.php';
+require_once __DIR__ . '/new_api_endpoints.php';
+
+
+// (функции isAdmin, isAdminFull, calculateUserLevel, isAccountAdmin, isAdminCombined определены выше)
 
 $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
 
@@ -378,28 +386,6 @@ function sendTgNotify($userId, $text) {
     @curl_exec($ch); curl_close($ch);
 }
 
-
-// ===== НОВЫЕ API ENDPOINTS =====
-
-// Функция для расчета уровня (повторно, на случай если не была добавлена)
-if (!function_exists('calculateUserLevel')) {
-    function calculateUserLevel(&$pdo, $account_id) {
-        try {
-            $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
-            $stmt->execute([$account_id]);
-            $user = $stmt->fetch();
-            if (!$user) return;
-            $xp = $user['user_xp'];
-            $level = 1;
-            $xp_needed = 0;
-            while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
-                $xp_needed += 100 + ($level - 1) * 50;
-                $level++;
-            }
-            $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
-        } catch (Exception $e) {}
-    }
-}
 
 // API: Комментарии под мангой
 // Add reply_to column to manga_comments if not exists
