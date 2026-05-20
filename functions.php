@@ -180,249 +180,96 @@ function getOnlineLabel(string $status, ?string $lastSeen): string {
         if ($diff < 86400)  return '⚫ ' . round($diff/3600) . ' ч назад';
         if ($diff < 604800) return '⚫ ' . round($diff/86400) . ' дн назад';
     }
-    return '⚫ Не в сети';
+    return '⚫ Offline';
 }
 
-// ========================= ПРОВЕРКА ДОСТИЖЕНИЙ =========================
+// ========================= МАНГА: РЕЙТИНГ =========================
 
-function checkAchievements(PDO $pdo, int $accountId): array {
-    $unlocked = [];
+function rateManga(PDO $pdo, int $accountId, int $mangaId, int $rating): bool {
+    if (!in_array($rating, [1,2,3,4,5])) return false;
     try {
-        // Получаем все достижения и текущий прогресс пользователя
-        $stmt = $pdo->prepare("SELECT a.*, COALESCE(ua.progress, 0) as current_progress, ua.unlocked_at
-            FROM achievements a
-            LEFT JOIN user_achievements ua ON ua.achievement_id=a.id AND ua.account_id=?");
-        $stmt->execute([$accountId]);
-        $achievements = $stmt->fetchAll();
+        $pdo->prepare("INSERT INTO manga_ratings (user_id, manga_id, rating)
+            VALUES (?,?,?)
+            ON CONFLICT (user_id, manga_id) DO UPDATE SET rating=EXCLUDED.rating")
+            ->execute([$accountId, $mangaId, $rating]);
 
-        // Получаем текущую статистику
-        $statStmt = $pdo->prepare("SELECT us.*, ux.level, ux.total_xp FROM user_stats us
-            LEFT JOIN user_xp ux ON ux.account_id=us.account_id
-            WHERE us.account_id=?");
-        $statStmt->execute([$accountId]);
-        $stats = $statStmt->fetch() ?: [];
+        // Добавить XP автору/модератору
+        $adminStmt = $pdo->prepare("SELECT uploaded_by FROM manga WHERE id=?");
+        $adminStmt->execute([$mangaId]);
+        $admin = $adminStmt->fetch();
+        if ($admin && (int)$admin['uploaded_by'] !== $accountId) {
+            addXP($pdo, (int)$admin['uploaded_by'], XP_RATING, 'rating');
+        }
 
-        $accCreatedStmt = $pdo->prepare("SELECT created_at FROM accounts WHERE id=?");
-        $accCreatedStmt->execute([$accountId]);
-        $accInfo = $accCreatedStmt->fetch();
+        // Добавить в статистику
+        $pdo->prepare("INSERT INTO user_stats (account_id, total_ratings)
+            VALUES (?,1)
+            ON CONFLICT (account_id) DO UPDATE SET total_ratings=user_stats.total_ratings+1")
+            ->execute([$accountId]);
 
-        // Ночной читатель: текущий час
-        $isNight = (int)date('H') >= 0 && (int)date('H') < 5;
+        return true;
+    } catch (Exception $e) { return false; }
+}
 
-        foreach ($achievements as $ach) {
-            if ($ach['unlocked_at']) continue; // Уже получено
+// ========================= КОММЕНТАРИИ: ДОБАВЛЕНИЕ =========================
 
-            $current = 0;
-            switch ($ach['requirement_type']) {
-                case 'manga_read':    $current = (int)($stats['total_manga_read']    ?? 0); break;
-                case 'pages_read':    $current = (int)($stats['total_pages_read']    ?? 0); break;
-                case 'chapters_read': $current = (int)($stats['total_chapters_read'] ?? 0); break;
-                case 'comments':      $current = (int)($stats['total_comments']       ?? 0); break;
-                case 'comment_likes': $current = (int)($stats['comment_likes_received'] ?? 0); break;
-                case 'ratings':       $current = (int)($stats['total_ratings']        ?? 0); break;
-                case 'streak':        $current = (int)($stats['reading_streak']       ?? 0); break;
-                case 'level':         $current = (int)($stats['level']                ?? 1); break;
-                case 'night_read':    $current = $isNight ? 1 : 0; break;
-                case 'account_age':
-                    if ($accInfo) {
-                        $days = (int)floor((time() - strtotime($accInfo['created_at'])) / 86400);
-                        $current = $days;
-                    }
-                    break;
+function addComment(PDO $pdo, int $accountId, int $mangaId, string $text, ?int $replyToId = null): ?array {
+    $text = htmlspecialchars(substr(trim($text), 0, 1000), ENT_QUOTES);
+    if (!$text) return null;
+
+    try {
+        $stmt = $pdo->prepare("INSERT INTO manga_comments (account_id, manga_id, text, reply_to)
+            VALUES (?,?,?,?) RETURNING id, created_at");
+        $stmt->execute([$accountId, $mangaId, $text, $replyToId]);
+        $row = $stmt->fetch();
+
+        if ($row) {
+            // XP за комментарий
+            addXP($pdo, $accountId, XP_COMMENT, 'comment');
+
+            // Обновить статистику
+            $pdo->prepare("INSERT INTO user_stats (account_id, total_comments)
+                VALUES (?,1)
+                ON CONFLICT (account_id) DO UPDATE SET total_comments=user_stats.total_comments+1")
+                ->execute([$accountId]);
+
+            // Уведомление автору манги
+            $authorStmt = $pdo->prepare("SELECT uploaded_by FROM manga WHERE id=?");
+            $authorStmt->execute([$mangaId]);
+            $author = $authorStmt->fetch();
+            if ($author && (int)$author['uploaded_by'] !== $accountId) {
+                $userStmt = $pdo->prepare("SELECT username FROM accounts WHERE id=?");
+                $userStmt->execute([$accountId]);
+                $user = $userStmt->fetch();
+                if ($user) {
+                    sendInternalNotification($pdo, (int)$author['uploaded_by'], 'comment', $accountId, $mangaId,
+                        "@{$user['username']}: " . mb_substr($text, 0, 80));
+                }
             }
 
-            // Обновить прогресс
-            $pdo->prepare("INSERT INTO user_achievements (account_id, achievement_id, progress)
-                VALUES (?,?,?)
-                ON CONFLICT (account_id, achievement_id) DO UPDATE SET progress=EXCLUDED.progress")
-                ->execute([$accountId, $ach['id'], $current]);
-
-            // Разблокировать если достигнуто
-            if ($current >= (int)$ach['requirement_value']) {
-                $pdo->prepare("UPDATE user_achievements SET unlocked_at=NOW() WHERE account_id=? AND achievement_id=?")
-                    ->execute([$accountId, $ach['id']]);
-
-                // XP за достижение
-                addXP($pdo, $accountId, (int)$ach['xp_reward'], 'achievement');
-
-                // Уведомление
-                sendInternalNotification($pdo, $accountId, 'achievement', null, (int)$ach['id'],
-                    "🏆 Достижение разблокировано: {$ach['name']}! (+{$ach['xp_reward']} XP)");
-
-                $unlocked[] = $ach;
-            }
+            checkAchievements($pdo, $accountId);
+            return ['id' => $row['id'], 'created_at' => $row['created_at']];
         }
     } catch (Exception $e) {}
-    return $unlocked;
+    return null;
 }
 
-// ========================= СИНХРОНИЗАЦИЯ СТАТИСТИКИ =========================
+// ========================= КОММЕНТАРИИ: ЛАЙК =========================
 
-function syncUserStats(PDO $pdo, int $accountId): void {
+function toggleCommentLike(PDO $pdo, int $accountId, int $commentId): array {
     try {
-        // Получить tg_user_id
-        $accStmt = $pdo->prepare("SELECT tg_user_id FROM accounts WHERE id=?");
-        $accStmt->execute([$accountId]);
-        $acc = $accStmt->fetch();
-        $tgId = $acc ? (int)$acc['tg_user_id'] : 0;
+        $likeStmt = $pdo->prepare("SELECT 1 FROM manga_comment_likes WHERE account_id=? AND comment_id=?");
+        $likeStmt->execute([$accountId, $commentId]);
+        $liked = (bool)$likeStmt->fetch();
 
-        // Считаем прочитанную мангу (из обеих систем)
-        $mangaReadStmt = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status
-            WHERE status='read' AND (account_id=? " . ($tgId ? "OR user_id=?" : "") . ")");
-        if ($tgId) $mangaReadStmt->execute([$accountId, $tgId]);
-        else $mangaReadStmt->execute([$accountId]);
-        $mangaRead = (int)$mangaReadStmt->fetchColumn();
-
-        // Считаем оценки
-        $ratingsCount = 0;
-        if ($tgId) {
-            $rStmt = $pdo->prepare("SELECT COUNT(*) FROM manga_ratings WHERE user_id=?");
-            $rStmt->execute([$tgId]);
-            $ratingsCount = (int)$rStmt->fetchColumn();
-        }
-
-        // Считаем комментарии
-        $commStmt = $pdo->prepare("SELECT COUNT(*) FROM manga_comments WHERE account_id=? AND is_deleted=FALSE");
-        $commStmt->execute([$accountId]);
-        $commCount = (int)$commStmt->fetchColumn();
-
-        // Обновляем user_stats
-        $pdo->prepare("INSERT INTO user_stats (account_id, total_manga_read, total_ratings, total_comments)
-            VALUES (?,?,?,?)
-            ON CONFLICT (account_id) DO UPDATE SET
-                total_manga_read = EXCLUDED.total_manga_read,
-                total_ratings    = EXCLUDED.total_ratings,
-                total_comments   = EXCLUDED.total_comments,
-                updated_at = NOW()")
-            ->execute([$accountId, $mangaRead, $ratingsCount, $commCount]);
-
-        // Пересчитать уровень
-        $xpStmt = $pdo->prepare("SELECT total_xp FROM user_xp WHERE account_id=?");
-        $xpStmt->execute([$accountId]);
-        $xpRow = $xpStmt->fetch();
-        if ($xpRow) {
-            $correctLevel = getLevel((int)$xpRow['total_xp']);
-            $pdo->prepare("UPDATE user_xp SET level=? WHERE account_id=?")->execute([$correctLevel, $accountId]);
-        }
-
-        // Инициализировать XP если нет
-        $pdo->prepare("INSERT INTO user_xp (account_id) VALUES (?) ON CONFLICT DO NOTHING")->execute([$accountId]);
-
-    } catch (Exception $e) {}
-}
-
-// ========================= ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ =========================
-
-function getUserProfile(PDO $pdo, string $username): ?array {
-    try {
-        $stmt = $pdo->prepare("SELECT a.id, a.username, a.email, a.created_at as reg_date, a.is_admin,
-            a.admin_tag, a.is_verified, a.last_seen, a.profile_privacy,
-            pc.avatar_url, pc.banner_url, pc.banner_color, pc.bio,
-            COALESCE(ux.total_xp, 0) as total_xp,
-            COALESCE(ux.level, 1) as level,
-            COALESCE(ux.weekly_xp, 0) as weekly_xp,
-            COALESCE(ux.weekly_pages, 0) as weekly_pages,
-            COALESCE(ux.weekly_chapters, 0) as weekly_chapters,
-            COALESCE(us.total_manga_read, 0) as total_manga_read,
-            COALESCE(us.total_chapters_read, 0) as total_chapters_read,
-            COALESCE(us.total_pages_read, 0) as total_pages_read,
-            COALESCE(us.total_ratings, 0) as total_ratings,
-            COALESCE(us.total_comments, 0) as total_comments,
-            COALESCE(us.comment_likes_received, 0) as comment_likes_received,
-            COALESCE(us.reading_streak, 0) as reading_streak
-            FROM accounts a
-            LEFT JOIN profile_customizations pc ON pc.account_id=a.id
-            LEFT JOIN user_xp ux ON ux.account_id=a.id
-            LEFT JOIN user_stats us ON us.account_id=a.id
-            WHERE LOWER(a.username)=LOWER(?)");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
-        if (!$user) return null;
-
-        $uid = (int)$user['id'];
-
-        // Библиотечная статистика (из user_manga_status)
-        $tgStmt = $pdo->prepare("SELECT tg_user_id FROM accounts WHERE id=?");
-        $tgStmt->execute([$uid]);
-        $tgRow = $tgStmt->fetch();
-        $tgId = $tgRow ? (int)$tgRow['tg_user_id'] : 0;
-
-        $libStats = [];
-        foreach (['read', 'reading', 'plan_to_read', 'dropped', 'on_hold'] as $status) {
-            $lStmt = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE status=?
-                AND (account_id=? " . ($tgId ? "OR user_id=?" : "") . ")");
-            if ($tgId) $lStmt->execute([$status, $uid, $tgId]);
-            else $lStmt->execute([$status, $uid]);
-            $libStats[$status] = (int)$lStmt->fetchColumn();
-        }
-
-        // Последние комментарии
-        $cStmt = $pdo->prepare("SELECT mc.id, mc.text, mc.likes, mc.created_at, m.title as manga_title, mc.manga_id
-            FROM manga_comments mc
-            JOIN manga m ON m.id=mc.manga_id
-            WHERE mc.account_id=? AND mc.is_deleted=FALSE
-            ORDER BY mc.created_at DESC LIMIT 5");
-        $cStmt->execute([$uid]);
-        $comments = $cStmt->fetchAll();
-
-        // Достижения (только разблокированные)
-        $aStmt = $pdo->prepare("SELECT a.key, a.name, a.icon, a.rarity, a.xp_reward, ua.unlocked_at
-            FROM user_achievements ua
-            JOIN achievements a ON a.id=ua.achievement_id
-            WHERE ua.account_id=? AND ua.unlocked_at IS NOT NULL
-            ORDER BY ua.unlocked_at DESC LIMIT 20");
-        $aStmt->execute([$uid]);
-        $achievements = $aStmt->fetchAll();
-
-        // Онлайн статус
-        $onlineStmt = $pdo->prepare("SELECT last_seen FROM user_online WHERE account_id=?");
-        $onlineStmt->execute([$uid]);
-        $onlineRow = $onlineStmt->fetch();
-        $lastSeen = $onlineRow['last_seen'] ?? $user['last_seen'] ?? null;
-        $onlineStatus = getOnlineStatus($lastSeen);
-
-        // XP прогресс
-        $xpProgress = xpProgressInLevel((int)$user['total_xp']);
-
-        return [
-            'user'        => $user,
-            'lib_stats'   => $libStats,
-            'comments'    => $comments,
-            'achievements'=> $achievements,
-            'online'      => [
-                'status'   => $onlineStatus,
-                'label'    => getOnlineLabel($onlineStatus, $lastSeen),
-                'last_seen'=> $lastSeen,
-            ],
-            'xp'          => [
-                'total'    => (int)$user['total_xp'],
-                'level'    => (int)$user['level'],
-                'weekly'   => (int)$user['weekly_xp'],
-                'progress' => $xpProgress,
-            ],
-        ];
-    } catch (Exception $e) { return null; }
-}
-
-// ========================= КОММЕНТАРИИ =========================
-
-function likeComment(PDO $pdo, int $commentId, int $accountId): array {
-    try {
-        $check = $pdo->prepare("SELECT 1 FROM comment_likes WHERE comment_id=? AND account_id=?");
-        $check->execute([$commentId, $accountId]);
-        $liked = false;
-
-        if ($check->fetch()) {
-            // Убрать лайк
-            $pdo->prepare("DELETE FROM comment_likes WHERE comment_id=? AND account_id=?")->execute([$commentId, $accountId]);
-            $pdo->prepare("UPDATE manga_comments SET likes=GREATEST(0,likes-1) WHERE id=?")->execute([$commentId]);
+        if ($liked) {
+            $pdo->prepare("DELETE FROM manga_comment_likes WHERE account_id=? AND comment_id=?")
+                ->execute([$accountId, $commentId]);
         } else {
-            // Поставить лайк
-            $pdo->prepare("INSERT INTO comment_likes (comment_id, account_id) VALUES (?,?) ON CONFLICT DO NOTHING")->execute([$commentId, $accountId]);
-            $pdo->prepare("UPDATE manga_comments SET likes=likes+1 WHERE id=?")->execute([$commentId]);
-            $liked = true;
+            $pdo->prepare("INSERT INTO manga_comment_likes (account_id, comment_id)
+                VALUES (?,?)")->execute([$accountId, $commentId]);
 
-            // XP и статистика автора комментария
+            // XP за лайк (комментарию)
             $authorStmt = $pdo->prepare("SELECT account_id FROM manga_comments WHERE id=?");
             $authorStmt->execute([$commentId]);
             $author = $authorStmt->fetch();
@@ -597,6 +444,101 @@ function getPopularTags(PDO $pdo, int $limit = 20, bool $showNsfw = false): arra
     } catch (Exception $e) { return []; }
 }
 
+// ========================= ПОЛУЧЕНИЕ ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ =========================
+
+function getUserProfile(PDO $pdo, string $username): ?array {
+    try {
+        $stmt = $pdo->prepare("SELECT a.id, a.username, a.email, a.created_at as reg_date, a.is_admin,
+            a.admin_tag, a.is_verified, a.last_seen, a.profile_privacy,
+            pc.avatar_url, pc.banner_url, pc.banner_color, pc.bio,
+            COALESCE(ux.total_xp, 0) as total_xp,
+            COALESCE(ux.level, 1) as level,
+            COALESCE(ux.weekly_xp, 0) as weekly_xp,
+            COALESCE(ux.weekly_pages, 0) as weekly_pages,
+            COALESCE(ux.weekly_chapters, 0) as weekly_chapters,
+            COALESCE(us.total_manga_read, 0) as total_manga_read,
+            COALESCE(us.total_chapters_read, 0) as total_chapters_read,
+            COALESCE(us.total_pages_read, 0) as total_pages_read,
+            COALESCE(us.total_ratings, 0) as total_ratings,
+            COALESCE(us.total_comments, 0) as total_comments,
+            COALESCE(us.comment_likes_received, 0) as comment_likes_received,
+            COALESCE(us.reading_streak, 0) as reading_streak
+            FROM accounts a
+            LEFT JOIN profile_customizations pc ON pc.account_id=a.id
+            LEFT JOIN user_xp ux ON ux.account_id=a.id
+            LEFT JOIN user_stats us ON us.account_id=a.id
+            WHERE LOWER(a.username)=LOWER(?)");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+        if (!$user) return null;
+
+        $uid = (int)$user['id'];
+
+        // Библиотечная статистика (из user_manga_status)
+        $tgStmt = $pdo->prepare("SELECT tg_user_id FROM accounts WHERE id=?");
+        $tgStmt->execute([$uid]);
+        $tgRow = $tgStmt->fetch();
+        $tgId = $tgRow ? (int)$tgRow['tg_user_id'] : 0;
+
+        $libStats = [];
+        foreach (['read', 'reading', 'plan_to_read', 'dropped', 'on_hold'] as $status) {
+            $lStmt = $pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE status=?
+                AND (account_id=? " . ($tgId ? "OR user_id=?" : "") . ")");
+            if ($tgId) $lStmt->execute([$status, $uid, $tgId]);
+            else $lStmt->execute([$status, $uid]);
+            $libStats[$status] = (int)$lStmt->fetchColumn();
+        }
+
+        // Последние комментарии
+        $cStmt = $pdo->prepare("SELECT mc.id, mc.text, mc.likes, mc.created_at, m.title as manga_title, mc.manga_id
+            FROM manga_comments mc
+            JOIN manga m ON m.id=mc.manga_id
+            WHERE mc.account_id=? AND mc.is_deleted=FALSE
+            ORDER BY mc.created_at DESC LIMIT 5");
+        $cStmt->execute([$uid]);
+        $comments = $cStmt->fetchAll();
+
+        // Достижения (только разблокированные)
+        $aStmt = $pdo->prepare("SELECT a.key, a.name, a.icon, a.rarity, a.xp_reward, ua.unlocked_at
+            FROM user_achievements ua
+            JOIN achievements a ON a.id=ua.achievement_id
+            WHERE ua.account_id=? AND ua.unlocked_at IS NOT NULL
+            ORDER BY ua.unlocked_at DESC LIMIT 20");
+        $aStmt->execute([$uid]);
+        $achievements = $aStmt->fetchAll();
+
+        // Онлайн статус
+        $onlineStmt = $pdo->prepare("SELECT last_seen FROM user_online WHERE account_id=?");
+        $onlineStmt->execute([$uid]);
+        $onlineRow = $onlineStmt->fetch();
+        $lastSeen = $onlineRow['last_seen'] ?? $user['last_seen'] ?? null;
+        $onlineStatus = getOnlineStatus($lastSeen);
+
+        // XP прогресс
+        $xpProgress = xpProgressInLevel((int)$user['total_xp']);
+
+        return [
+            'user'        => $user,
+            'lib_stats'   => $libStats,
+            'comments'    => $comments,
+            'achievements'=> $achievements,
+            'online'      => [
+                'status'   => $onlineStatus,
+                'label'    => getOnlineLabel($onlineStatus, $lastSeen),
+                'last_seen'=> $lastSeen,
+            ],
+            'xp'          => [
+                'total'    => (int)$user['total_xp'],
+                'level'    => (int)$user['level'],
+                'weekly'   => (int)$user['weekly_xp'],
+                'progress' => $xpProgress,
+            ],
+        ];
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
 // ========================= СБРОС НЕДЕЛЬНОЙ СТАТИСТИКИ (запускать по крону) =========================
 // Добавить в cron: 0 0 * * 1 /usr/bin/php /path/to/reset_weekly.php
 // Или вызвать вручную через: resetWeeklyStats($pdo);
@@ -606,3 +548,4 @@ function resetWeeklyStats(PDO $pdo): void {
         $pdo->exec("UPDATE user_xp SET weekly_xp=0, weekly_pages=0, weekly_chapters=0, weekly_comments=0, week_start=CURRENT_DATE");
     } catch (Exception $e) {}
 }
+?>
