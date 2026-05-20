@@ -5,11 +5,38 @@
 // Обрабатывает маршруты: /u/USERNAME и /user/USERNAME
 // ============================================================
 
-// Маршрут: /u/USERNAME или /user/USERNAME
-if (preg_match('#^/u(?:ser)?/([a-zA-Z0-9_]{1,50})$#', $path, $m)) {
-    $targetUsername = $m[1];
-    $profile = getUserProfile($pdo, $targetUsername);
+// Маршруты профиля: /tg?user_id=TELEGRAM_ID или /u/USERNAME
+$profile = null;
+$isProfileRoute = false;
 
+// Маршрут: /tg?user_id=TELEGRAM_ID
+if ($path === '/tg' && !empty($_GET['user_id'])) {
+    $isProfileRoute = true;
+    $tgUserId = (int)$_GET['user_id'];
+    
+    // Найти аккаунт по Telegram ID
+    $tgStmt = $pdo->prepare("SELECT id FROM accounts WHERE tg_user_id=?");
+    $tgStmt->execute([$tgUserId]);
+    $tgAccount = $tgStmt->fetch();
+    
+    if ($tgAccount) {
+        // Получить профиль по account_id
+        $idStmt = $pdo->prepare("SELECT username FROM accounts WHERE id=?");
+        $idStmt->execute([(int)$tgAccount['id']]);
+        $accData = $idStmt->fetch();
+        if ($accData) {
+            $profile = getUserProfile($pdo, $accData['username']);
+        }
+    }
+}
+// Маршрут: /u/USERNAME или /user/USERNAME
+elseif (preg_match('#^/u(?:ser)?/([a-zA-Z0-9_]{1,50})$#', $path, $m)) {
+    $isProfileRoute = true;
+    $profile = getUserProfile($pdo, $m[1]);
+}
+
+// Показываем профиль или ошибку 404
+if ($isProfileRoute) {
     if (!$profile) {
         http_response_code(404);
         echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>404</title></head><body style="background:#0c0c0c;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div><div style="font-size:60px">👤</div><h1 style="margin:16px 0 8px">Пользователь не найден</h1><a href="/" style="color:#7c5cff">На главную</a></div></body></html>';
@@ -426,6 +453,6 @@ setInterval(() => fetch('/api/ping', {method:'POST'}), 60000);
 </body>
 </html>
 <?php 
-}  // Закрытие основного if (preg_match) блока со строки 9
+}  // Закрытие if ($isProfileRoute) блока
 exit; 
 ?>
