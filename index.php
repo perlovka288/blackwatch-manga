@@ -5,6 +5,22 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Перехватываем фатальные ошибки — показываем страницу ошибки вместо белого экрана
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        while (ob_get_level()) ob_end_clean();
+        http_response_code(500);
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ошибка</title></head>'
+           . '<body style="background:#0c0c0c;color:#f2f2f2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">'
+           . '<div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">⚠️</div>'
+           . '<h1 style="font-size:20px;margin-bottom:8px">Что-то пошло не так</h1>'
+           . '<p style="color:#888;font-size:13px">Попробуй обновить страницу</p>'
+           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:block;margin-top:16px">← На главную</a>'
+           . '</div></body></html>';
+    }
+});
+
 $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
 try {
     $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
@@ -64,6 +80,84 @@ try {
     
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0");
     $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NULL");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS nsfw_confirmed BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_nsfw BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_nsfw BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS uploaded_by INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS from_account_id INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS to_account_id INT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS reply_to_id INT DEFAULT NULL");
+
+    // ===== ТАБЛИЦЫ ДЛЯ functions.php =====
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_xp (
+        account_id INT PRIMARY KEY,
+        total_xp INT DEFAULT 0,
+        level INT DEFAULT 1,
+        weekly_xp INT DEFAULT 0,
+        weekly_pages INT DEFAULT 0,
+        weekly_chapters INT DEFAULT 0,
+        weekly_comments INT DEFAULT 0,
+        week_start DATE DEFAULT CURRENT_DATE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_stats (
+        account_id INT PRIMARY KEY,
+        total_manga_read INT DEFAULT 0,
+        total_chapters_read INT DEFAULT 0,
+        total_pages_read INT DEFAULT 0,
+        total_ratings INT DEFAULT 0,
+        total_comments INT DEFAULT 0,
+        comment_likes_received INT DEFAULT 0,
+        reading_streak INT DEFAULT 0
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_online (
+        account_id INT PRIMARY KEY,
+        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS achievements (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(100) NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT,
+        icon TEXT DEFAULT '🏆',
+        rarity VARCHAR(20) DEFAULT 'common',
+        xp_reward INT DEFAULT 0,
+        condition_type VARCHAR(50),
+        condition_value INT DEFAULT 0
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_achievements (
+        id SERIAL PRIMARY KEY,
+        account_id INT NOT NULL,
+        achievement_id INT NOT NULL,
+        unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(account_id, achievement_id)
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_notifications (
+        id SERIAL PRIMARY KEY,
+        account_id INT NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        from_account_id INT DEFAULT NULL,
+        reference_id INT DEFAULT NULL,
+        text TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_notifications_account ON user_notifications(account_id)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_subscriptions (
+        id SERIAL PRIMARY KEY,
+        follower_id INT NOT NULL,
+        following_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(follower_id, following_id)
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comment_likes (
+        account_id INT NOT NULL,
+        comment_id INT NOT NULL,
+        PRIMARY KEY(account_id, comment_id)
+    )");
     // Tags & genres tables
     $pdo->exec("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, is_nsfw BOOLEAN DEFAULT FALSE, manga_count INT DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS genres (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, manga_count INT DEFAULT 0)");
