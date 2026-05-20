@@ -2,7 +2,7 @@
 ob_start();
 error_reporting(E_ALL);
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 
 // Перехватываем фатальные ошибки — показываем страницу ошибки вместо белого экрана
@@ -22,95 +22,93 @@ register_shutdown_function(function() {
 });
 
 $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
-try {
     $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 } catch (PDOException $e) { die("DB Error: " . $e->getMessage()); }
 
-try {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, file_id TEXT, description TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, cover_imgbb_url TEXT, telegraph_url TEXT, is_series BOOLEAN DEFAULT FALSE)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapters (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, chapter_num FLOAT NOT NULL DEFAULT 1, title TEXT, telegraph_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapter_pages (id SERIAL PRIMARY KEY, chapter_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(50) NOT NULL, PRIMARY KEY (user_id, manga_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, chapter_id INT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, tg_user_id BIGINT DEFAULT NULL, tg_link_token TEXT DEFAULT NULL, is_verified BOOLEAN DEFAULT FALSE, last_login TIMESTAMP DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account_id INT NOT NULL, ip TEXT, user_agent TEXT, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_custom_statuses (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name VARCHAR(100) NOT NULL, color VARCHAR(20) NOT NULL DEFAULT '#7c5cff', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_ratings (user_id BIGINT NOT NULL, manga_id INT NOT NULL, rating INT NOT NULL CHECK(rating BETWEEN 1 AND 10), PRIMARY KEY (user_id, manga_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS admin_messages (id SERIAL PRIMARY KEY, text TEXT NOT NULL, sent_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_deleted BOOLEAN DEFAULT FALSE)");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_series BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
-    $pdo->exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS chapter_id INT DEFAULT NULL");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, file_id TEXT, description TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, cover_imgbb_url TEXT, telegraph_url TEXT, is_series BOOLEAN DEFAULT FALSE)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapters (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, chapter_num FLOAT NOT NULL DEFAULT 1, title TEXT, telegraph_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapter_pages (id SERIAL PRIMARY KEY, chapter_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(50) NOT NULL, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, chapter_id INT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, tg_user_id BIGINT DEFAULT NULL, tg_link_token TEXT DEFAULT NULL, is_verified BOOLEAN DEFAULT FALSE, last_login TIMESTAMP DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account_id INT NOT NULL, ip TEXT, user_agent TEXT, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_custom_statuses (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name VARCHAR(100) NOT NULL, color VARCHAR(20) NOT NULL DEFAULT '#7c5cff', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_ratings (user_id BIGINT NOT NULL, manga_id INT NOT NULL, rating INT NOT NULL CHECK(rating BETWEEN 1 AND 10), PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS admin_messages (id SERIAL PRIMARY KEY, text TEXT NOT NULL, sent_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_deleted BOOLEAN DEFAULT FALSE)"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_series BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS chapter_id INT DEFAULT NULL"); } catch(Exception $e) {}
     // New tables for friends, profile customization, email verification
-    $pdo->exec("CREATE TABLE IF NOT EXISTS email_verifications (id SERIAL PRIMARY KEY, email TEXT NOT NULL, code VARCHAR(6) NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS profile_customizations (account_id INT PRIMARY KEY, avatar_url TEXT DEFAULT NULL, banner_url TEXT DEFAULT NULL, banner_color VARCHAR(20) DEFAULT '#1a1a2e', bio TEXT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (id SERIAL PRIMARY KEY, requester_id INT NOT NULL, addressee_id INT NOT NULL, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(requester_id, addressee_id))");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS email_verifications (id SERIAL PRIMARY KEY, email TEXT NOT NULL, code VARCHAR(6) NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS profile_customizations (account_id INT PRIMARY KEY, avatar_url TEXT DEFAULT NULL, banner_url TEXT DEFAULT NULL, banner_color VARCHAR(20) DEFAULT '#1a1a2e', bio TEXT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (id SERIAL PRIMARY KEY, requester_id INT NOT NULL, addressee_id INT NOT NULL, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(requester_id, addressee_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)"); } catch(Exception $e) {}
 
     
     // ===== НОВЫЕ ТАБЛИЦЫ ДЛЯ КОММЕНТАРИЕВ, СООБЩЕНИЙ И СТАТИСТИКИ =====
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comments (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, account_id INT NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_manga ON manga_comments(manga_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_account ON manga_comments(account_id)");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comments (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, account_id INT NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_manga ON manga_comments(manga_id)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_account ON manga_comments(account_id)"); } catch(Exception $e) {}
     
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_messages (id SERIAL PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, text TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_recipient ON user_messages(recipient_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_sender ON user_messages(sender_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_pair ON user_messages(sender_id, recipient_id)");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_messages (id SERIAL PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, text TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_recipient ON user_messages(recipient_id)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_sender ON user_messages(sender_id)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_pair ON user_messages(sender_id, recipient_id)"); } catch(Exception $e) {}
     
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_weekly_stats (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, week_start TIMESTAMP NOT NULL, views INT DEFAULT 0, likes INT DEFAULT 0, comments INT DEFAULT 0, score INT DEFAULT 0, UNIQUE(manga_id, week_start))");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_weekly_stats ON manga_weekly_stats(week_start, score)");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_weekly_stats (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, week_start TIMESTAMP NOT NULL, views INT DEFAULT 0, likes INT DEFAULT 0, comments INT DEFAULT 0, score INT DEFAULT 0, UNIQUE(manga_id, week_start))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_weekly_stats ON manga_weekly_stats(week_start, score)"); } catch(Exception $e) {}
     
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NULL");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS nsfw_confirmed BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_nsfw BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_nsfw BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS uploaded_by INT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS views INT DEFAULT 0");
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS nsfw_confirmed BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_nsfw BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_nsfw BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS uploaded_by INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS views INT DEFAULT 0"); } catch(Exception $e) {}
     // manga_comments: новые поля
-    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
-    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE");
+    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
     // user_messages: мигрируем на схему from_account_id/to_account_id
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS from_account_id INT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS to_account_id INT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS reply_to_id INT DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_sender BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_receiver BOOLEAN DEFAULT FALSE");
-    $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE");
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS from_account_id INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS to_account_id INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS reply_to_id INT DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_sender BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_receiver BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
     // user_stats: недостающие поля
-    $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS last_read_date DATE DEFAULT NULL");
-    $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    try { $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS last_read_date DATE DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"); } catch(Exception $e) {}
     // user_online: флаг скрытия
-    $pdo->exec("ALTER TABLE user_online ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE");
+    try { $pdo->exec("ALTER TABLE user_online ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
     // user_achievements: прогресс и статус
-    $pdo->exec("ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0");
+    try { $pdo->exec("ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0"); } catch(Exception $e) {}
     // achievements: поля для новой схемы
-    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_type VARCHAR(50) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_value INT DEFAULT 1");
-    $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''");
+    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_type VARCHAR(50) DEFAULT NULL"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_value INT DEFAULT 1"); } catch(Exception $e) {}
+    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''"); } catch(Exception $e) {}
     // comment_likes — алиас для manga_comment_likes
-    $pdo->exec("CREATE TABLE IF NOT EXISTS comment_likes (account_id INT NOT NULL, comment_id INT NOT NULL, PRIMARY KEY (account_id, comment_id))");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS comment_likes (account_id INT NOT NULL, comment_id INT NOT NULL, PRIMARY KEY (account_id, comment_id))"); } catch(Exception $e) {}
 
     // ===== ТАБЛИЦЫ ДЛЯ functions.php =====
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_xp (
@@ -166,7 +164,7 @@ try {
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_notifications_account ON user_notifications(account_id)");
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_notifications_account ON user_notifications(account_id)"); } catch(Exception $e) {}
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_subscriptions (
         id SERIAL PRIMARY KEY,
         follower_id INT NOT NULL,
@@ -180,12 +178,12 @@ try {
         PRIMARY KEY(account_id, comment_id)
     )");
     // Tags & genres tables
-    $pdo->exec("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, is_nsfw BOOLEAN DEFAULT FALSE, manga_count INT DEFAULT 0)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS genres (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, manga_count INT DEFAULT 0)");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_tags (manga_id INT NOT NULL, tag_id INT NOT NULL, PRIMARY KEY (manga_id, tag_id))");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_genres (manga_id INT NOT NULL, genre_id INT NOT NULL, PRIMARY KEY (manga_id, genre_id))");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_tags_manga ON manga_tags(manga_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_genres_manga ON manga_genres(manga_id)");
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, is_nsfw BOOLEAN DEFAULT FALSE, manga_count INT DEFAULT 0)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS genres (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, manga_count INT DEFAULT 0)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_tags (manga_id INT NOT NULL, tag_id INT NOT NULL, PRIMARY KEY (manga_id, tag_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_genres (manga_id INT NOT NULL, genre_id INT NOT NULL, PRIMARY KEY (manga_id, genre_id))"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_tags_manga ON manga_tags(manga_id)"); } catch(Exception $e) {}
+    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_genres_manga ON manga_genres(manga_id)"); } catch(Exception $e) {}
     // Seed tags from JSON if table is empty
     try {
         $tagCount = (int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
@@ -210,7 +208,6 @@ try {
             foreach ($defaultGenres as $g) { $gInsert->execute($g); }
         }
     } catch(Exception $e) {}
-} catch (Exception $e) {}
 
 // Стартуем сессию СРАЗУ — до любых функций авторизации
 if (session_status() === PHP_SESSION_NONE) {
@@ -317,7 +314,6 @@ $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
     foreach ($stmtAdmins as $row) { if (!in_array((int)$row['user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['user_id']; }
-} catch (Exception $e) {}
 try {
     $accAdmStmt = $pdo->query("SELECT tg_user_id FROM accounts WHERE is_admin=TRUE AND tg_user_id IS NOT NULL");
     foreach ($accAdmStmt as $row) { if (!in_array((int)$row['tg_user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['tg_user_id']; }
