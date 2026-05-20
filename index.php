@@ -1,4 +1,6 @@
 <?php
+// Копируем до строки 192
+<?php
 ob_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -190,6 +192,27 @@ if ($path === '/api/debug-session') {
 
 // ===== НОВЫЕ МОДУЛИ =====
 require_once __DIR__ . '/functions.php';
+
+// ===== ОБРАБОТКА ПАРАМЕТРА tg_user_id =====
+// Если пришёл параметр ?tg_user_id=TELEGRAM_ID, редиректим на профиль /u/username
+if (!empty($_GET["tg_user_id"]) && is_numeric($_GET["tg_user_id"]) && $path === "/") {
+    $tgUserId = (int)$_GET["tg_user_id"];
+    try {
+        $tgStmt = $pdo->prepare("SELECT id FROM accounts WHERE tg_user_id=?");
+        $tgStmt->execute([$tgUserId]);
+        $tgAccount = $tgStmt->fetch();
+        if ($tgAccount) {
+            $idStmt = $pdo->prepare("SELECT username FROM accounts WHERE id=?");
+            $idStmt->execute([(int)$tgAccount["id"]]);
+            $accData = $idStmt->fetch();
+            if ($accData) {
+                header("Location: /u/" . urlencode($accData["username"]), true, 302);
+                exit;
+            }
+        }
+    } catch (Exception $e) {}
+}
+
 require_once __DIR__ . '/profile_page.php';
 require_once __DIR__ . '/new_api_endpoints.php';
 
