@@ -602,7 +602,7 @@ if ($path === '/admin') {
         .lock{font-size:64px;filter:grayscale(1)}h2{font-size:20px;font-weight:600;color:#fff}p{color:#666;font-size:14px}
         a{color:#e8192c;text-decoration:none;font-weight:600;border:1px solid rgba(232,25,44,.3);padding:8px 20px;border-radius:8px;transition:.2s}
         a:hover{background:rgba(232,25,44,.08)}</style></head><body>
-        <div class="lock">🔒</div><h2>Доступ закрыт</h2><p>У тебя нет прав для просмотра этой страницы.</p><a href="/">← На главную</a>
+        <div class="lock" style="font-size:48px">&#128274;</div><h2>Доступ закрыт</h2><p>У тебя нет прав для просмотра этой страницы.</p><a href="/">← На главную</a>
         </body></html><?php exit;
     }
     $bodyClass = isset($_COOKIE['bw_theme']) && $_COOKIE['bw_theme'] === 'light' ? 'light' : '';
@@ -1171,7 +1171,7 @@ select.input{cursor:pointer}
 <!-- ═══════════ SIDEBAR ═══════════ -->
 <aside class="sidebar" id="sidebar">
   <div class="s-logo">
-    <div class="s-logo-badge">⚙</div>
+    <div class="s-logo-badge"></div>
     <div>
       <div class="s-logo-name">BLACKWATCH</div>
       <div class="s-logo-tag">Admin Panel</div>
@@ -1199,7 +1199,7 @@ select.input{cursor:pointer}
       <span class="nav-label">Добавить главу</span>
     </div>
     <div class="nav-item" onclick="nav('add-manga',this)">
-      <span class="nav-icon">📖</span>
+      <span class="nav-icon"></span>
       <span class="nav-label">Добавить мангу</span>
     </div>
     <div class="nav-item" onclick="nav('tags',this)">
@@ -1226,7 +1226,7 @@ select.input{cursor:pointer}
 
   <div class="s-footer">
     <button class="s-footer-btn" onclick="toggleTheme()">
-      <span id="theme-icon">🌙</span>
+      <span id="theme-icon"></span>
       <span id="theme-label">Сменить тему</span>
     </button>
     <a href="/" class="s-footer-btn" style="text-decoration:none">
@@ -1249,8 +1249,8 @@ select.input{cursor:pointer}
       <div class="topbar-title" id="topbar-title">Дашборд</div>
     </div>
     <div class="topbar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">＋ Глава</button>
-      <button class="btn btn-red btn-sm" onclick="nav('add-manga',null)">＋ Манга</button>
+      <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">+ Глава</button>
+      <button class="btn btn-red btn-sm" onclick="nav('add-manga',null)">+ Манга</button>
     </div>
   </div>
 
@@ -1275,12 +1275,12 @@ select.input{cursor:pointer}
         <!-- Top Manga -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">♥ Топ по лайкам</div>
+            <div class="card-title">Топ по лайкам</div>
             <button class="btn btn-ghost btn-xs" onclick="nav('edit',null)">Редактировать →</button>
           </div>
           <div class="card-body-flush">
             <div id="top-manga-list" style="padding:12px 16px">
-              <div class="empty"><div class="empty-icon">📚</div>Загрузка...</div>
+              <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
             </div>
           </div>
         </div>
@@ -1288,34 +1288,34 @@ select.input{cursor:pointer}
         <!-- Quick Actions -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">⚡ Быстрые действия</div>
+            <div class="card-title">Быстрые действия</div>
           </div>
           <div class="card-body">
             <div class="qa-grid">
               <button class="qa-card qa-green" onclick="nav('add-manga',null)">
-                <div class="qa-card-icon">＋</div>
+                <div class="qa-card-icon">+</div>
                 <div class="qa-card-title">Новая манга</div>
                 <div class="qa-card-sub">ZIP, обложка, описание</div>
               </button>
               <button class="qa-card qa-amber" onclick="nav('add-chapter',null)">
-                <div class="qa-card-icon">📚</div>
+                <div class="qa-card-icon"></div>
                 <div class="qa-card-title">Новая глава</div>
                 <div class="qa-card-sub">Загрузить страницы</div>
               </button>
               <button class="qa-card qa-purple" onclick="nav('messages',null)">
-                <div class="qa-card-icon">✉</div>
+                <div class="qa-card-icon"></div>
                 <div class="qa-card-title">Написать всем</div>
                 <div class="qa-card-sub">Уведомление</div>
               </button>
               <button class="qa-card qa-blue" onclick="nav('suggestions',null)">
-                <div class="qa-card-icon">☆</div>
+                <div class="qa-card-icon"></div>
                 <div class="qa-card-title">Предложения</div>
                 <div class="qa-card-sub" id="qa-sug-count">—</div>
               </button>
             </div>
             <div style="margin-top:10px">
               <button class="qa-card qa-red" onclick="nav('admins',null)" style="width:100%;flex-direction:row;align-items:center;gap:12px;padding:13px 16px">
-                <div class="qa-card-icon" style="font-size:18px">🛡</div>
+                <div class="qa-card-icon" style="font-size:18px"></div>
                 <div>
                   <div class="qa-card-title">Управление администраторами</div>
                   <div class="qa-card-sub">Добавить или удалить</div>
@@ -1332,11 +1332,11 @@ select.input{cursor:pointer}
     <div class="panel" id="panel-archive">
       <div class="card">
         <div class="card-head">
-          <div class="card-title">◷ Журнал действий</div>
+          <div class="card-title">Журнал действий</div>
           <button class="btn btn-ghost btn-sm" onclick="loadArchive(0)">↺ Обновить</button>
         </div>
         <div class="card-body-flush" id="archive-list">
-          <div class="empty"><div class="empty-icon">⏳</div>Загрузка...</div>
+          <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
         </div>
         <div class="card-body" style="padding-top:0">
           <div class="pages" id="archive-pages"></div>
@@ -1348,15 +1348,15 @@ select.input{cursor:pointer}
     <div class="panel" id="panel-edit">
       <div class="card">
         <div class="card-head">
-          <div class="card-title">✎ Редактирование манги</div>
+          <div class="card-title">Редактирование манги</div>
         </div>
         <div class="card-body">
           <div id="edit-search-row" style="display:flex;gap:8px;margin-bottom:14px">
-            <input class="input" id="edit-search" type="text" placeholder="🔍 Поиск по названию..." onkeydown="if(event.key==='Enter')searchManga()">
+            <input class="input" id="edit-search" type="text" placeholder="Поиск по названию..." onkeydown="if(event.key==='Enter')searchManga()">
             <button class="btn btn-red" onclick="searchManga()">Найти</button>
           </div>
           <div id="manga-list">
-            <div class="empty"><div class="empty-icon">🔍</div>Введите название для поиска</div>
+            <div class="empty"><div class="empty-icon"></div>Введите название для поиска</div>
           </div>
           <div class="pages" id="edit-pages"></div>
           <div id="edit-form-wrap" style="display:none">
@@ -1371,7 +1371,7 @@ select.input{cursor:pointer}
     <div class="panel" id="panel-add-chapter">
       <div class="card">
         <div class="card-head">
-          <div class="card-title">📚 Добавить главу</div>
+          <div class="card-title">Добавить главу</div>
         </div>
         <div class="card-body">
           <div class="field">
@@ -1398,13 +1398,13 @@ select.input{cursor:pointer}
             <div class="field">
               <label class="label">Страницы</label>
               <div class="file-tabs">
-                <div class="ftab active" id="ftab-zip" onclick="switchTab('zip')">📦 ZIP-архив</div>
-                <div class="ftab" id="ftab-photos" onclick="switchTab('photos')">📸 Изображения</div>
+                <div class="ftab active" id="ftab-zip" onclick="switchTab('zip')">ZIP-архив</div>
+                <div class="ftab" id="ftab-photos" onclick="switchTab('photos')">Изображения</div>
               </div>
               <div class="fpanel active" id="fpanel-zip">
                 <div class="upload-zone">
                   <input type="file" id="ch-zip" accept=".zip" onchange="chZipChange(this)">
-                  <div class="upload-icon">📦</div>
+                  <div class="upload-icon"></div>
                   <div class="upload-text">ZIP со страницами главы</div>
                   <div class="upload-hint">Нажмите или перетащите файл</div>
                   <div class="upload-count" id="ch-zip-count"></div>
@@ -1413,7 +1413,7 @@ select.input{cursor:pointer}
               <div class="fpanel" id="fpanel-photos">
                 <div class="upload-zone">
                   <input type="file" id="ch-photos" accept="image/*" multiple onchange="chPhotosChange(this)">
-                  <div class="upload-icon">📸</div>
+                  <div class="upload-icon"></div>
                   <div class="upload-text">Выберите страницы (несколько файлов)</div>
                   <div class="upload-hint">Нажмите или перетащите файлы</div>
                   <div class="upload-count" id="ch-photos-count"></div>
@@ -1425,7 +1425,7 @@ select.input{cursor:pointer}
 
             <button class="btn btn-red btn-wide" id="ch-submit" onclick="submitChapter()">
               <span class="spinner" id="ch-spinner"></span>
-              <span class="btn-text">📤 Загрузить главу</span>
+              <span class="btn-text">Загрузить главу</span>
             </button>
             <div class="result" id="ch-result"></div>
           </div>
@@ -1439,7 +1439,7 @@ select.input{cursor:pointer}
         <!-- Genres -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">🎭 Жанры <span id="genre-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
+            <div class="card-title">Жанры <span id="genre-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
           </div>
           <div class="card-body">
             <div class="field">
@@ -1449,13 +1449,13 @@ select.input{cursor:pointer}
                 <button class="btn btn-purple btn-sm" onclick="addGenre()">+</button>
               </div>
             </div>
-            <div id="genres-list"><div class="empty" style="padding:20px 0"><div class="empty-icon">🎭</div>Загрузка...</div></div>
+            <div id="genres-list"><div class="empty" style="padding:20px 0"><div class="empty-icon"></div>Загрузка...</div></div>
           </div>
         </div>
         <!-- Tags -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">🏷 Теги <span id="tag-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
+            <div class="card-title">Теги <span id="tag-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
           </div>
           <div class="card-body">
             <div class="field">
@@ -1465,16 +1465,16 @@ select.input{cursor:pointer}
                 <button class="btn btn-purple btn-sm" onclick="addTag()">+</button>
               </div>
               <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer">
-                <input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW тег
+                <input type="checkbox" id="new-tag-nsfw"> NSFW тег
               </label>
             </div>
-            <div id="tags-list"><div class="empty" style="padding:20px 0"><div class="empty-icon">🏷</div>Загрузка...</div></div>
+            <div id="tags-list"><div class="empty" style="padding:20px 0"><div class="empty-icon"></div>Загрузка...</div></div>
           </div>
         </div>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-ghost" onclick="reseedTags()">↺ Загрузить стандартные теги</button>
-        <button class="btn btn-ghost" onclick="dedupTags()">🧹 Удалить дубли</button>
+        <button class="btn btn-ghost" onclick="dedupTags()">Удалить дубли</button>
         <span style="font-size:11px;color:var(--text3)">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
       </div>
     </div>
@@ -1484,24 +1484,24 @@ select.input{cursor:pointer}
       <div class="grid-2">
         <div class="card">
           <div class="card-head">
-            <div class="card-title">✉ Рассылка пользователям</div>
+            <div class="card-title">Рассылка пользователям</div>
           </div>
           <div class="card-body">
             <div class="field">
               <label class="label">Текст сообщения</label>
               <textarea class="input textarea" id="msg-text" placeholder="Введите текст сообщения для всех пользователей..."></textarea>
             </div>
-            <button class="btn btn-red btn-wide" onclick="sendMessage()">📨 Отправить всем</button>
+            <button class="btn btn-red btn-wide" onclick="sendMessage()">Отправить всем</button>
             <div class="result" id="msg-result"></div>
           </div>
         </div>
         <div class="card">
           <div class="card-head">
-            <div class="card-title">📋 Отправленные</div>
+            <div class="card-title">Отправленные</div>
             <button class="btn btn-ghost btn-xs" onclick="loadMessages()">↺</button>
           </div>
           <div class="card-body-flush" id="msg-list">
-            <div class="empty"><div class="empty-icon">✉</div>Загрузка...</div>
+            <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
           </div>
         </div>
       </div>
@@ -1511,11 +1511,11 @@ select.input{cursor:pointer}
     <div class="panel" id="panel-suggestions">
       <div class="card">
         <div class="card-head">
-          <div class="card-title">☆ Предложения пользователей</div>
+          <div class="card-title">Предложения пользователей</div>
           <button class="btn btn-ghost btn-sm" onclick="loadSuggestions(0)">↺ Обновить</button>
         </div>
         <div class="card-body-flush" id="sug-list">
-          <div class="empty"><div class="empty-icon">☆</div>Загрузка...</div>
+          <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
         </div>
         <div class="card-body" style="padding-top:0">
           <div class="pages" id="sug-pages"></div>
@@ -1528,16 +1528,16 @@ select.input{cursor:pointer}
       <div class="grid-2">
         <div class="card">
           <div class="card-head">
-            <div class="card-title">🛡 Список администраторов</div>
+            <div class="card-title">Список администраторов</div>
             <button class="btn btn-ghost btn-xs" onclick="loadAdmins()">↺</button>
           </div>
           <div class="card-body-flush" id="admins-list">
-            <div class="empty"><div class="empty-icon">🛡</div>Загрузка...</div>
+            <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
           </div>
         </div>
         <div class="card">
           <div class="card-head">
-            <div class="card-title">⚡ Назначить администратора</div>
+            <div class="card-title">Назначить администратора</div>
           </div>
           <div class="card-body">
             <div class="field">
@@ -1548,7 +1548,7 @@ select.input{cursor:pointer}
               <label class="label">Роль / Тег</label>
               <input class="input" id="ap-tag" type="text" placeholder="Редактор, Модератор...">
             </div>
-            <button class="btn btn-red btn-wide" onclick="submitAddAdmin()">✓ Назначить администратором</button>
+            <button class="btn btn-red btn-wide" onclick="submitAddAdmin()">Назначить администратором</button>
             <div class="result" id="ap-result"></div>
           </div>
         </div>
@@ -1559,7 +1559,7 @@ select.input{cursor:pointer}
     <div class="panel" id="panel-add-manga">
       <div class="card" style="max-width:680px">
         <div class="card-head">
-          <div class="card-title">📖 Добавить мангу</div>
+          <div class="card-title">Добавить мангу</div>
           <button class="btn btn-ghost btn-xs" onclick="resetAddMangaForm()">↺ Сбросить</button>
         </div>
         <div class="card-body">
@@ -1568,8 +1568,8 @@ select.input{cursor:pointer}
           <div class="field">
             <label class="label">Тип</label>
             <div style="display:flex;gap:6px">
-              <button class="btn btn-red btn-sm" id="am-type-single" onclick="amSetType('single')" style="flex:1">📄 Обычная</button>
-              <button class="btn btn-ghost btn-sm" id="am-type-series" onclick="amSetType('series')" style="flex:1">📚 Серия глав</button>
+              <button class="btn btn-red btn-sm" id="am-type-single" onclick="amSetType('single')" style="flex:1">Обычная</button>
+              <button class="btn btn-ghost btn-sm" id="am-type-series" onclick="amSetType('series')" style="flex:1">Серия глав</button>
             </div>
           </div>
 
@@ -1602,7 +1602,7 @@ select.input{cursor:pointer}
             <label class="label">Обложка</label>
             <div class="upload-zone" id="am-cover-zone">
               <input type="file" id="am-cover-input" accept="image/*" onchange="amOnCoverChange(this)">
-              <div class="upload-icon">🖼</div>
+              <div class="upload-icon"></div>
               <div class="upload-text">Загрузить обложку</div>
               <div class="upload-hint">JPG, PNG, WebP • Нажмите или перетащите</div>
               <div class="upload-count" id="am-cover-count"></div>
@@ -1614,13 +1614,13 @@ select.input{cursor:pointer}
             <div class="field">
               <label class="label">Страницы</label>
               <div class="file-tabs">
-                <div class="ftab active" id="am-ftab-zip" onclick="amSwitchTab('zip')">📦 ZIP-архив</div>
-                <div class="ftab" id="am-ftab-photos" onclick="amSwitchTab('photos')">📸 Изображения</div>
+                <div class="ftab active" id="am-ftab-zip" onclick="amSwitchTab('zip')">ZIP-архив</div>
+                <div class="ftab" id="am-ftab-photos" onclick="amSwitchTab('photos')">Изображения</div>
               </div>
               <div class="fpanel active" id="am-fpanel-zip">
                 <div class="upload-zone">
                   <input type="file" id="am-zip" accept=".zip" onchange="amOnZipChange(this)">
-                  <div class="upload-icon">📦</div>
+                  <div class="upload-icon"></div>
                   <div class="upload-text">ZIP со страницами</div>
                   <div class="upload-hint">Сортировка по дате • Нажмите или перетащите</div>
                   <div class="upload-count" id="am-zip-count"></div>
@@ -1629,7 +1629,7 @@ select.input{cursor:pointer}
               <div class="fpanel" id="am-fpanel-photos">
                 <div class="upload-zone">
                   <input type="file" id="am-photos" accept="image/*" multiple onchange="amOnPhotosChange(this)">
-                  <div class="upload-icon">📸</div>
+                  <div class="upload-icon"></div>
                   <div class="upload-text">Выберите страницы</div>
                   <div class="upload-hint">001.jpg, 002.jpg... • Нажмите или перетащите</div>
                   <div class="upload-count" id="am-photos-count"></div>
@@ -1642,7 +1642,7 @@ select.input{cursor:pointer}
 
           <button class="btn btn-red btn-wide" id="am-submit" onclick="amSubmitManga()">
             <span class="spinner" id="am-spinner"></span>
-            <span class="btn-text">🚀 Опубликовать</span>
+            <span class="btn-text">Опубликовать</span>
           </button>
           <div class="result" id="am-result"></div>
 
@@ -1666,9 +1666,9 @@ function toggleTheme(){
   const light=document.body.classList.toggle('light');
   document.documentElement.classList.toggle('light',light);
   document.cookie='bw_theme='+(light?'light':'dark')+';max-age='+(86400*365)+';path=/';
-  $id('theme-icon').textContent=light?'☀️':'🌙';
+  $id('theme-icon').textContent=light?'☀️':'';
 }
-(function(){const l=document.body.classList.contains('light');$id('theme-icon').textContent=l?'☀️':'🌙';})();
+(function(){const l=document.body.classList.contains('light');$id('theme-icon').textContent=l?'☀️':'';})();
 
 /* ══ SIDEBAR ══ */
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('open');}
@@ -1693,13 +1693,13 @@ async function loadStats(){
   try{
     const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());
     const d=await r.json();
-    if(d.error){$id('stat-cards').innerHTML='<div class="empty"><div class="empty-icon">🔒</div>Нет прав доступа</div>';return;}
+    if(d.error){$id('stat-cards').innerHTML='<div class="empty">Нет прав доступа</div>';return;}
     const cards=[
-      {num:d.manga_count,label:'Всего манги',icon:'📚',color:'var(--text)'},
-      {num:d.users_count,label:'Пользователей',icon:'👤',color:'var(--green)'},
+      {num:d.manga_count,label:'Всего манги',icon:'',color:'var(--text)'},
+      {num:d.users_count,label:'Пользователей',icon:'',color:'var(--green)'},
       {num:d.votes_count,label:'Голосований',icon:'♥',color:'var(--red)',accent:true},
-      {num:d.chapters_count,label:'Глав загружено',icon:'📖',color:'var(--text)'},
-      {num:d.new_today,label:'Новых сегодня',icon:'🔥',color:'var(--amber)'},
+      {num:d.chapters_count,label:'Глав загружено',icon:'',color:'var(--text)'},
+      {num:d.new_today,label:'Новых сегодня',icon:'',color:'var(--amber)'},
       {num:d.suggest_count,label:'Предложений',icon:'☆',color:'var(--blue)'},
     ];
     $id('stat-cards').innerHTML=cards.map(c=>`
@@ -1714,7 +1714,7 @@ async function loadStats(){
     $id('top-manga-list').innerHTML=top.length?top.map((m,i)=>{
       const cls=i===0?'gold':i===1?'silver':i===2?'bronze':'';
       return`<div class="top-item"><div class="top-num ${cls}">${i+1}</div><div class="top-name">${esc(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`;
-    }).join(''):'<div class="empty"><div class="empty-icon">📚</div>Нет данных</div>';
+    }).join(''):'<div class="empty"><div class="empty-icon"></div>Нет данных</div>';
 
     // Suggestion count
     if(d.suggest_count>0){const b=$id('sug-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
@@ -1730,7 +1730,7 @@ async function loadArchive(pg){
     const dotClass=t=>t.includes('add')?'log-dot-add':t.includes('del')?'log-dot-del':'log-dot-edit';
     $id('archive-list').innerHTML=d.items?.length
       ?'<div>'+d.items.map(a=>`<div class="log-item"><div class="log-dot ${dotClass(a.action_type)}"></div><div style="flex:1"><div class="log-type">${esc(a.action_type)}</div><div class="log-text">${esc(a.action_text)}</div><div class="log-time">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon">◷</div>Журнал пуст</div>';
+      :'<div class="empty">Журнал пуст</div>';
     pager('archive-pages',pg,d.total,20,n=>`loadArchive(${n})`);
   }catch(e){}
 }
@@ -1753,16 +1753,16 @@ async function loadMangaList(q='',pg=0){
     const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());
     const d=await r.json();
     if(!d.items?.length){
-      $id('manga-list').innerHTML='<div class="empty"><div class="empty-icon">🔍</div>Ничего не найдено</div>';
+      $id('manga-list').innerHTML='<div class="empty"><div class="empty-icon"></div>Ничего не найдено</div>';
       $id('edit-pages').innerHTML='';return;
     }
     $id('manga-list').innerHTML='<div class="list">'+d.items.map(m=>{
       const src=m.cover_imgbb_url||'';
       return`<div class="list-row list-row-click" onclick="openEdit(${m.id})">
         ${src?`<img class="cover-thumb" src="${esc(src)}" onerror="this.style.display='none'">`:``}
-        <div class="${src?'cover-placeholder':'cover-placeholder'}" style="${src?'display:none':''}">📖</div>
+        <div class="${src?'cover-placeholder':'cover-placeholder'}" style="${src?'display:none':''}"></div>
         <div class="row-main"><div class="row-title">${esc(m.title)}</div></div>
-        <div class="row-end"><span style="font-size:11px;color:var(--text3)">${m.is_series?'📚 Серия':'📄 Манга'}</span></div>
+        <div class="row-end"><span style="font-size:11px;color:var(--text3)">${m.is_series?'Серия':'Манга'}</span></div>
       </div>`;
     }).join('')+'</div>';
     pager('edit-pages',pg,d.total,10,n=>`loadMangaList('${esc(_editQ)}',${n})`);
@@ -1780,13 +1780,13 @@ async function openEdit(mangaId){
     $id('edit-form-wrap').style.display='block';
     let chapHtml='';
     if(manga.is_series&&manga.chapters?.length){
-      chapHtml=`<div class="field" style="margin-top:16px"><label class="label">Главы</label><div class="list">`+manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+esc(ch.title):''}</div><button class="btn btn-ghost btn-xs" onclick="delChapter(${ch.id},this)">🗑 Удалить</button></div>`).join('')+`</div></div>`;
+      chapHtml=`<div class="field" style="margin-top:16px"><label class="label">Главы</label><div class="list">`+manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+esc(ch.title):''}</div><button class="btn btn-ghost btn-xs" onclick="delChapter(${ch.id},this)">Удалить</button></div>`).join('')+`</div></div>`;
     }
     let allG=[],allT=[],mgIds=new Set(),mtIds=new Set();
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allG=gd.genres||[];allT=gd.tags||[];}catch(e){}
     try{const mr=await fetch(`/api/manga/${mangaId}/genres`);const md=await mr.json();md.genres?.forEach(g=>mgIds.add(g.id));md.tags?.forEach(t=>mtIds.add(t.id));}catch(e){}
-    const genHtml=allG.length?`<div class="field"><label class="label">🎭 Жанры</label><div class="chip-wrap">${allG.map(g=>`<label class="chip${mgIds.has(g.id)?' on':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagHtml=allT.length?`<div class="field"><label class="label">🏷 Теги</label><div class="chip-wrap">${allT.map(t=>`<label class="chip${mtIds.has(t.id)?' on':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    const genHtml=allG.length?`<div class="field"><label class="label">Жанры</label><div class="chip-wrap">${allG.map(g=>`<label class="chip${mgIds.has(g.id)?' on':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagHtml=allT.length?`<div class="field"><label class="label">Теги</label><div class="chip-wrap">${allT.map(t=>`<label class="chip${mtIds.has(t.id)?' on':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
     $id('edit-form').innerHTML=`
       <div class="field"><label class="label">Название</label><input class="input" id="ef-title" value="${esc(manga.title)}"></div>
       <div class="field"><label class="label">Описание</label><textarea class="input textarea" id="ef-desc">${esc(manga.description||'')}</textarea></div>
@@ -1797,15 +1797,15 @@ async function openEdit(mangaId){
           <div style="flex:1;min-width:120px">
             <div style="position:relative;border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .2s;text-align:center;font-size:11px;color:var(--text3);background:var(--surface2)" id="ef-cover-dropzone" onclick="document.getElementById('ef-cover-file').click()" onmouseover="this.style.borderColor='var(--border3)'" onmouseout="this.style.borderColor='var(--border2)'">
               <input type="file" id="ef-cover-file" accept="image/*" style="display:none" onchange="uploadEditCover(this, ${mangaId})">
-              <div id="ef-cover-upload-status">📷 Нажми чтобы загрузить новую обложку</div>
+              <div id="ef-cover-upload-status">Нажми чтобы загрузить новую обложку</div>
             </div>
             <input class="input" id="ef-cover" value="${esc(manga.cover_imgbb_url||'')}" placeholder="или вставь URL обложки" style="margin-top:6px;font-size:11px">
           </div>
         </div></div>
       ${genHtml}${tagHtml}${chapHtml}
       <div style="display:flex;gap:8px;margin-top:16px">
-        <button class="btn btn-red" style="flex:1" onclick="saveManga(${mangaId})">💾 Сохранить</button>
-        <button class="btn btn-ghost" onclick="delManga(${mangaId})">🗑 Удалить</button>
+        <button class="btn btn-red" style="flex:1" onclick="saveManga(${mangaId})">Сохранить</button>
+        <button class="btn btn-ghost" onclick="delManga(${mangaId})">Удалить</button>
       </div>
       <div class="result" id="ef-result"></div>`;
   }catch(e){alert('❌ Ошибка загрузки');}
@@ -1818,7 +1818,7 @@ async function saveManga(id){
     const gIds=[...$id('edit-form').querySelectorAll('input[data-gid]:checked')].map(el=>+el.dataset.gid);
     const tIds=[...$id('edit-form').querySelectorAll('input[data-tid]:checked')].map(el=>+el.dataset.tid);
     try{await fetch(`/api/admin/manga/${id}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:gIds,tag_ids:tIds})});}catch(e){}
-    showResult('ef-result',data.success,data.success?'✅ Сохранено!':'❌ Ошибка сохранения');
+    showResult('ef-result',data.success,data.success?'Сохранено':'Ошибка сохранения');
   }catch(e){}
 }
 async function delManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){backToList();loadMangaList(_editQ,_editPg);}}catch(e){}}
@@ -1832,13 +1832,13 @@ async function searchForChapter(){
     const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());
     const d=await r.json();
     if(!d.items?.length){$id('ch-manga-list').innerHTML='<div style="color:var(--text3);font-size:12px">Не найдено</div>';return;}
-    $id('ch-manga-list').innerHTML='<div class="list">'+d.items.map(m=>`<div class="list-row list-row-click" onclick="selectChManga(${m.id},'${esc(m.title).replace(/'/g,"\\'")}')"><div class="cover-placeholder">📖</div><div class="row-main"><div class="row-title">${esc(m.title)}</div></div><div class="row-end" style="color:var(--text3);font-size:11px">${m.is_series?'📚 Серия':'📄 Манга'}</div></div>`).join('')+'</div>';
+    $id('ch-manga-list').innerHTML='<div class="list">'+d.items.map(m=>`<div class="list-row list-row-click" onclick="selectChManga(${m.id},'${esc(m.title).replace(/'/g,"\\'")}')"><div class="cover-placeholder"></div><div class="row-main"><div class="row-title">${esc(m.title)}</div></div><div class="row-end" style="color:var(--text3);font-size:11px">${m.is_series?'Серия':'Манга'}</div></div>`).join('')+'</div>';
   }catch(e){}
 }
 function selectChManga(id,title){
   _chMangaId=id;
   $id('ch-form').style.display='block';
-  $id('ch-manga-list').innerHTML=`<div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:9px;padding:10px 14px;font-weight:700;color:var(--green);font-size:12px">✅ ${esc(title)}</div>`;
+  $id('ch-manga-list').innerHTML=`<div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:9px;padding:10px 14px;font-weight:700;color:var(--green);font-size:12px">${esc(title)}</div>`;
 }
 function switchTab(tab){
   ['zip','photos'].forEach(t=>{
@@ -1856,7 +1856,7 @@ async function chZipChange(input){
     zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
     files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
     const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
-    _chFiles=blobs;prev.textContent=`📦 ${blobs.length} стр. распаковано`;
+    _chFiles=blobs;prev.textContent=`${blobs.length} стр. распаковано`;
   }catch(e){prev.textContent='❌ '+e.message;}
 }
 async function submitChapter(){
@@ -1877,7 +1877,7 @@ async function submitChapter(){
     fill.style.width='95%';
     const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:_chMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
     const data=await res.json();fill.style.width='100%';
-    showResult('ch-result',data.success,data.success?`✅ Глава ${chNum} добавлена! ${urls.length} стр.`:'❌ '+(data.error||'Ошибка'));
+    showResult('ch-result',data.success,data.success?`Глава ${chNum} добавлена! ${urls.length} стр.`:'❌ '+(data.error||'Ошибка'));
   }catch(e){showResult('ch-result',false,'❌ '+e.message);}
   btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').style.display='';
 }
@@ -1890,18 +1890,18 @@ async function loadTagsPanel(){
     $id('tag-count').textContent=d.tags?.length||0;
     $id('genres-list').innerHTML=d.genres?.length
       ?d.genres.map(g=>`<div class="tg-row"><div class="tg-name">${esc(g.name)}</div><div class="tg-slug">${esc(g.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delGenre(${g.id},this)">🗑</button></div>`).join('')
-      :'<div class="empty" style="padding:16px 0"><div class="empty-icon">🎭</div>Нет жанров</div>';
+      :'<div class="empty" style="padding:16px 0"><div class="empty-icon"></div>Нет жанров</div>';
     $id('tags-list').innerHTML=d.tags?.length
       ?d.tags.map(t=>`<div class="tg-row" style="${t.is_nsfw?'border-color:rgba(232,25,44,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${esc(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${esc(t.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delTag(${t.id},this)">🗑</button></div>`).join('')
-      :'<div class="empty" style="padding:16px 0"><div class="empty-icon">🏷</div>Нет тегов</div>';
+      :'<div class="empty" style="padding:16px 0"><div class="empty-icon"></div>Нет тегов</div>';
   }catch(e){}
 }
 async function addGenre(){const name=$id('new-genre-name').value.trim();const slug=$id('new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){$id('new-genre-name').value='';$id('new-genre-slug').value='';loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
 async function delGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
 async function addTag(){const name=$id('new-tag-name').value.trim();const slug=$id('new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=$id('new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){$id('new-tag-name').value='';$id('new-tag-slug').value='';$id('new-tag-nsfw').checked=false;loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
 async function delTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
-async function reseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function dedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function reseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function dedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
 
 /* ══ MESSAGES ══ */
 async function loadMessages(){
@@ -1909,7 +1909,7 @@ async function loadMessages(){
     const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
     $id('msg-list').innerHTML=d.items?.length
       ?'<div>'+d.items.map(m=>`<div class="msg-item" id="amsg-${m.id}"><div class="msg-del"><button class="btn btn-ghost btn-xs" onclick="delMessage(${m.id})">Удалить</button></div><div class="msg-text">${esc(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon">✉</div>Сообщений нет</div>';
+      :'<div class="empty"><div class="empty-icon"></div>Сообщений нет</div>';
   }catch(e){}
 }
 async function sendMessage(){
@@ -1918,7 +1918,7 @@ async function sendMessage(){
   try{
     const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});
     const d=await r.json();
-    showResult('msg-result',d.success,d.success?'✅ Сообщение отправлено!':'❌ Ошибка');
+    showResult('msg-result',d.success,d.success?'Сообщение отправлено':'Ошибка');
     if(d.success){$id('msg-text').value='';loadMessages();}
   }catch(e){}
 }
@@ -1930,7 +1930,7 @@ async function loadSuggestions(pg){
     const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
     $id('sug-list').innerHTML=d.items?.length
       ?'<div>'+d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${esc(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="btn btn-green btn-xs" onclick="markSug(${s.id},this)">✓ Прочитано</button></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon">☆</div>Новых предложений нет</div>';
+      :'<div class="empty"><div class="empty-icon"></div>Новых предложений нет</div>';
     pager('sug-pages',pg,d.total,15,n=>`loadSuggestions(${n})`);
   }catch(e){}
 }
@@ -1941,8 +1941,8 @@ async function loadAdmins(){
   try{
     const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
     $id('admins-list').innerHTML=d.admins?.length
-      ?'<div>'+d.admins.map(a=>`<div class="list-row"><div class="row-icon row-icon-red">🛡</div><div class="row-main"><div class="row-title">${esc(a.tag)}</div><div class="row-sub">ID: ${a.user_id}</div></div><div class="row-end"><button class="btn btn-ghost btn-xs" onclick="navigator.clipboard?.writeText?.('${a.user_id}')">Копировать</button></div></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon">🛡</div>Нет данных</div>';
+      ?'<div>'+d.admins.map(a=>`<div class="list-row"><div class="row-icon row-icon-red"></div><div class="row-main"><div class="row-title">${esc(a.tag)}</div><div class="row-sub">ID: ${a.user_id}</div></div><div class="row-end"><button class="btn btn-ghost btn-xs" onclick="navigator.clipboard?.writeText?.('${a.user_id}')">Копировать</button></div></div>`).join('')+'</div>'
+      :'<div class="empty"><div class="empty-icon"></div>Нет данных</div>';
   }catch(e){}
 }
 async function submitAddAdmin(){
@@ -1953,7 +1953,7 @@ async function submitAddAdmin(){
   try{
     const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    showResult('ap-result',d.success,d.success?'✅ '+d.message:'❌ '+d.error);
+    showResult('ap-result',d.success,d.success?d.message:d.error);
     if(d.success){$id('ap-input').value='';$id('ap-tag').value='';setTimeout(loadAdmins,1500);}
   }catch(e){showResult('ap-result',false,'❌ Ошибка сети');}
 }
@@ -1988,11 +1988,11 @@ function amSwitchTab(tab){
 function amOnCoverChange(input){
   if(!input.files[0])return;
   _amCoverFile=input.files[0];
-  $id('am-cover-count').textContent='🖼 '+_amCoverFile.name;
+  $id('am-cover-count').textContent=_amCoverFile.name;
 }
 function amOnPhotosChange(input){
   _amPhotoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
-  $id('am-photos-count').textContent='📸 '+_amPhotoFiles.length+' файлов';
+  $id('am-photos-count').textContent=_amPhotoFiles.length+' файлов';
 }
 async function amOnZipChange(input){
   if(!input.files[0])return;
@@ -2004,7 +2004,7 @@ async function amOnZipChange(input){
     zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
     files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
     const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
-    _amPhotoFiles=blobs;$id('am-zip-count').textContent='📦 '+blobs.length+' стр. распаковано';
+    _amPhotoFiles=blobs;$id('am-zip-count').textContent=blobs.length+' стр. распаковано';
   }catch(e){$id('am-zip-count').textContent='❌ '+e.message;}
 }
 async function amLoadGenresAndTags(){
@@ -2037,7 +2037,7 @@ async function amSubmitManga(){
   showResult('am-result',true,'');$id('am-result').className='result';
   try{
     const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
-    if(!kd.success||!kd.keys?.length){showResult('am-result',false,'❌ Нет доступа к ключам');btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='🚀 Опубликовать';return;}
+    if(!kd.success||!kd.keys?.length){showResult('am-result',false,'❌ Нет доступа к ключам');btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='Опубликовать';return;}
     const keys=kd.keys;let coverUrl=null;
     if(_amCoverFile){fill.style.width='5%';coverUrl=await uploadOneToImgbb(_amCoverFile,keys);}
     const pageUrls=[];
@@ -2047,10 +2047,10 @@ async function amSubmitManga(){
     const tagIds=[...document.querySelectorAll('#am-tags-list input[data-am-tid]:checked')].map(e=>parseInt(e.dataset.amTid));
     const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:genreIds,tag_ids:tagIds})});
     const data=await res.json();fill.style.width='100%';
-    if(data.success){showResult('am-result',true,`✅ <strong>Манга добавлена!</strong>${isSeries?' 📚 Серия создана':''}${data.pages>0?' · '+data.pages+' стр.':''}`);$id('am-result').className='result ok';}
+    if(data.success){showResult('am-result',true,`<strong>Манга добавлена!</strong>${isSeries?' Серия создана':''}${data.pages>0?' · '+data.pages+' стр.':''}`);$id('am-result').className='result ok';}
     else{showResult('am-result',false,'❌ '+(data.error||'Неизвестная ошибка'));$id('am-result').className='result err';}
   }catch(e){showResult('am-result',false,'❌ '+e.message);$id('am-result').className='result err';}
-  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='🚀 Опубликовать';
+  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='Опубликовать';
 }
 function resetAddMangaForm(){
   $id('am-title').value='';$id('am-desc').value='';
@@ -2085,9 +2085,9 @@ async function uploadEditCover(input, mangaId) {
         if (url) {
             document.getElementById('ef-cover').value = url;
             if (previewEl) { previewEl.src = url; previewEl.style.display = 'block'; }
-            if (statusEl) statusEl.textContent = '✅ Обложка загружена!';
+            if (statusEl) statusEl.textContent = 'Обложка загружена!';
             // Auto-save cover
-            showResult('ef-result', true, '✅ Обложка загружена! Нажми Сохранить.');
+            showResult('ef-result', true, 'Обложка загружена! Нажми Сохранить.');
         } else {
             if (statusEl) statusEl.textContent = '❌ Ошибка загрузки';
         }
@@ -2353,10 +2353,10 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
-    $isNsfw = isset($input['is_nsfw']) && $input['is_nsfw'] ? true : false;
+    $isNsfw = !empty($input['is_nsfw']) ? true : false;
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?1:0]);
+    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?'true':'false']);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
@@ -2378,7 +2378,7 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $slug=trim($input['slug']??'');
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$name,$slug]);
+    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
@@ -3309,7 +3309,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <body>
 <div class="page-header">
     <a href="/" class="back-btn">← Назад</a>
-    <h1 class="page-title">💬 Сообщения</h1>
+    <h1 class="page-title">Сообщения</h1>
 </div>
 <div class="messages-container">
     <div class="msg-list" id="msg-list"></div>
@@ -3517,7 +3517,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 
     <?php if (!$account['is_verified']): ?>
     <div class="verify-banner">
-        <div class="verify-icon">📧</div>
+        <div class="verify-icon"></div>
         <div class="verify-info">
             <p>Подтверди email <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong> — мы отправили 6-значный код.</p>
             <div class="verify-input-row">
@@ -3531,7 +3531,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 
     <?php if ($needsReauth): ?>
     <div class="reauth-banner">
-        <div style="font-size:22px;flex-shrink:0">🔑</div>
+        <div style="font-size:22px;flex-shrink:0"></div>
         <div style="flex:1">
             <p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">Ежемесячное подтверждение. Нажми чтобы подтвердить аккаунт.</p>
             <button onclick="openReauthModal()" style="padding:7px 14px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Подтвердить сейчас</button>
@@ -3550,24 +3550,24 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
             <div class="avatar">
                 <?php if (!empty($custom['avatar_url'])): ?>
                 <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                <?php else: ?>👤<?php endif; ?>
+                <?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
             </div>
         </div>
         <div class="profile-header-row">
             <div class="profile-name-col">
                 <div class="username">
                     <?=htmlspecialchars($account['username'])?>
-                    <?php if ($isAccountAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($accountAdminTag ?? 'ADMIN')?></span><?php endif; ?>
-                    <?php if ($account['is_verified']): ?><span class="verify-badge">✓ Верифицирован</span><?php endif; ?>
+                    <?php if ($isAccountAdmin): ?><span class="admin-badge"><?=htmlspecialchars($accountAdminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($account['is_verified']): ?><span class="verify-badge">Верифицирован</span><?php endif; ?>
                 </div>
                 <div class="email"><?=htmlspecialchars($account['email'])?></div>
                 <?php if (!empty($custom['bio'])): ?>
                 <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
                 <?php endif; ?>
                 <div class="joined">На сайте с: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
-                <div style="margin-top:8px"><a href="/u/<?=htmlspecialchars($account['username'])?>" class="profile-link">👁 Открыть публичный профиль</a></div>
+                <div style="margin-top:8px"><a href="/u/<?=htmlspecialchars($account['username'])?>" class="profile-link">Открыть публичный профиль</a></div>
             </div>
-            <a href="/profile/edit" class="edit-profile-btn">✏️ Редактировать</a>
+            <a href="/profile/edit" class="edit-profile-btn">Редактировать</a>
         </div>
     </div>
 
@@ -3587,13 +3587,13 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
         $pct = $xpForLvl > 0 ? min(100, round($curXpInLevel / $xpForLvl * 100)) : 0;
         $xpProgress = ['pct'=>$pct,'current'=>$curXpInLevel,'needed'=>$xpForLvl,'next_lvl'=>$curLevel+1];
         // Level label
-        if ($curLevel >= 50) $lvlLabel = ['color'=>'#f59e0b','label'=>'👑 Легенда'];
-        elseif ($curLevel >= 30) $lvlLabel = ['color'=>'#8b5cf6','label'=>'💎 Мастер'];
-        elseif ($curLevel >= 15) $lvlLabel = ['color'=>'#3b82f6','label'=>'⚡ Опытный'];
-        elseif ($curLevel >= 5)  $lvlLabel = ['color'=>'#10b981','label'=>'📚 Читатель'];
-        else                     $lvlLabel = ['color'=>'#6b7280','label'=>'🌑 Новичок'];
+        if ($curLevel >= 50) $lvlLabel = ['color'=>'#f59e0b','label'=>'Легенда'];
+        elseif ($curLevel >= 30) $lvlLabel = ['color'=>'#8b5cf6','label'=>'Мастер'];
+        elseif ($curLevel >= 15) $lvlLabel = ['color'=>'#3b82f6','label'=>'Опытный'];
+        elseif ($curLevel >= 5)  $lvlLabel = ['color'=>'#10b981','label'=>'Читатель'];
+        else                     $lvlLabel = ['color'=>'#6b7280','label'=>'Новичок'];
         $levelFrame = $lvlLabel;
-    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок']; }
+    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'Новичок']; }
     ?>
     <div class="card" style="padding:0;overflow:hidden">
         <div style="padding:18px 22px 18px">
@@ -3602,7 +3602,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                     <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Уровень</span>
                     <span style="background:<?=htmlspecialchars($levelFrame['color'])?>;color:#fff;font-size:11px;font-weight:800;padding:3px 11px;border-radius:20px;letter-spacing:.3px"><?=htmlspecialchars($levelFrame['label'])?> <?=$curLevel?></span>
                 </div>
-                <span style="font-size:12px;color:var(--muted);font-weight:600">⭐ <?=number_format($totalXp)?> XP</span>
+                <span style="font-size:12px;color:var(--muted);font-weight:600"><?=number_format($totalXp)?> XP</span>
             </div>
             <div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden">
                 <div style="background:linear-gradient(90deg,<?=htmlspecialchars($levelFrame['color'])?>,<?=htmlspecialchars($levelFrame['color'])?>aa);height:100%;width:<?=$xpProgress['pct']?>%;border-radius:6px;transition:width .6s;box-shadow:0 0 8px <?=htmlspecialchars($levelFrame['color'])?>66"></div>
@@ -3629,25 +3629,25 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     } catch(Exception $e) { $totalLib=0; $readingLib=0; $readLib=0; }
     ?>
     <div class="card">
-        <div class="sec-title">📚 Библиотека</div>
+        <div class="sec-title">Библиотека</div>
         <div class="stats-row" id="stats-row">
-            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">📖 Всего</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">✅ Прочитано</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">Всего</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">Прочитано</div></a>
             <a class="stat" href="/library"><div class="stat-n"><?=$readingLib?></div><div class="stat-l">▶ Читаю</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$planLib?></div><div class="stat-l">📋 В планах</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$dropLib?></div><div class="stat-l">❌ Брошено</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$pauseLib?></div><div class="stat-l">⏸ На паузе</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$planLib?></div><div class="stat-l">В планах</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$dropLib?></div><div class="stat-l">Брошено</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$pauseLib?></div><div class="stat-l">На паузе</div></a>
         </div>
     </div>
 
     <!-- PRIVACY -->
     <div class="card">
-        <div class="sec-title">🔒 Видимость профиля</div>
+        <div class="sec-title">Видимость профиля</div>
         <?php $privacy = $account['profile_privacy'] ?? 'public'; ?>
         <div class="privacy-row">
-            <button class="privacy-btn <?=$privacy==='public'?'active-public':''?>" onclick="setPrivacy('public')">🌐 Открытый</button>
-            <button class="privacy-btn <?=$privacy==='friends'?'active-friends':''?>" onclick="setPrivacy('friends')">👥 Для друзей</button>
-            <button class="privacy-btn <?=$privacy==='private'?'active-private':''?>" onclick="setPrivacy('private')">🔒 Закрытый</button>
+            <button class="privacy-btn <?=$privacy==='public'?'active-public':''?>" onclick="setPrivacy('public')">Открытый</button>
+            <button class="privacy-btn <?=$privacy==='friends'?'active-friends':''?>" onclick="setPrivacy('friends')">Для друзей</button>
+            <button class="privacy-btn <?=$privacy==='private'?'active-private':''?>" onclick="setPrivacy('private')">Закрытый</button>
         </div>
         <div style="padding:0 24px 16px;font-size:11px;color:var(--muted)" id="privacy-desc">
             <?php if($privacy==='public'): ?>Профиль виден всем пользователям
@@ -3659,7 +3659,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- FRIENDS -->
     <div class="card">
         <div class="friends-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:14px">👥 Друзья <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(<?=$friendsCount?>)</span></div>
+            <div class="sec-title" style="padding:0;margin-bottom:14px">Друзья <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(<?=$friendsCount?>)</span></div>
             <div class="friend-add-row">
                 <input type="text" id="friend-username" placeholder="Username друга..." oninput="searchUsers(this.value)">
                 <button class="friend-add-btn" onclick="addFriend()">+ Добавить</button>
@@ -3672,11 +3672,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- TELEGRAM -->
     <div class="card">
         <div class="tg-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:13px">🤖 Telegram</div>
+            <div class="sec-title" style="padding:0;margin-bottom:13px">Telegram</div>
             <?php if ($account['tg_user_id']): ?>
             <div class="tg-connected">
                 <div>
-                    <div class="tg-info">✅ Telegram привязан</div>
+                    <div class="tg-info">Telegram привязан</div>
                     <div class="tg-meta">TG ID: <?=(int)$account['tg_user_id']?></div>
                 </div>
                 <button class="unlink-btn" onclick="unlinkTg()">Отвязать</button>
@@ -3693,7 +3693,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                 <div class="command-box"><span id="cmd-text"></span><button class="copy-cmd" onclick="copyCmd()">Копировать</button></div>
                 <p style="font-size:11px;color:var(--muted);margin-top:7px">Токен действителен 10 минут.</p>
             </div>
-            <button class="gen-btn" id="gen-btn" onclick="genLink()">🔗 Получить команду привязки</button>
+            <button class="gen-btn" id="gen-btn" onclick="genLink()">Получить команду привязки</button>
             <?php endif; ?>
         </div>
     </div>
@@ -3702,11 +3702,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- ADMIN MANAGEMENT (only for superadmins) -->
     <div class="card">
         <div class="admin-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:13px">⚡ Управление администраторами</div>
+            <div class="sec-title" style="padding:0;margin-bottom:13px">Управление администраторами</div>
             <div class="admin-add-row">
                 <input type="text" id="new-admin-input" placeholder="Email или TG ID пользователя">
                 <input type="text" id="new-admin-tag" placeholder="Тег (например: Редактор)">
-                <button class="admin-add-btn" onclick="addAdmin()">➕ Добавить администратора</button>
+                <button class="admin-add-btn" onclick="addAdmin()">Добавить администратора</button>
             </div>
             <div id="admin-result" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Список администраторов</div>
@@ -3721,7 +3721,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <!-- REAUTH MODAL -->
 <div class="modal-overlay" id="reauth-modal">
 <div class="modal-box">
-    <h2>🔑 Подтверждение</h2>
+    <h2>Подтверждение</h2>
     <p>Ежемесячное подтверждение. Введи пароль, затем код из письма.</p>
     <div class="err-msg" id="reauth-err"></div>
     <div id="reauth-step1">
@@ -3745,20 +3745,20 @@ async function verifyEmail(){
     if(code.length!==6){showToast('Введи 6 цифр');return;}
     const res=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
     const d=await res.json();
-    if(d.success){showToast('✅ Email подтверждён!');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('Email подтверждён!');setTimeout(()=>location.reload(),800);}
     else showToast('❌ '+d.error);
 }
 async function resendCode(){
     const res=await fetch('/api/auth/resend-verify',{method:'POST'});
     const d=await res.json();
-    showToast(d.success?'📧 Код отправлен заново':'❌ '+d.error);
+    showToast(d.success?'Код отправлен заново':'❌ '+d.error);
 }
 
 async function genLink(){const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';try{const res=await fetch('/api/auth/tg-link-token',{method:'POST'});const d=await res.json();if(d.success){document.getElementById('cmd-text').textContent=d.command;document.getElementById('link-command').style.display='block';btn.textContent='🔄 Обновить команду';}else showToast('Ошибка: '+d.error);}catch(e){showToast('Ошибка сети');}btn.disabled=false;}
-function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Скопировано!');}
+function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('Скопировано!');}
 async function unlinkTg(){if(!confirm('Отвязать Telegram?'))return;const res=await fetch('/api/auth/tg-unlink',{method:'POST'});const d=await res.json();if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}}
 
-async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');if(rows)rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total||0}</div><div class="stat-l">📖 Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.read||0}</div><div class="stat-l">✅ Прочитано</div></a><a class="stat" href="/library"><div class="stat-n">${d.now||0}</div><div class="stat-l">▶ Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.will||0}</div><div class="stat-l">📋 В планах</div></a><a class="stat" href="/library"><div class="stat-n">${d.drop||0}</div><div class="stat-l">❌ Брошено</div></a><a class="stat" href="/library"><div class="stat-n">${d.pause||0}</div><div class="stat-l">⏸ На паузе</div></a>`;}}catch(e){}}
+async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');if(rows)rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total||0}</div><div class="stat-l">Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.read||0}</div><div class="stat-l">Прочитано</div></a><a class="stat" href="/library"><div class="stat-n">${d.now||0}</div><div class="stat-l">▶ Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.will||0}</div><div class="stat-l">В планах</div></a><a class="stat" href="/library"><div class="stat-n">${d.drop||0}</div><div class="stat-l">Брошено</div></a><a class="stat" href="/library"><div class="stat-n">${d.pause||0}</div><div class="stat-l">На паузе</div></a>`;}}catch(e){}}
 
 async function setPrivacy(mode){
     const btns=document.querySelectorAll('.privacy-btn');
@@ -3769,7 +3769,7 @@ async function setPrivacy(mode){
     document.getElementById('privacy-desc').textContent=labels[mode];
     const res=await fetch('/api/profile/privacy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
     const d=await res.json();
-    if(d.success){showToast('✅ '+labels[mode]);}
+    if(d.success){showToast(labels[mode]);}
     else showToast('❌ Ошибка');
 }
 
@@ -3791,12 +3791,12 @@ async function loadFriends(){
     if(!d.friends||!d.friends.length){list.innerHTML='<div style="color:var(--muted);font-size:12px">Друзей пока нет</div>';return;}
     list.innerHTML=d.friends.map(f=>{
         const isPending=f.status==='pending';const isMine=f.is_mine;
-        const avatarHtml=f.avatar_url?`<img src="${escapeHtml(f.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div class="friend-avatar">👤</div>`;
+        const avatarHtml=f.avatar_url?`<img src="${escapeHtml(f.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div class="friend-avatar"></div>`;
         let actions='';
-        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">✓ Принять</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
+        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">Принять</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
         else if(isPending&&isMine)actions=`<span style="font-size:10px;color:var(--muted)">⏳ Ожидание...</span>`;
         else actions=`<button class="f-btn remove" onclick="friendAction(${f.id},'remove')">Удалить</button>`;
-        return `<div class="friend-item"><div class="friend-avatar" style="overflow:hidden">${avatarHtml}</div><div style="flex:1;min-width:0"><a href="/u/${escapeHtml(f.username)}" class="friend-name">${escapeHtml(f.username)}</a><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'👥 Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
+        return `<div class="friend-item"><div class="friend-avatar" style="overflow:hidden">${avatarHtml}</div><div style="flex:1;min-width:0"><a href="/u/${escapeHtml(f.username)}" class="friend-name">${escapeHtml(f.username)}</a><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
     }).join('');}catch(e){}
 }
 async function addFriend(){
@@ -3804,12 +3804,12 @@ async function addFriend(){
     if(!username){showToast('Введи имя пользователя');return;}
     const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){showToast('✅ Запрос отправлен!');document.getElementById('friend-username').value='';document.getElementById('user-suggestions').innerHTML='';loadFriends();}
+    if(d.success){showToast('Запрос отправлен');document.getElementById('friend-username').value='';document.getElementById('user-suggestions').innerHTML='';loadFriends();}
     else showToast('❌ '+(d.error||'Ошибка'));
 }
 async function friendAction(id,action){
     await fetch(`/api/friends/${id}/${action}`,{method:'POST'});loadFriends();
-    showToast(action==='accept'?'✅ Принято!':action==='reject'?'Отклонено':'Удалено');
+    showToast(action==='accept'?'Принято':action==='reject'?'Отклонено':'Удалено');
 }
 
 function openReauthModal(){document.getElementById('reauth-modal').classList.add('open');}
@@ -3829,7 +3829,7 @@ async function reauthStep2(){
     if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
     const res=await fetch('/api/auth/reauth-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'code',code})});
     const d=await res.json();
-    if(d.success){showToast('✅ Подтверждено!');document.getElementById('reauth-modal').classList.remove('open');setTimeout(()=>location.reload(),500);}
+    if(d.success){showToast('Подтверждено!');document.getElementById('reauth-modal').classList.remove('open');setTimeout(()=>location.reload(),500);}
     else{err.textContent=d.error||'Неверный код';err.classList.add('show');}
 }
 
@@ -3845,7 +3845,7 @@ async function addAdmin(){
     else{body.email=input;}
     const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
-    if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;loadAdminsList();}
+    if(d.success){result.style.color='var(--green)';result.textContent=d.message;loadAdminsList();}
     else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}
 }
 async function removeAdmin(tgId){
@@ -3861,7 +3861,7 @@ async function loadAdminsList(){
     document.getElementById('admins-full-list').innerHTML=d.admins.map(a=>`
         <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:5px">
             <div>
-                <div style="font-size:12px;font-weight:600;color:${a.is_super?'#ef4444':'var(--text2)'}">${escapeHtml(a.tag||'Администратор')}${a.is_super?' ⭐':''}</div>
+                <div style="font-size:12px;font-weight:600;color:${a.is_super?'#ef4444':'var(--text2)'}">${escapeHtml(a.tag||'Администратор')}${a.is_super?' (super)':''}</div>
                 <div style="font-size:10px;color:var(--muted)">${a.username?'@'+escapeHtml(a.username)+' · ':''}TG: ${a.tg_id}</div>
                 ${a.email?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(a.email)}</div>`:''}
             </div>
@@ -3935,7 +3935,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
     <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('visuals')">🖼 Внешний вид</button>
-        <button class="tab-btn" onclick="switchTab('account')">👤 Аккаунт</button>
+        <button class="tab-btn" onclick="switchTab('account')">Аккаунт</button>
     </div>
 
     <!-- TAB: VISUALS -->
@@ -3950,7 +3950,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
                     <img id="avatar-preview" class="avatar-preview" src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
                     <div class="upload-overlay">📷 Изменить</div>
                     <?php else: ?>
-                    <div class="upload-ph"><span>👤</span>Загрузить</div>
+                    <div class="upload-ph">Загрузить фото</div>
                     <div class="upload-overlay">📷</div>
                     <?php endif; ?>
                 </div>
@@ -3987,7 +3987,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
         <!-- BIO -->
         <div class="card">
-            <div class="card-title">📝 О себе</div>
+            <div class="card-title">О себе</div>
             <div class="fg">
                 <label class="fl">Биография</label>
                 <textarea class="fta" id="cust-bio" placeholder="Расскажи о себе..." maxlength="300"><?=htmlspecialchars($custom['bio']??'')?></textarea>
@@ -3997,7 +3997,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <!-- Скрытые поля для хранения URL фото перед сохранением -->
             <input type="hidden" id="avatar-pending-url" value="">
             <input type="hidden" id="banner-pending-url" value="">
-            <button class="save-btn" onclick="saveBio()">💾 Сохранить изменения</button>
+            <button class="save-btn" onclick="saveBio()">Сохранить изменения</button>
         </div>
     </div>
 
@@ -4005,7 +4005,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="tab-panel" id="tab-account">
         <!-- CHANGE USERNAME -->
         <div class="card">
-            <div class="card-title">🔤 Изменить никнейм</div>
+            <div class="card-title">Изменить никнейм</div>
             <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['username'])?></strong></p>
             <div class="fg">
                 <label class="fl">Новый никнейм</label>
@@ -4018,7 +4018,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
         <!-- CHANGE EMAIL -->
         <div class="card">
-            <div class="card-title">📧 Изменить email</div>
+            <div class="card-title">Изменить email</div>
             <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['email'])?></strong></p>
             <div id="email-step1">
                 <div class="fg">
@@ -4073,7 +4073,7 @@ async function uploadImage(input, type){
         const res = await fetch('/api/profile/upload-image?type='+type, {method:'POST', body:formData});
         const d = await res.json();
         if(d.success){
-            statusEl.textContent = '✅ Загружено! Нажми "Сохранить" чтобы применить';
+            statusEl.textContent = 'Загружено. Нажми Сохранить чтобы применить';
             // Сохраняем URL в скрытое поле для последующего сохранения
             document.getElementById(type+'-pending-url').value = d.url;
             if(type==='avatar'){
@@ -4116,10 +4116,10 @@ async function saveBio(){
     const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
     if(d.success){
-        ok.textContent='✅ Сохранено!';ok.classList.add('show');
+        ok.textContent='Сохранено!';ok.classList.add('show');
         document.getElementById('avatar-pending-url').value='';
         document.getElementById('banner-pending-url').value='';
-        showToast('✅ Профиль обновлён!');
+        showToast('Профиль обновлён!');
     }
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
@@ -4131,7 +4131,7 @@ async function changeUsername(){
     if(!username){err.textContent='Введи новый никнейм';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-username',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){ok.textContent='✅ Никнейм изменён! Перезагружаю...';ok.classList.add('show');setTimeout(()=>location.reload(),1000);}
+    if(d.success){ok.textContent='Никнейм изменён! Перезагружаю...';ok.classList.add('show');setTimeout(()=>location.reload(),1000);}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 
@@ -4143,7 +4143,7 @@ async function changeEmailStep1(){
     if(!password||!new_email){err.textContent='Заполни все поля';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'request',password,new_email})});
     const d=await res.json();
-    if(d.success){ok.textContent='📧 '+d.message;ok.classList.add('show');document.getElementById('email-step1').style.display='none';document.getElementById('email-step2').style.display='block';}
+    if(d.success){ok.textContent=d.message;ok.classList.add('show');document.getElementById('email-step1').style.display='none';document.getElementById('email-step2').style.display='block';}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 async function changeEmailStep2(){
@@ -4153,7 +4153,7 @@ async function changeEmailStep2(){
     if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'confirm',code})});
     const d=await res.json();
-    if(d.success){ok.textContent='✅ Email изменён!';ok.classList.add('show');showToast('✅ Email обновлён!');setTimeout(()=>location.reload(),1000);}
+    if(d.success){ok.textContent='Email изменён!';ok.classList.add('show');showToast('Email обновлён!');setTimeout(()=>location.reload(),1000);}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 </script>
@@ -4162,7 +4162,7 @@ async function changeEmailStep2(){
 // /u/username — PUBLIC USER PROFILE PAGE
 if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $targetUsername = $um[1];
-    $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag FROM accounts WHERE username=?");
+    $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag,user_xp,user_level FROM accounts WHERE username=?");
     $stmt->execute([$targetUsername]);
     $target = $stmt->fetch();
     if (!$target) { http_response_code(404); echo '<!DOCTYPE html><html><body style="background:#0c0c0c;color:#f2f2f2;font-family:Outfit,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">😔</div><h1 style="font-size:22px">Пользователь не найден</h1><a href="/" style="color:#7c5cff;text-decoration:none;margin-top:16px;display:block">← В каталог</a></div></body></html>'; exit; }
@@ -4284,15 +4284,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <div class="avatar">
                 <?php if (!empty($custom['avatar_url'])): ?>
                 <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                <?php else: ?>👤<?php endif; ?>
+                <?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
             </div>
         </div>
         <div class="profile-header-row">
             <div>
                 <div class="username">
                     <?=htmlspecialchars($target['username'])?>
-                    <?php if ($targetIsAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($adminTag ?? 'ADMIN')?></span><?php endif; ?>
-                    <?php if ($target['is_verified']): ?><span class="verify-badge">✓</span><?php endif; ?>
+                    <?php if ($targetIsAdmin): ?><span class="admin-badge"><?=htmlspecialchars($adminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($target['is_verified']): ?><span class="verify-badge">Верифицирован</span><?php endif; ?>
                 </div>
                 <?php if (!empty($custom['bio'])): ?>
                 <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
@@ -4302,18 +4302,18 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <?php if ($viewer): ?>
             <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-end">
                 <?php if ($friendshipStatus === 'accepted'): ?>
-                <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">👥 Друзья</button>
+                <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">Друзья</button>
                 <?php elseif ($friendshipStatus === 'pending' && $friendshipIsMine): ?>
-                <button class="friend-action-btn btn-pending">⏳ Ожидание</button>
+                <button class="friend-action-btn btn-pending">Ожидание</button>
                 <?php elseif ($friendshipStatus === 'pending' && !$friendshipIsMine): ?>
-                <button class="friend-action-btn btn-accept" onclick="acceptFriend(<?=$friendshipId?>)">✓ Принять</button>
+                <button class="friend-action-btn btn-accept" onclick="acceptFriend(<?=$friendshipId?>)">Принять</button>
                 <?php else: ?>
-                <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">+ В друзья</button>
+                <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">В друзья</button>
                 <?php endif; ?>
-                <button class="friend-action-btn" style="background:rgba(255,255,255,0.05);border-color:var(--border2);color:var(--text2);font-size:11px;padding:6px 12px" onclick="openMsgToUser(<?=$tid?>,'<?=htmlspecialchars($target['username'])?>')">✉️ Написать</button>
+                <button class="friend-action-btn" style="background:rgba(255,255,255,0.05);border-color:var(--border2);color:var(--text2);font-size:11px;padding:6px 12px" onclick="openMsgToUser(<?=$tid?>,'<?=htmlspecialchars($target['username'])?>')">Написать</button>
             </div>
             <?php else: ?>
-            <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">+ В друзья</a>
+            <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">В друзья</a>
             <?php endif; ?>
         </div>
     </div>
@@ -4322,20 +4322,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card" style="padding:18px 20px">
         <div style="display:flex;align-items:center;gap:14px">
             <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#5a4ca0);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;flex-shrink:0"><?=$targetLevel?></div>
-            <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px">⭐ Уровень <?=$targetLevel?></div><div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:linear-gradient(90deg,#7c5cff,#a78bfa);width:<?=$xpProgress?>%;border-radius:3px"></div></div><div style="font-size:10px;color:var(--muted)"><?=$currentXp?>/<?=$xpForLevel?> XP до следующего уровня</div></div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px">Уровень <?=$targetLevel?></div><div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:linear-gradient(90deg,#7c5cff,#a78bfa);width:<?=$xpProgress?>%;border-radius:3px"></div></div><div style="font-size:10px;color:var(--muted)"><?=$currentXp?>/<?=$xpForLevel?> XP до следующего уровня</div></div>
             <div style="text-align:right;flex-shrink:0"><div style="font-size:18px;font-weight:800;color:var(--text2)"><?=$targetXp?></div><div style="font-size:9px;color:var(--muted)">Всего XP</div></div>
         </div>
     </div>
     <?php if ($canView): ?>
     <div class="card">
-        <div class="sec-title">📚 Библиотека</div>
+        <div class="sec-title">Библиотека</div>
         <div class="stats-row">
-            <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">📖 Всего</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">✅ Прочитано</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">▶ Читает</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['will']?></div><div class="stat-l">📋 В планах</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['drop']?></div><div class="stat-l">❌ Брошено</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['pause']?></div><div class="stat-l">⏸ На паузе</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">Всего</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">Прочитано</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">Читает</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['will']?></div><div class="stat-l">В планах</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['drop']?></div><div class="stat-l">Брошено</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['pause']?></div><div class="stat-l">На паузе</div></div>
         </div>
         <?php if (!empty($libItems)): ?>
         <div class="lib-grid">
@@ -4343,9 +4343,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <a class="lib-card" href="/read/<?=(int)$li['id']?>">
                 <?php if(!empty($li['cover_imgbb_url'])): ?>
                 <img class="lib-cover" src="<?=htmlspecialchars($li['cover_imgbb_url'])?>" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">
-                <div class="lib-cover-ph" style="display:none">📖</div>
+                <div class="lib-cover-ph" style="display:none"></div>
                 <?php else: ?>
-                <div class="lib-cover-ph">📖</div>
+                <div class="lib-cover-ph"></div>
                 <?php endif; ?>
                 <div class="lib-title"><?=htmlspecialchars($li['title'])?></div>
             </a>
@@ -4354,19 +4354,19 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <?php endif; ?>
     </div>
     <?php elseif ($privacy === 'private'): ?>
-    <div class="card"><div class="private-notice">🔒 Профиль закрыт</div></div>
+    <div class="card"><div class="private-notice">Профиль закрыт</div></div>
     <?php else: ?>
-    <div class="card"><div class="private-notice">👥 Только для друзей<br><small style="font-size:11px;margin-top:6px;display:block">Добавь пользователя в друзья чтобы видеть библиотеку</small></div></div>
+    <div class="card"><div class="private-notice">Только для друзей<br><small style="font-size:11px;margin-top:6px;display:block">Добавь пользователя в друзья чтобы видеть библиотеку</small></div></div>
     <?php endif; ?>
 
     <?php if (!empty($friendsList)): ?>
     <div class="card">
-        <div class="sec-title">👥 Друзья</div>
+        <div class="sec-title">Друзья</div>
         <div class="friends-row">
             <?php foreach($friendsList as $fl): ?>
             <a href="/u/<?=htmlspecialchars($fl['username'])?>" class="friend-chip">
                 <div class="friend-chip-av">
-                    <?php if(!empty($fl['avatar_url'])): ?><img src="<?=htmlspecialchars($fl['avatar_url'])?>" alt=""><?php else: ?>👤<?php endif; ?>
+                    <?php if(!empty($fl['avatar_url'])): ?><img src="<?=htmlspecialchars($fl['avatar_url'])?>" alt=""><?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
                 </div>
                 <div class="friend-chip-name"><?=htmlspecialchars($fl['username'])?></div>
             </a>
@@ -4381,13 +4381,13 @@ function showToast(msg){const t=document.createElement('div');t.className='toast
 async function addFriend(username){
     const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){showToast('✅ Запрос отправлен!');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('Запрос отправлен');setTimeout(()=>location.reload(),800);}
     else showToast('❌ '+(d.error||'Ошибка'));
 }
 async function acceptFriend(id){
     const res=await fetch(`/api/friends/${id}/accept`,{method:'POST'});
     const d=await res.json();
-    if(d.success){showToast('✅ Теперь вы друзья!');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('Теперь вы друзья');setTimeout(()=>location.reload(),800);}
 }
 async function removeFriend(id){
     if(!confirm('Удалить из друзей?'))return;
@@ -4435,7 +4435,7 @@ p{color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6}
 <body>
 <div class="box">
     <a href="/" class="logo">⚫ BLACKWATCH</a>
-    <div class="icon">📧</div>
+    <div class="icon" style="font-size:32px;margin-bottom:16px">✉</div>
     <h1>Подтверди email</h1>
     <p>Мы отправили 6-значный код на <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong></p>
     <div class="err" id="err"></div>
@@ -4459,7 +4459,7 @@ async function verify(){
 async function resend(){
     const res=await fetch('/api/auth/resend-verify',{method:'POST'});
     const d=await res.json();
-    alert(d.success?'📧 Код отправлен повторно!':'Ошибка: '+d.error);
+    alert(d.success?'Код отправлен повторно':'Ошибка: '+d.error);
 }
 document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter')verify();});
 </script>
@@ -4489,7 +4489,7 @@ if (preg_match('#^/view/(\d+)$#',$path,$m)){
 <div class="counter"><span id="counter">—</span></div>
 <div class="nav-area prev" id="nav-prev"></div>
 <div class="nav-area next" id="nav-next"></div>
-<div class="reader"><div id="loading">📖 Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p><?php if($telegraphUrl):?><a href="<?=$telegraphUrl?>" target="_blank" class="telegraph-link">📄 Telegraph</a><?php endif;?></div></div>
+<div class="reader"><div id="loading">Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p><?php if($telegraphUrl):?><a href="<?=$telegraphUrl?>" target="_blank" class="telegraph-link">📄 Telegraph</a><?php endif;?></div></div>
 <script>
 let pages=[],current=0;
 const loadEl=document.getElementById('loading'),pageEl=document.getElementById('page'),fallEl=document.getElementById('fallback'),cntEl=document.getElementById('counter');
@@ -4546,11 +4546,11 @@ if (preg_match('#^/view-chapter/(\d+)$#',$path,$m)){
 <div class="counter"><span id="counter">—</span></div>
 <div class="nav-area prev" id="nav-prev"></div>
 <div class="nav-area next" id="nav-next"></div>
-<div class="reader"><div id="loading">📖 Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p></div></div>
+<div class="reader"><div id="loading">Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p></div></div>
 <div class="chapter-end" id="chapter-end">
     <h2>🎉 Глава завершена!</h2>
     <p>Глава <?=$chapter['chapter_num']?><?=$chapter['title']?': '.htmlspecialchars($chapter['title']):''?></p>
-    <?php if($nextChapter):?><a class="end-btn end-next" href="/view-chapter/<?=$nextChapter['id']?>">▶ Читать главу <?=$nextChapter['chapter_num']?></a><?php else:?><p style="color:#7c5cff;font-weight:600">✅ Это последняя глава</p><?php endif;?>
+    <?php if($nextChapter):?><a class="end-btn end-next" href="/view-chapter/<?=$nextChapter['id']?>">▶ Читать главу <?=$nextChapter['chapter_num']?></a><?php else:?><p style="color:#7c5cff;font-weight:600">Это последняя глава</p><?php endif;?>
     <a class="end-btn end-back" href="/read/<?=$chapter['manga_id']?>">← К информации о манге</a>
 </div>
 <script>
@@ -4601,7 +4601,7 @@ p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}
 <body>
 <div class="box">
     <a href="/" class="back">← Каталог</a>
-    <div class="lock">🔒</div>
+    <div class="lock" style="font-size:48px">&#128274;</div>
     <div class="manga-title">«<?=$title?>»</div>
     <h1>Нужна регистрация</h1>
     <p>Чтобы читать мангу, следить за прогрессом и сохранять в библиотеку — создай аккаунт. Это бесплатно!</p>
@@ -4789,11 +4789,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <div class="manga-page">
     <div class="hero">
         <div class="cover-wrap">
-            <?php if($coverSrc):?><img class="cover-img" src="<?=$coverSrc?>" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cover-ph" style="display:none">📖</div><?php else:?><div class="cover-ph">📖</div><?php endif;?>
+            <?php if($coverSrc):?><img class="cover-img" src="<?=$coverSrc?>" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cover-ph" style="display:none"></div><?php else:?><div class="cover-ph"></div><?php endif;?>
         </div>
         <div class="meta">
             <div class="manga-title"><?=htmlspecialchars($manga['title'])?></div>
-            <?php if($manga['is_series']):?><div><span class="badge-series">📚 Серия глав</span></div><?php endif;?>
+            <?php if($manga['is_series']):?><div><span class="badge-series">Серия глав</span></div><?php endif;?>
             <?php if($manga['description']):?><div class="manga-desc"><?=nl2br(htmlspecialchars($manga['description']))?></div><?php endif;?>
             <?php if(!empty($mangaGenres)||!empty($mangaTags)):?>
             <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
@@ -4813,9 +4813,9 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                 <span class="rate-avg" id="rate-avg-text"><?=($ratingData['cnt']>0)?round((float)$ratingData['avg'],1).' / 10 ('.(int)$ratingData['cnt'].' оценок)':'Нет оценок'?></span>
             </div>
             <div class="status-row" id="status-row">
-                <button class="status-btn <?=$currentStatus==='now'?'active-now':''?>" onclick="setStatus('now')">📖 Читаю</button>
-                <button class="status-btn <?=$currentStatus==='will'?'active-will':''?>" onclick="setStatus('will')">🔖 Буду читать</button>
-                <button class="status-btn <?=$currentStatus==='read'?'active-read':''?>" onclick="setStatus('read')">✅ Прочитано</button>
+                <button class="status-btn <?=$currentStatus==='now'?'active-now':''?>" onclick="setStatus('now')">Читаю</button>
+                <button class="status-btn <?=$currentStatus==='will'?'active-will':''?>" onclick="setStatus('will')">Буду читать</button>
+                <button class="status-btn <?=$currentStatus==='read'?'active-read':''?>" onclick="setStatus('read')">Прочитано</button>
                 <?php foreach($customStatuses as $cs):?>
                 <button class="status-btn <?=$currentStatus===$cs['name']?'active-custom':''?>" style="<?=$currentStatus===$cs['name']?'background:'.htmlspecialchars($cs['color']).'22;border-color:'.htmlspecialchars($cs['color']).';color:'.htmlspecialchars($cs['color']):''?>" onclick="setStatus('<?=htmlspecialchars(addslashes($cs['name']))?>')"><?=htmlspecialchars($cs['name'])?></button>
                 <?php endforeach;?>
@@ -4825,11 +4825,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     </div>
     <div class="read-section">
         <?php if($manga['is_series']):?>
-        <h3>📚 Список глав</h3>
+        <h3>Список глав</h3>
         <div class="chapters-list" id="chapters-list"><div style="color:var(--muted);padding:8px 0">Загрузка глав...</div></div>
         <?php else:?>
-        <h3>📖 Читать</h3>
-        <?php if($pagesCount>0):?><a href="/view/<?=$id?>" class="read-btn read-primary">📖 Читать (<?=$pagesCount?> стр.)</a><?php endif;?>
+        <h3>Читать</h3>
+        <?php if($pagesCount>0):?><a href="/view/<?=$id?>" class="read-btn read-primary">Читать (<?=$pagesCount?> стр.)</a><?php endif;?>
         <?php if($manga['telegraph_url']):?><a href="<?=htmlspecialchars($manga['telegraph_url'])?>" target="_blank" class="read-btn read-secondary">📄 Telegraph</a><?php endif;?>
         <?php if(!$pagesCount&&!$manga['telegraph_url']):?><p style="color:var(--muted);font-size:14px">😔 Страницы ещё не добавлены</p><?php endif;?>
         <?php endif;?>
@@ -4842,7 +4842,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
             <?php foreach($similarManga as $sm):$smCover=!empty($sm['cover_imgbb_url'])?htmlspecialchars($sm['cover_imgbb_url']):'';?>
             <a class="sim-card" href="/read/<?=(int)$sm['id']?>">
                 <?php if($smCover):?><img class="sim-cover" src="<?=$smCover?>" alt="" onerror="this.style.background='#1a1a2e'">
-                <?php else:?><div class="sim-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px">📖</div><?php endif;?>
+                <?php else:?><div class="sim-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px"></div><?php endif;?>
                 <div class="sim-title"><?=htmlspecialchars($sm['title'])?></div>
             </a>
             <?php endforeach;?>
@@ -4853,7 +4853,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- ===== КОММЕНТАРИИ НА СТРАНИЦЕ МАНГИ ===== -->
     <div id="manga-comments-section" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:16px">
         <div style="font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif">
-            💬 Комментарии <span style="background:rgba(255,255,255,0.07);color:var(--muted);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:600" id="manga-comments-count">(0)</span>
+            Комментарии <span style="background:rgba(255,255,255,0.07);color:var(--muted);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:600" id="manga-comments-count">(0)</span>
         </div>
         <?php if($currentAccount): ?>
         <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px">
@@ -4935,7 +4935,7 @@ function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.innerText=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
 async function vote(type){try{const res=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,vote_type:type,tg_user_id:getTgUser()})});const data=await res.json();if(data.success){document.getElementById('likes').textContent=data.likes;document.getElementById('dislikes').textContent=data.dislikes;showToast(type==='like'?'👍 Лайк!':'👎 Дизлайк');}}catch(e){}}
-async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';b.removeAttribute('style');});const map={'now':'active-now','will':'active-will','read':'active-read'};if(map[s])event.target.classList.add(map[s]);else{event.target.classList.add('active-custom');const clr=event.target.style.borderColor||'var(--accent)';event.target.style.cssText=`background:${clr}22;border-color:${clr};color:${clr};border-width:2px`;}showToast('✅ Статус обновлён');}catch(e){}}
+async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';b.removeAttribute('style');});const map={'now':'active-now','will':'active-will','read':'active-read'};if(map[s])event.target.classList.add(map[s]);else{event.target.classList.add('active-custom');const clr=event.target.style.borderColor||'var(--accent)';event.target.style.cssText=`background:${clr}22;border-color:${clr};color:${clr};border-width:2px`;}showToast('Статус обновлён');}catch(e){}}
 // Rating
 function openRatingModal(){document.getElementById('rating-modal').classList.add('open');initStars();}
 function closeRatingModal(){document.getElementById('rating-modal').classList.remove('open');}
@@ -4945,7 +4945,7 @@ async function submitRating(){if(!selectedRating){showToast('Выбери оце
 function openCStatusModal(){const cr=document.getElementById('cs-colors');cr.innerHTML=colors.map(c=>`<div class="color-opt${c===selectedColor?' sel':''}" style="background:${c}" data-c="${c}" onclick="pickColor(this,'${c}')"></div>`).join('');document.getElementById('cstatus-modal').classList.add('open');}
 function closeCStatusModal(){document.getElementById('cstatus-modal').classList.remove('open');}
 function pickColor(el,c){selectedColor=c;document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');}
-async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('✅ Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
+async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
 let _delStatusId=null;
 function confirmDeleteStatus(id,name){_delStatusId=id;document.getElementById('del-status-name').textContent=name;const m=document.getElementById('delete-status-modal');m.style.display='flex';}
 function cancelDeleteStatus(){_delStatusId=null;document.getElementById('delete-status-modal').style.display='none';}
@@ -4992,7 +4992,7 @@ async function loadMangaComments(mangaId) {
                     </div>
                     <div style="display:flex;gap:5px;flex-shrink:0">
                         ${_mangaCurrentAccId ? `<button onclick="setMangaReply(${c.id},'${escapeHtml(c.username).replace(/'/g,"\\'")}')" style="padding:3px 9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.color='var(--text2)';this.style.borderColor='var(--border2)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Ответить</button>` : ''}
-                        ${canDel ? `<button onclick="deleteMangaComment(${c.id},${mangaId})" style="padding:3px 9px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:#f87171;font-size:10px;cursor:pointer;font-family:inherit" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">🗑 Удалить</button>` : ''}
+                        ${canDel ? `<button onclick="deleteMangaComment(${c.id},${mangaId})" style="padding:3px 9px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:#f87171;font-size:10px;cursor:pointer;font-family:inherit" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">Удалить</button>` : ''}
                     </div>
                 </div>
                 <div style="font-size:13px;color:var(--text2);line-height:1.55;padding-left:39px;margin-top:-30px;padding-top:30px">${replyRef}${escapeHtml(c.text)}</div>
@@ -5049,7 +5049,7 @@ async function submitMangaComment(mangaId) {
         if (data.success) {
             input.value = '';
             cancelMangaReply();
-            showToast('✅ Комментарий добавлен!');
+            showToast('Комментарий добавлен');
             loadMangaComments(mangaId);
         } else {
             showToast('❌ Сначала войди в аккаунт');
@@ -5066,7 +5066,7 @@ if ($path==='/library'){
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}.box{max-width:360px;width:100%}.lock{font-size:56px;margin-bottom:16px}h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}.btns{display:flex;gap:10px;flex-direction:column}.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;display:block}.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;display:block}.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}</style>
-</head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock">📚</div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
+</head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock"></div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
     $userId=getEffectiveUserId($pdo);
     // Get custom statuses
     $csStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$csStmt->execute([$userId]);$customStatuses=$csStmt->fetchAll();
@@ -5205,27 +5205,27 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 @keyframes loaderSpin{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.1);background:var(--text2)}}
 </style>
 <header><div class="header-inner">
-    <a href="/" class="logo">⬛ <span>BLACKWATCH</span></a>
+    <a href="/" class="logo">BLACKWATCH</a>
     <a href="/" class="back-btn" style="margin-left:auto">← Каталог</a>
 </div></header>
 <div class="wrap">
-    <div class="lib-title">📚 Моя библиотека <span id="lib-total-count"></span></div>
+    <div class="lib-title">Моя библиотека <span id="lib-total-count"></span></div>
     <div class="lib-controls">
-        <input class="lib-search" type="text" placeholder="🔍 Поиск в библиотеке..." id="lib-search" oninput="filterLib()">
+        <input class="lib-search" type="text" placeholder="Поиск в библиотеке..." id="lib-search" oninput="filterLib()">
         <select class="sort-select" id="sort-select" onchange="filterLib()">
             <option value="all">Все статусы</option>
             <option value="popular">По популярности</option>
-            <option value="now">📖 Читаю</option>
-            <option value="read">✅ Прочитано</option>
-            <option value="will">🔖 Буду читать</option>
+            <option value="now">Читаю</option>
+            <option value="read">Прочитано</option>
+            <option value="will">Буду читать</option>
             <?php foreach($customStatuses as $cs):?><option value="custom_<?=htmlspecialchars($cs['name'])?>"><?=htmlspecialchars($cs['name'])?></option><?php endforeach;?>
         </select>
         <div class="view-btns">
-            <button class="view-btn active" id="vb-grid" onclick="setView('grid')">⊞ Плитка</button>
-            <button class="view-btn" id="vb-list" onclick="setView('list')">☰ Список</button>
+            <button class="view-btn active" id="vb-grid" onclick="setView('grid')">Плитка</button>
+            <button class="view-btn" id="vb-list" onclick="setView('list')">Список</button>
         </div>
     </div>
-    <div id="content"><div class="empty-page">📖 Загрузка...</div></div>
+    <div id="content"><div class="empty-page">Загрузка...</div></div>
 </div>
 <script>
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
@@ -5234,7 +5234,7 @@ function escapeHtml(t){const d=document.createElement('div');d.textContent=t;ret
 window.addEventListener('load',()=>{const l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
-const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
+const labelMap={now:'Читаю',will:'Буду читать',read:'Прочитано'};
 function getBadgeClass(status){return badgeMap[status]||'badge-will';}
 function getBadgeLabel(status){return labelMap[status]||status;}
 function setView(v){currentView=v;document.getElementById('vb-grid').classList.toggle('active',v==='grid');document.getElementById('vb-list').classList.toggle('active',v==='list');renderLib(allItems);}
@@ -5242,22 +5242,22 @@ function filterLib(){const q=document.getElementById('lib-search').value.toLower
 function renderLib(items){
     const c=document.getElementById('content');
     const tc=document.getElementById('lib-total-count');if(tc)tc.textContent='('+items.length+')';
-    if(!items.length){c.innerHTML='<div class="empty-page">📭 Ничего не найдено<br><br><a href="/" style="color:var(--accent)">Каталог →</a></div>';return;}
+    if(!items.length){c.innerHTML='<div class="empty-page">Ничего не найдено<br><br><a href="/" style="color:var(--accent)">Каталог →</a></div>';return;}
     if(currentView==='grid'){
         // Group by status
         const groups={now:[],will:[],read:[],custom:{}};
         items.forEach(m=>{if(m.status==='now')groups.now.push(m);else if(m.status==='will')groups.will.push(m);else if(m.status==='read')groups.read.push(m);else{if(!groups.custom[m.status])groups.custom[m.status]=[];groups.custom[m.status].push(m);}});
         let html='';
-        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map((m,i)=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;const rHtml=m.avg_rating>0?`<div style="font-size:9px;color:#f59e0b;margin-top:2px">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}<span style="color:var(--muted);margin-left:3px">${m.avg_rating}</span></div>`:'';return `<a class="card" href="/read/${m.id}" style="animation-delay:${i*25}ms">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div>${rHtml}</div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title}<span class="sec-count">${arr.length}</span></div><div class="grid-view">${cards}</div></div>`;};
-        if(groups.now.length)html+=renderSection('📖','Читаю сейчас',groups.now);
-        if(groups.will.length)html+=renderSection('🔖','Буду читать',groups.will);
-        if(groups.read.length)html+=renderSection('✅','Прочитано',groups.read);
-        Object.entries(groups.custom).forEach(([name,arr])=>{if(arr.length)html+=renderSection('🏷',name,arr);});
-        c.innerHTML=html||'<div class="empty-page">📭 Список пуст</div>';
+        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map((m,i)=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;const rHtml=m.avg_rating>0?`<div style="font-size:9px;color:#f59e0b;margin-top:2px">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}<span style="color:var(--muted);margin-left:3px">${m.avg_rating}</span></div>`:'';return `<a class="card" href="/read/${m.id}" style="animation-delay:${i*25}ms">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div>${rHtml}</div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title}<span class="sec-count">${arr.length}</span></div><div class="grid-view">${cards}</div></div>`;};
+        if(groups.now.length)html+=renderSection('','Читаю сейчас',groups.now);
+        if(groups.will.length)html+=renderSection('','Буду читать',groups.will);
+        if(groups.read.length)html+=renderSection('','Прочитано',groups.read);
+        Object.entries(groups.custom).forEach(([name,arr])=>{if(arr.length)html+=renderSection('',name,arr);});
+        c.innerHTML=html||'<div class="empty-page">Список пуст</div>';
     } else {
         // List view
         let html='<div class="list-view">';
-        items.forEach(m=>{let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='lc'+m.id,phId='lp'+m.id;html+=`<a class="list-item" href="/read/${m.id}">${src?`<img class="list-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="list-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}">📖</div><div class="list-body"><div class="list-title">${escapeHtml(m.title)}</div><div class="list-date">${getBadgeLabel(m.status)}</div></div><div class="list-status"><span class="badge ${getBadgeClass(m.status)}">${getBadgeLabel(m.status)}</span></div></a>`;});
+        items.forEach(m=>{let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='lc'+m.id,phId='lp'+m.id;html+=`<a class="list-item" href="/read/${m.id}">${src?`<img class="list-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="list-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div><div class="list-body"><div class="list-title">${escapeHtml(m.title)}</div><div class="list-date">${getBadgeLabel(m.status)}</div></div><div class="list-status"><span class="badge ${getBadgeClass(m.status)}">${getBadgeLabel(m.status)}</span></div></a>`;});
         html+='</div>';c.innerHTML=html;
     }
 }
@@ -5998,20 +5998,20 @@ header{
 
     <!-- Right Actions -->
     <div class="header-actions">
-        <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn">🌙</button>
+        <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn"></button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()" title="Случайная манга">🎲</button>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
         <a href="/messages" class="hbtn" title="Чаты" style="gap:5px">💬 <span>Чаты</span></a>
         <a href="/profile" class="hbtn" style="gap:6px">
-            👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span>
+            <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?><?php endif;?></span>
         </a>
         <?php else: ?>
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn hbtn-accent">Регистрация</a>
         <?php endif; ?>
         <button class="hbtn hbtn-admin hbtn-accent" id="add-manga-btn" onclick="openAddModal()" style="display:none">＋ <span>Манга</span></button>
-        <a href="/admin" class="hbtn hbtn-admin" id="admin-btn" style="text-decoration:none">⚙️ <span>Админ</span></a>
+        <a href="/admin" class="hbtn hbtn-admin" id="admin-btn" style="text-decoration:none">️ <span>Админ</span></a>
     </div>
 </div>
 </header>
@@ -6020,7 +6020,7 @@ header{
 <div class="sidebar-icons">
     <div class="sidebar-rail">
         <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">
-            <span class="sib-icon">📚</span><span class="sib-label">Библиотека</span>
+            <span class="sib-icon"></span><span class="sib-label">Библиотека</span>
         </a>
         <a href="/messages" class="sidebar-icon-btn" title="Чаты" style="text-decoration:none" id="sidebar-messages-link">
             <span class="sib-icon">💬</span><span class="sib-label">Чаты</span>
@@ -6033,11 +6033,11 @@ header{
             <?php if ($msgCount > 0): ?><span class="sidebar-badge" style="background:var(--accent)"><?=$msgCount?></span><?php endif; ?>
         </button>
         <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">
-            <span class="sib-icon">👤</span><span class="sib-label">Профиль</span>
+            <span class="sib-icon"></span><span class="sib-label">Профиль</span>
         </a>
         <?php endif; ?>
         <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">
-            <span class="sib-icon">🤖</span><span class="sib-label">Telegram</span>
+            <span class="sib-icon"></span><span class="sib-label">Telegram</span>
         </a>
         <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
             <span class="sib-icon">🛟</span><span class="sib-label">Поддержка</span>
@@ -6149,7 +6149,7 @@ header{
         <a href="/u/<?=htmlspecialchars($tw['username'])?>" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:9px 13px;transition:all .18s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
             <div style="width:22px;font-size:13px;font-weight:800;color:<?=$i===0?'#f59e0b':($i===1?'#9ca3af':($i===2?'#b45309':'var(--muted)'))?>;text-align:center"><?=$i+1?></div>
             <div style="width:32px;height:32px;border-radius:50%;background:#1a1a2e;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">
-                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?>👤<?php endif; ?>
+                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
             </div>
             <div style="flex:1;min-width:0">
                 <div style="font-size:12px;font-weight:600;color:var(--text2)"><?=htmlspecialchars($tw['username'])?></div>
@@ -6166,16 +6166,16 @@ header{
     <div class="filters">
         <button class="filter-btn active" id="f-new" onclick="setFilter('new')">🕒 Новые</button>
         <button class="filter-btn" id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
-        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">🔤 А-Я</button>
+        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">А-Я</button>
         <button class="filter-btn" id="f-genre-tag" onclick="toggleGenreFilter()" style="gap:5px">🏷 Жанр/Тег</button>
         <span class="stats-label" id="stats">Манг: <strong><?=(int)$total?></strong></span>
     </div>
 
     <!-- GENRE/TAG FILTER PANEL -->
     <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🎭 Жанры</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Жанры</div>
         <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;max-height:100px;overflow-y:auto"></div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🏷 Теги</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Теги</div>
         <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
         <button onclick="clearGenreFilter()" style="padding:5px 13px;background:transparent;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">✕ Сбросить</button>
     </div>
@@ -6193,8 +6193,8 @@ header{
     <div class="modal-sub">Загрузи обложку и страницы</div>
     <div class="fg">
         <div class="toggle-row">
-            <button class="toggle-btn active" id="type-single" onclick="setMangaType('single')">📄 Обычная</button>
-            <button class="toggle-btn" id="type-series" onclick="setMangaType('series')">📚 Серия</button>
+            <button class="toggle-btn active" id="type-single" onclick="setMangaType('single')">Обычная</button>
+            <button class="toggle-btn" id="type-series" onclick="setMangaType('series')">Серия</button>
         </div>
     </div>
     <div class="fg"><label class="fl">Название</label><input class="fi" type="text" id="manga-title" placeholder="Название манги..."></div>
@@ -6211,7 +6211,7 @@ header{
         <label class="fl">Обложка</label>
         <div class="upload-zone" id="cover-zone">
             <input type="file" id="cover-input" accept="image/*" onchange="onCoverChange(this)">
-            <div class="upload-icon">🖼</div>
+            <div class="upload-icon"></div>
             <div class="upload-text"><strong>Загрузить обложку</strong><br>JPG, PNG, WebP</div>
             <div class="upload-preview" id="cover-preview"></div>
         </div>
@@ -6226,7 +6226,7 @@ header{
             <div class="file-panel active" id="panel-zip">
                 <div class="upload-zone" id="zip-zone">
                     <input type="file" id="zip-input" accept=".zip" onchange="onZipChange(this)">
-                    <div class="upload-icon">📦</div>
+                    <div class="upload-icon"></div>
                     <div class="upload-text"><strong>ZIP-архив страниц</strong><br>Сортировка по дате</div>
                     <div class="upload-preview" id="zip-preview"></div>
                 </div>
@@ -6234,7 +6234,7 @@ header{
             <div class="file-panel" id="panel-photos">
                 <div class="upload-zone" id="photos-zone">
                     <input type="file" id="photos-input" accept="image/*" multiple onchange="onPhotosChange(this)">
-                    <div class="upload-icon">📸</div>
+                    <div class="upload-icon"></div>
                     <div class="upload-text"><strong>Выбери страницы</strong><br>001.jpg, 002.jpg...</div>
                     <div class="upload-preview" id="photos-preview"></div>
                 </div>
@@ -6242,7 +6242,7 @@ header{
         </div>
     </div>
     <div class="upbar" id="upload-progress"><div class="upbar-fill" id="upload-progress-fill"></div></div>
-    <button class="sbtn" id="submit-btn" onclick="submitManga()"><span class="btn-text">🚀 Опубликовать</span><div class="spinner"></div></button>
+    <button class="sbtn" id="submit-btn" onclick="submitManga()"><span class="btn-text">Опубликовать</span><div class="spinner"></div></button>
     <div class="result-banner" id="result-banner"></div>
 </div>
 </div>
@@ -6277,13 +6277,13 @@ header{
 (function(){
     const saved=localStorage.getItem('bw_theme')||'dark';
     if(saved==='light')document.body.classList.add('light');
-    const icon = saved==='light'?'🌙':'☀️';
+    const icon = saved==='light'?'':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
 })();
 function toggleTheme(){
     const isLight=document.body.classList.toggle('light');
     localStorage.setItem('bw_theme',isLight?'light':'dark');
-    const icon=isLight?'🌙':'☀️';
+    const icon=isLight?'':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
 }
 
@@ -6312,7 +6312,7 @@ async function checkAdmin(){
                 adminBtn.className='sidebar-icon-btn';
                 adminBtn.title='Админ-панель';
                 adminBtn.style.cssText='text-decoration:none;color:var(--accent);border-color:rgba(232,25,44,0.3);background:rgba(232,25,44,0.05)';
-                adminBtn.textContent='⚙️';
+                adminBtn.textContent='️';
                 rail.insertBefore(adminBtn, rail.firstChild);
             }
         }
@@ -6405,7 +6405,7 @@ function onHeaderSearch(val){
                 const rating=m.avg_rating>0?`<div class="sd-rating">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))} ${m.avg_rating}</div>`:'';
                 return `<a class="sd-item" href="/read/${m.id}">
                     ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
-                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div>${rating}</div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'Серия':'Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div>${rating}</div>
                 </a>`;
             }).join('');
             if(data.total>7){
@@ -6438,7 +6438,7 @@ function onSearch(val){
                 let src=m.cover_display||'';if(src&&src.startsWith('tg://'))src='';
                 return `<a class="sd-item" href="/read/${m.id}">
                     ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
-                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div></div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'Серия':'Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div></div>
                 </a>`;
             }).join('');
             searchDrop.classList.add('open');
@@ -6449,7 +6449,7 @@ function onSearch(val){
 async function load(reset=false){
     if(loading)return;loading=true;
     if(reset){page=0;grid.innerHTML='';hasMore=true;moreBtn.style.display='none';}
-    if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">📖 Загрузка...</div>';
+    if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">Загрузка...</div>';
     try{
         const _gp=activeGenre?'&genre='+encodeURIComponent(activeGenre):activeTag?'&tag='+encodeURIComponent(activeTag):'';
         const res=await fetch('/api/manga?page='+page+'&q='+encodeURIComponent(q)+'&sort='+currentSort+_gp);
@@ -6465,10 +6465,10 @@ async function load(reset=false){
             el.style.animationDelay=(i*30)+'ms';
             el.innerHTML=`${m.is_new?'<div class="card-new-badge">Новое</div>':''}
                 ${src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' }
-                <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div>
+                <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div>
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
-                    ${m.is_series?'<div class="card-series-badge">📚 Серия</div>':''}
+                    ${m.is_series?'<div class="card-series-badge">Серия</div>':''}
                     ${m.avg_rating>0?`<div class="card-rating"><span class="card-stars">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}</span><span class="card-rating-val">${m.avg_rating}</span></div>`:(m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:'')}
                 </div>`;
             grid.appendChild(el);
@@ -6528,7 +6528,7 @@ async function loadAdminNotifications(){
 function openSupportModal(){document.getElementById('support-modal').classList.add('open');}
 function closeSupportModal(){document.getElementById('support-modal').classList.remove('open');}
 async function sendSupport(){const text=document.getElementById('support-text').value.trim();if(!text){showToast('Введи сообщение');return;}
-try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();const b=document.getElementById('support-result');if(d.success){b.className='result-banner success open';b.innerHTML='✅ Сообщение отправлено!';document.getElementById('support-text').value='';}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){}}
+try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();const b=document.getElementById('support-result');if(d.success){b.className='result-banner success open';b.innerHTML='Сообщение отправлено!';document.getElementById('support-text').value='';}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){}}
 
 // ===== ADD MANGA MODAL =====
 let coverFile=null,photoFiles=[],currentMangaType='single';
@@ -6561,10 +6561,10 @@ async function submitManga(){
         const addTagIds=[...document.querySelectorAll('#add-tags-list input[type=checkbox][data-add-tid]:checked')].map(el=>parseInt(el.dataset.addTid));
         const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:addGenreIds,tag_ids:addTagIds})});
         const data=await res.json();pf.style.width='100%';
-        if(data.success){showResult('success',`✅ <strong>Манга добавлена!</strong><br>${isSeries?'📚 Серия создана<br>':''}${data.pages>0?`📄 ${data.pages} страниц<br>`:''}${data.telegraph?`🔗 <a href="${escapeHtml(data.telegraph)}" target="_blank">Telegraph</a><br>`:''}<a href="${escapeHtml(data.site_url)}" target="_blank">🌐 Открыть →</a>`);setTimeout(()=>{load(true);loadNew();},1500);}
+        if(data.success){showResult('success',`<strong>Манга добавлена!</strong><br>${isSeries?'Серия создана<br>':''}${data.pages>0?`${data.pages} страниц<br>`:''}${data.telegraph?`<a href="${escapeHtml(data.telegraph)}" target="_blank">Telegraph</a><br>`:''}<a href="${escapeHtml(data.site_url)}" target="_blank">Открыть →</a>`);setTimeout(()=>{load(true);loadNew();},1500);}
         else{showResult('error','❌ '+(data.error||'Неизвестная ошибка'));}
     }catch(e){showResult('error','❌ '+e.message);}
-    const t=btn.querySelector('.btn-text');if(t)t.textContent='🚀 Опубликовать';btn.disabled=false;btn.classList.remove('loading');
+    const t=btn.querySelector('.btn-text');if(t)t.textContent='Опубликовать';btn.disabled=false;btn.classList.remove('loading');
 }
 ['cover-zone','zip-zone','photos-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
 
@@ -6599,7 +6599,7 @@ async function loadHero(){
                 <div class="hero-slide-accentbar"></div>
                 <div class="hero-content">
                     <div class="hero-label">ТОП НЕДЕЛИ</div>
-                    <div class="hero-rank">#${i+1} ${m.is_series?'📚 Серия':'📄 Манга'}</div>
+                    <div class="hero-rank">#${i+1} ${m.is_series?'Серия':'Манга'}</div>
                     <h1 class="hero-title">${escapeHtml(m.title)}</h1>
                     ${m.description?`<p class="hero-desc">${escapeHtml(m.description)}</p>`:''}
                     <div class="hero-stats">${rat}${lk}${vw}</div>
@@ -6724,7 +6724,7 @@ let chatCurrentUsername = null;
 let chatPollInterval = null;
 let chatLastMsgCount = 0;
 
-const EMOJIS = ['😀','😂','😍','🥰','😎','😭','😤','🤔','😮','🥺','❤️','🔥','👍','👎','✨','💯','🎉','😈','🤣','😊','🙄','😅','🫡','💀','🫶','💪','🎮','📖','⭐','🏆'];
+const EMOJIS = ['😀','😂','😍','🥰','😎','😭','😤','🤔','😮','🥺','❤️','🔥','👍','👎','✨','💯','🎉','😈','🤣','😊','🙄','😅','🫡','💀','🫶','💪','🎮','','⭐','🏆'];
 
 function openMessagesModal() {
     const modal = document.getElementById('messages-modal');
@@ -6770,7 +6770,7 @@ async function loadMessagesList() {
         updateChatBadge(totalUnread);
         listDiv.innerHTML = data.messages.map(m => `
             <div class="message-item${m.unread_count>0?' unread':''}" onclick="openDialog(${m.other_id}, '${escapeHtml(m.other_username)}')">
-                <div class="message-avatar">👤</div>
+                <div class="message-avatar">U</div>
                 <div class="message-content">
                     <div class="message-username">${escapeHtml(m.other_username)}</div>
                     <div class="message-preview">${m.last_text ? escapeHtml(m.last_text.substring(0,40)) : 'Нет сообщений'}</div>
@@ -6799,7 +6799,7 @@ async function openDialog(userId, username) {
     backBtn.style.display = 'flex';
     document.getElementById('chat-header-name').textContent = username;
     document.getElementById('chat-header-sub').textContent = 'В сети · пишет...';
-    document.getElementById('chat-header-avatar').textContent = '👤';
+    document.getElementById('chat-header-avatar').textContent = '';
     document.getElementById('chat-input').value = '';
     document.getElementById('chat-input').style.height = 'auto';
     const emojiPicker = document.getElementById('emoji-picker');
@@ -6891,7 +6891,7 @@ function searchUsers(query) {
             if (data.success && data.users) {
                 document.getElementById('user-search-results').innerHTML = data.users.map(u => `
                     <div class="user-search-item" onclick="openDialog(${u.id},'${escapeHtml(u.username)}');document.getElementById('message-search').value='';">
-                        <div class="user-search-avatar">👤</div>
+                        <div class="user-search-avatar">U</div>
                         <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--text);font-size:12px">${escapeHtml(u.username)}</div></div>
                     </div>`).join('');
             }
@@ -6991,7 +6991,7 @@ async function loadUserLevel(accountId) {
                 container.innerHTML = `
                     <div style="background:linear-gradient(135deg,#7c5cff 0%,#5a4ca0 100%);border-radius:10px;padding:12px;color:#fff;margin:12px 0">
                         <div style="display:flex;align-items:center;gap:10px">
-                            <div style="font-size:24px;font-weight:800">⭐ ${data.level}</div>
+                            <div style="font-size:24px;font-weight:800">${data.level}</div>
                             <div style="flex:1">
                                 <div style="font-size:11px;opacity:0.9;margin-bottom:4px">Уровень пользователя</div>
                                 <div style="height:4px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden">
@@ -7108,7 +7108,7 @@ document.addEventListener('click', function(e) {
                 <div style="display:flex;gap:7px;align-items:flex-end">
                     <button onclick="toggleEmojiPicker()" title="Смайлики"
                         style="width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center"
-                        onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">😊</button>
+                        onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">☺</button>
                     <textarea id="chat-input" placeholder="Напиши сообщение..." rows="1"
                         style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:13px;padding:9px 12px;outline:none;resize:none;min-height:36px;max-height:100px;line-height:1.45;transition:border-color .18s;scrollbar-width:none"
                         onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'"
@@ -7161,12 +7161,12 @@ document.addEventListener('click', function(e) {
 <!-- ===== КОММЕНТАРИИ ===== -->
 <div id="comments-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:20px 0;display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px">
-        💬 Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
+        Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
     </div>
     <div id="comments-form" style="margin-bottom:16px;display:<?php echo isset($currentAccount) && $currentAccount ? 'block' : 'none'; ?>">
         <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:Outfit,sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
         <button onclick="submitComment()" style="margin-top:8px;padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s" onmouseover="this.style.transform='translateY(-1px)';this.style.opacity='0.9'" onmouseout="this.style.transform='translateY(0)';this.style.opacity='1'">
-            📤 Отправить комментарий
+            Отправить комментарий
         </button>
     </div>
     <div id="comments-list" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
