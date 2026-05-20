@@ -315,6 +315,7 @@ $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
     foreach ($stmtAdmins as $row) { if (!in_array((int)$row['user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['user_id']; }
+} catch (Exception $e) {}
 try {
     $accAdmStmt = $pdo->query("SELECT tg_user_id FROM accounts WHERE is_admin=TRUE AND tg_user_id IS NOT NULL");
     foreach ($accAdmStmt as $row) { if (!in_array((int)$row['tg_user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['tg_user_id']; }
