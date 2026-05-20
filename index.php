@@ -18,6 +18,10 @@ register_shutdown_function(function() {
            . '<p style="color:#888;font-size:13px">Попробуй обновить страницу</p>'
            . '<a href="/" style="color:#7c5cff;text-decoration:none;display:block;margin-top:16px">← На главную</a>'
            . '</div></body></html>';
+        flush();
+    } else {
+        while (ob_get_level()) ob_end_flush();
+        flush();
     }
 });
 
@@ -7279,4 +7283,4 @@ document.addEventListener('click', function(e) {
 
 </body>
 </html>
-<?php ob_end_flush(); ?>
+<?php while(ob_get_level()) ob_end_flush(); ?>
