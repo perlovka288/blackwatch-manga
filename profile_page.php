@@ -425,4 +425,7 @@ setInterval(() => fetch('/api/ping', {method:'POST'}), 60000);
 
 </body>
 </html>
-<?php exit; ?>
+<?php 
+}  // Закрытие основного if (preg_match) блока со строки 9
+exit; 
+?>
