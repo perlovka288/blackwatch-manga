@@ -5376,6 +5376,7 @@ load();
 # ========================= HOME =========================
 
 # ========================= HOME =========================
+error_log("BW_DEBUG: reached HOME, path=" . $path . " mem=" . memory_get_usage());
 $total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 // Count unread admin messages
