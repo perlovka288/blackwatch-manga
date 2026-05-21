@@ -59,10 +59,6 @@ if ($isProfileRoute) {
     $frame  = getLevelFrame((int)$profile['xp']['level']);
     $xpProg = $profile['xp']['progress'];
 
-    // Проверка приватности для приватных данных
-    // Только сам пользователь или админ могут видеть приватную информацию
-    $canViewPrivate = $isSelf || $isAdm;
-
     // Статус подписки
     $isSubscribed = false;
     if ($currentAccount && !$isSelf) {
@@ -172,30 +168,29 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .ach-empty{color:var(--muted);font-size:12px;padding:16px 0}
 
 /* COMMENTS */
-.comment-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;font-size:12px}
-.comment-card:last-child{margin-bottom:0}
-.comment-manga{color:var(--accent);text-decoration:none;font-weight:600;display:block;margin-bottom:6px}
-.comment-manga:hover{text-decoration:underline}
-.comment-text{color:var(--text2);margin-bottom:6px;line-height:1.5}
-.comment-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
-.comment-likes{color:var(--green)}
+.comment-card{padding:12px 0;border-bottom:1px solid var(--border)}
+.comment-card:last-child{border-bottom:none}
+.comment-manga{font-size:11px;color:var(--accent);margin-bottom:4px;text-decoration:none;display:block}
+.comment-text{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:4px}
+.comment-meta{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.comment-likes{color:var(--muted);display:flex;align-items:center;gap:3px}
 
-/* PRIVATE NOTICE */
-.private-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px 24px;text-align:center}
-.private-icon{font-size:48px;margin-bottom:16px}
-.private-text{color:var(--text2);font-size:14px;margin-bottom:8px}
-.private-notice{background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text2);margin-bottom:14px}
+/* PRIVATE */
+.private-block{text-align:center;padding:40px 20px;color:var(--muted)}
+.private-icon{font-size:48px;margin-bottom:12px}
+.private-text{font-size:14px}
 
 /* TOAST */
-.toast{position:fixed;bottom:20px;left:20px;background:#222;border:1px solid var(--border2);color:var(--text);padding:12px 18px;border-radius:8px;z-index:1000;animation:slideIn .3s ease;font-size:13px}
-@keyframes slideIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;border:1px solid var(--border2);animation:ti .25s ease;pointer-events:none}
+@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@media(max-width:480px){.stats-grid{grid-template-columns:repeat(2,1fr)}.profile-top{flex-wrap:wrap}.profile-actions{margin-left:0;width:100%}}
 </style>
 </head>
 <body>
 
 <div class="page-header">
     <a href="/" class="back-btn">← Назад</a>
-    <div class="page-title">Профиль</div>
+    <div class="page-title"><?=$username?></div>
 </div>
 
 <?php if ($bannerUrl): ?>
@@ -216,173 +211,168 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
                 <?php if ($avatarUrl): ?>
                     <img src="<?=htmlspecialchars($avatarUrl)?>" alt="Avatar">
                 <?php else: ?>
-                    👤
+                    <?=mb_strtoupper(mb_substr($username, 0, 1))?>
                 <?php endif; ?>
             </div>
             <?php
-                $onlineStatus = $profile['online']['status'];
-                $dotColor = $onlineStatus === 'online' ? '#4ade80' : ($onlineStatus === 'recently' ? '#fbbf24' : '#6b7280');
+            $onlineStatus = $profile['online']['status'];
+            $dotColor = $onlineStatus === 'online' ? '#4ade80' : ($onlineStatus === 'recently' ? '#fb923c' : '#555');
             ?>
             <div class="online-dot-big" style="background:<?=$dotColor?>"></div>
         </div>
         <div class="profile-name-area">
             <div class="profile-username">
                 <?=$username?>
-                <?php if ((bool)$profile['user']['is_verified']): ?>
-                    <span class="verified-badge">✓</span>
-                <?php endif; ?>
-                <?php if ((bool)$profile['user']['is_admin']): ?>
-                    <span class="admin-badge">ADMIN</span>
+                <?php if (!empty($profile['user']['is_verified'])): ?><span class="verified-badge" title="Верифицирован">✓</span><?php endif; ?>
+                <?php if (!empty($profile['user']['is_admin'])): ?>
+                    <span class="admin-badge"><?=htmlspecialchars($profile['user']['admin_tag'] ?? 'Админ')?></span>
                 <?php endif; ?>
             </div>
-            <div class="profile-level">
-                <?=$frame['label']?> — Уровень <?=(int)$profile['xp']['level']?>
-            </div>
-            <div class="profile-online"><?=$profile['online']['label']?></div>
+            <div class="profile-level"><?=$frame['label']?> &nbsp;·&nbsp; Уровень <?=(int)$profile['xp']['level']?></div>
+            <div class="profile-online"><?=htmlspecialchars($profile['online']['label'])?></div>
         </div>
         <div class="profile-actions">
-            <?php if ($currentAccount && !$isSelf): ?>
-                <button class="btn btn-msg" onclick="openMessages(<?=$uid?>, '<?=htmlspecialchars($username)?>'); return false;">💬 Сообщение</button>
-                <?php if ($isSubscribed): ?>
-                    <button class="btn btn-green" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>); return false;">✓ Подписан</button>
-                <?php else: ?>
-                    <button class="btn btn-accent" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>); return false;">+ Подписаться</button>
-                <?php endif; ?>
+            <?php if ($isSelf): ?>
+                <a href="/settings" class="btn btn-outline">⚙️ Настройки</a>
+            <?php elseif ($currentAccount): ?>
+                <button class="btn btn-msg" onclick="openMessages(<?=$uid?>, '<?=$username?>')">💬 Написать</button>
+                <?php
+                $fsId     = $friendship ? (int)$friendship['id'] : 0;
+                $fsStatus = $friendship['status'] ?? '';
+                $fsIsMine = $friendship && (int)$friendship['requester_id'] === (int)$currentAccount['id'];
+                ?>
                 <?php if (!$friendship): ?>
-                    <button class="btn btn-outline" id="friend-btn" onclick="friendRequest(<?=$uid?>); return false;">👥 Добавить</button>
-                <?php elseif ($friendship['status'] === 'pending' && $friendship['requester_id'] === $uid): ?>
-                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=(int)$friendship['id']?>, 'accept'); return false;">✓ Принять</button>
-                    <button class="btn btn-outline" onclick="friendAction(<?=(int)$friendship['id']?>, 'reject'); return false;">✕ Отклонить</button>
-                <?php elseif ($friendship['status'] === 'pending'): ?>
-                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=(int)$friendship['id']?>, 'remove'); return false;">⏳ Отменить</button>
-                <?php elseif ($friendship['status'] === 'accepted'): ?>
-                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=(int)$friendship['id']?>, 'remove'); return false;">👥 Удалить</button>
+                    <button class="btn btn-accent" id="friend-btn" onclick="friendRequest(<?=$uid?>)">+ В друзья</button>
+                <?php elseif ($fsStatus === 'accepted'): ?>
+                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=$fsId?>,'remove')">👥 Удалить</button>
+                <?php elseif ($fsStatus === 'pending' && $fsIsMine): ?>
+                    <button class="btn btn-outline" id="friend-btn" style="color:var(--muted)" onclick="friendAction(<?=$fsId?>,'reject')">⏳ Отменить</button>
+                <?php elseif ($fsStatus === 'pending' && !$fsIsMine): ?>
+                    <button class="btn btn-green" id="friend-btn" onclick="friendAction(<?=$fsId?>,'accept')">✓ Принять</button>
                 <?php endif; ?>
+                <button class="btn <?=$isSubscribed?'btn-green':'btn-accent'?>" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>)">
+                    <?=$isSubscribed?'✓ Подписан':'+ Подписаться'?>
+                </button>
+            <?php else: ?>
+                <a href="/login" class="btn btn-accent">Войти</a>
             <?php endif; ?>
         </div>
     </div>
 
+    <!-- XP BAR -->
+    <div class="xp-bar-wrap">
+        <div class="xp-bar-label">
+            <span>⭐ <?=number_format((int)$profile['xp']['total'], 0, ',', ' ')?> XP</span>
+            <span>Lv<?=(int)$profile['xp']['level']?> → Lv<?=(int)$xpProg['next_lvl']?> &nbsp; <?=(int)$xpProg['current']?> / <?=(int)$xpProg['needed']?> XP</span>
+        </div>
+        <div class="xp-bar">
+            <div class="xp-bar-fill" style="width:<?=(int)$xpProg['pct']?>%"></div>
+        </div>
+    </div>
+
+    <!-- BIO -->
+    <?php if ($bio): ?>
+    <div class="bio-box"><?=$bio?></div>
+    <?php elseif ($isSelf): ?>
+    <div class="bio-box empty">Добавь описание профиля в настройках</div>
+    <?php endif; ?>
+
     <?php if ($canView): ?>
-        <?php if ($bio): ?>
-        <div class="bio-box"><?=$bio?></div>
-        <?php else: ?>
-        <div class="bio-box empty">Пока нет описания</div>
-        <?php endif; ?>
 
-        <!-- XP BAR — ВИДНО ВСЕ, ЕСЛИ ПРОФИЛЬ ПУБЛИЧНЫЙ -->
-        <div class="xp-bar-wrap">
-            <div class="xp-bar-label">
-                <span>Уровень <?=(int)$profile['xp']['level']?></span>
-                <span><?=(int)$xpProg['current']?> / <?=(int)$xpProg['needed']?> XP</span>
-            </div>
-            <div class="xp-bar">
-                <div class="xp-bar-fill" style="width:<?=(int)$xpProg['pct']?>%"></div>
-            </div>
+    <!-- STATS GRID -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_manga_read'] ?? $libStats['read'] ?? 0))?></div>
+            <div class="stat-label">📚 Прочитано</div>
         </div>
+        <div class="stat-card">
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_chapters_read'] ?? 0))?></div>
+            <div class="stat-label">📑 Глав</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_pages_read'] ?? 0))?></div>
+            <div class="stat-label">📄 Страниц</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_ratings'] ?? 0))?></div>
+            <div class="stat-label">⭐ Оценок</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_comments'] ?? 0))?></div>
+            <div class="stat-label">💬 Комментариев</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">🔥 <?=(int)($profile['user']['reading_streak'] ?? 0)?></div>
+            <div class="stat-label">Дней стрик</div>
+        </div>
+    </div>
 
-        <!-- СТАТИСТИКА: ВИДНА ДЛЯ ПУБЛИЧНОГО ПРОФИЛЯ -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value">📖 <?=(int)($profile['user']['total_pages_read'] ?? 0)?></div>
-                <div class="stat-label">Страниц прочитано</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">💬 <?=(int)($profile['user']['total_comments'] ?? 0)?></div>
-                <div class="stat-label">Комментариев</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">🔥 <?=(int)($profile['user']['reading_streak'] ?? 0)?></div>
-                <div class="stat-label">Дней стрик</div>
-            </div>
+    <!-- LIBRARY BARS -->
+    <?php $totalLib = array_sum($libStats); ?>
+    <div class="lib-section">
+        <div class="section-title">📚 Библиотека</div>
+        <?php
+        $libItems = [
+            ['label'=>'Прочитано',   'key'=>'read',         'color'=>'#4ade80'],
+            ['label'=>'Читаю',       'key'=>'reading',      'color'=>'#7c5cff'],
+            ['label'=>'В планах',    'key'=>'plan_to_read', 'color'=>'#60a5fa'],
+            ['label'=>'Брошено',     'key'=>'dropped',      'color'=>'#ef4444'],
+            ['label'=>'На паузе',    'key'=>'on_hold',      'color'=>'#fb923c'],
+        ];
+        foreach ($libItems as $li):
+            $cnt = (int)($libStats[$li['key']] ?? 0);
+            $pct = $totalLib > 0 ? round($cnt / $totalLib * 100) : 0;
+        ?>
+        <div class="lib-row">
+            <div class="lib-label"><?=$li['label']?></div>
+            <div class="lib-bar-wrap"><div class="lib-bar" style="width:<?=$pct?>%;background:<?=$li['color']?>"></div></div>
+            <div class="lib-count"><?=$cnt?></div>
         </div>
+        <?php endforeach; ?>
+    </div>
 
-        <!-- БИБЛИОТЕКА — СКРЫТА ДЛЯ ПУБЛИЧНЫХ ПРОФИЛЕЙ, ВИДНА ТОЛЬКО ДЛЯ СЕБЯ И АДМИНОВ -->
-        <?php if ($canViewPrivate): ?>
-        <?php $totalLib = array_sum($libStats); ?>
-        <div class="lib-section">
-            <div class="section-title">📚 Библиотека</div>
-            <?php
-            $libItems = [
-                ['label'=>'Прочитано',   'key'=>'read',         'color'=>'#4ade80'],
-                ['label'=>'Читаю',       'key'=>'reading',      'color'=>'#7c5cff'],
-                ['label'=>'В планах',    'key'=>'plan_to_read', 'color'=>'#60a5fa'],
-                ['label'=>'Брошено',     'key'=>'dropped',      'color'=>'#ef4444'],
-                ['label'=>'На паузе',    'key'=>'on_hold',      'color'=>'#fb923c'],
-            ];
-            foreach ($libItems as $li):
-                $cnt = (int)($libStats[$li['key']] ?? 0);
-                $pct = $totalLib > 0 ? round($cnt / $totalLib * 100) : 0;
-            ?>
-            <div class="lib-row">
-                <div class="lib-label"><?=$li['label']?></div>
-                <div class="lib-bar-wrap"><div class="lib-bar" style="width:<?=$pct?>%;background:<?=$li['color']?>"></div></div>
-                <div class="lib-count"><?=$cnt?></div>
+    <!-- ДОСТИЖЕНИЯ -->
+    <div class="lib-section">
+        <div class="section-title">🏆 Достижения <span style="font-size:11px;color:var(--muted);font-family:'Inter',sans-serif;font-weight:400"><?=count($profile['achievements'])?> получено</span></div>
+        <?php if (count($profile['achievements']) > 0): ?>
+        <div class="ach-grid">
+        <?php foreach ($profile['achievements'] as $ach): ?>
+            <div class="ach-item <?=htmlspecialchars($ach['rarity'])?>">
+                <div class="ach-icon"><?=htmlspecialchars($ach['icon'])?></div>
+                <div class="ach-name"><?=htmlspecialchars(mb_substr($ach['name'], 0, 16))?></div>
+                <div class="ach-tooltip"><?=htmlspecialchars($ach['name'])?></div>
             </div>
-            <?php endforeach; ?>
-        </div>
-        <?php else: ?>
-        <div class="private-notice">
-            <span style="font-weight:600">🔒 Библиотека приватна</span><br>
-            Список прочитанной манги видна только для вас
-        </div>
-        <?php endif; ?>
-
-        <!-- ДОСТИЖЕНИЯ — ВИДНЫ ТОЛЬКО ДЛЯ СЕБЯ И АДМИНОВ -->
-        <?php if ($canViewPrivate): ?>
-        <div class="lib-section">
-            <div class="section-title">🏆 Достижения <span style="font-size:11px;color:var(--muted);font-family:'Inter',sans-serif;font-weight:400"><?=count($profile['achievements'])?> получено</span></div>
-            <?php if (count($profile['achievements']) > 0): ?>
-            <div class="ach-grid">
-            <?php foreach ($profile['achievements'] as $ach): ?>
-                <div class="ach-item <?=htmlspecialchars($ach['rarity'])?>">
-                    <div class="ach-icon"><?=htmlspecialchars($ach['icon'])?></div>
-                    <div class="ach-name"><?=htmlspecialchars(mb_substr($ach['name'], 0, 16))?></div>
-                    <div class="ach-tooltip"><?=htmlspecialchars($ach['name'])?></div>
-                </div>
-            <?php endforeach; ?>
-            </div>
-            <?php else: ?>
-            <div class="ach-empty">Пока нет достижений</div>
-            <?php endif; ?>
+        <?php endforeach; ?>
         </div>
         <?php else: ?>
-        <div class="private-notice">
-            <span style="font-weight:600">🔒 Достижения приватны</span><br>
-            Информация видна только для вас
-        </div>
+        <div class="ach-empty">Пока нет достижений</div>
         <?php endif; ?>
+    </div>
 
-        <!-- ПОСЛЕДНИЕ КОММЕНТАРИИ — ВИДНЫ ТОЛЬКО ДЛЯ СЕБЯ И АДМИНОВ -->
-        <?php if ($canViewPrivate && count($profile['comments']) > 0): ?>
-        <div class="lib-section">
-            <div class="section-title">💬 Последние комментарии</div>
-            <?php foreach ($profile['comments'] as $c): ?>
-            <div class="comment-card">
-                <a href="/manga/<?=(int)$c['manga_id']?>" class="comment-manga">📖 <?=htmlspecialchars($c['manga_title'])?></a>
-                <div class="comment-text"><?=htmlspecialchars(mb_substr($c['text'], 0, 200))?><?=mb_strlen($c['text'])>200?'…':''?></div>
-                <div class="comment-meta">
-                    <span><?=date('d.m.Y H:i', strtotime($c['created_at']))?></span>
-                    <span class="comment-likes">❤️ <?=(int)$c['likes']?></span>
-                </div>
-            </div>
-            <?php endforeach; ?>
-        </div>
-        <?php elseif (!$canViewPrivate && count($profile['comments']) > 0): ?>
-        <div class="private-notice">
-            <span style="font-weight:600">🔒 Комментарии приватны</span><br>
-            История комментариев видна только для вас
-        </div>
-        <?php endif; ?>
-
-        <!-- ИНФО -->
-        <div class="lib-section" style="font-size:12px;color:var(--muted)">
-            <div style="display:flex;flex-wrap:wrap;gap:16px">
-                <span>📅 Зарегистрирован: <span style="color:var(--text2)"><?=$regFormatted?></span></span>
-                <?php if ($canViewPrivate): ?>
-                    <span>🏅 Недельный XP: <span style="color:var(--text2)"><?=number_format((int)$profile['xp']['weekly'])?></span></span>
-                <?php endif; ?>
+    <!-- ПОСЛЕДНИЕ КОММЕНТАРИИ -->
+    <?php if (count($profile['comments']) > 0): ?>
+    <div class="lib-section">
+        <div class="section-title">💬 Последние комментарии</div>
+        <?php foreach ($profile['comments'] as $c): ?>
+        <div class="comment-card">
+            <a href="/manga/<?=(int)$c['manga_id']?>" class="comment-manga">📖 <?=htmlspecialchars($c['manga_title'])?></a>
+            <div class="comment-text"><?=htmlspecialchars(mb_substr($c['text'], 0, 200))?><?=mb_strlen($c['text'])>200?'…':''?></div>
+            <div class="comment-meta">
+                <span><?=date('d.m.Y H:i', strtotime($c['created_at']))?></span>
+                <span class="comment-likes">❤️ <?=(int)$c['likes']?></span>
             </div>
         </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+    <!-- ИНФО -->
+    <div class="lib-section" style="font-size:12px;color:var(--muted)">
+        <div style="display:flex;flex-wrap:wrap;gap:16px">
+            <span>📅 Зарегистрирован: <span style="color:var(--text2)"><?=$regFormatted?></span></span>
+            <span>🏅 Недельный XP: <span style="color:var(--text2)"><?=number_format((int)$profile['xp']['weekly'])?></span></span>
+        </div>
+    </div>
 
     <?php else: /* private */ ?>
     <div class="private-block">

@@ -205,8 +205,8 @@ try {
         if ($tagCount === 0) {
             $tagsJson = '[{"id":1,"name":"Реинкарнация","slug":"reincarnation","is_nsfw":false},{"id":2,"name":"Перерождение","slug":"rebirth","is_nsfw":false},{"id":3,"name":"Система","slug":"system","is_nsfw":false},{"id":4,"name":"Подземелья","slug":"dungeons","is_nsfw":false},{"id":5,"name":"Некромант","slug":"necromancer","is_nsfw":false},{"id":6,"name":"Культивация","slug":"cultivation","is_nsfw":false},{"id":7,"name":"Монстродевушки","slug":"monster-girls","is_nsfw":false},{"id":8,"name":"Цундере","slug":"tsundere","is_nsfw":false},{"id":9,"name":"Яндере","slug":"yandere","is_nsfw":false},{"id":10,"name":"Путешествие во времени","slug":"time-travel","is_nsfw":false},{"id":11,"name":"Боги","slug":"gods","is_nsfw":false},{"id":12,"name":"Зомби","slug":"zombies","is_nsfw":false},{"id":13,"name":"Школьная жизнь","slug":"school-life","is_nsfw":false},{"id":14,"name":"Ассасины","slug":"assassins","is_nsfw":false},{"id":15,"name":"Мафия","slug":"mafia","is_nsfw":false},{"id":16,"name":"Виртуальная реальность","slug":"vr","is_nsfw":false},{"id":17,"name":"Игровой мир","slug":"game-world","is_nsfw":false},{"id":18,"name":"Постапокалипсис","slug":"apocalypse","is_nsfw":false},{"id":19,"name":"Игра на выживание","slug":"survival-game","is_nsfw":false},{"id":20,"name":"Кулинария","slug":"cooking","is_nsfw":false},{"id":21,"name":"Драконы","slug":"dragons","is_nsfw":false},{"id":22,"name":"Зверолюди","slug":"beast-people","is_nsfw":false},{"id":23,"name":"Эльфы","slug":"elves","is_nsfw":false},{"id":24,"name":"Тёмное фэнтези","slug":"dark-fantasy","is_nsfw":false},{"id":25,"name":"Герой","slug":"hero","is_nsfw":false},{"id":26,"name":"Злодейка","slug":"villainess","is_nsfw":false},{"id":27,"name":"Строительство королевства","slug":"kingdom-building","is_nsfw":false},{"id":28,"name":"Регрессия","slug":"regression","is_nsfw":false},{"id":29,"name":"Охотники","slug":"hunters","is_nsfw":false},{"id":30,"name":"Гениальный ГГ","slug":"genius-mc","is_nsfw":false},{"id":31,"name":"Антигерой","slug":"antihero","is_nsfw":false},{"id":32,"name":"Ниндзя","slug":"ninja","is_nsfw":false},{"id":33,"name":"Пираты","slug":"pirates","is_nsfw":false},{"id":34,"name":"Космос","slug":"space","is_nsfw":false},{"id":35,"name":"Месть","slug":"revenge","is_nsfw":false},{"id":36,"name":"Турнир","slug":"tournament","is_nsfw":false},{"id":37,"name":"Сильный ГГ","slug":"op-mc","is_nsfw":false},{"id":38,"name":"Слабый в Сильный","slug":"weak-to-strong","is_nsfw":false},{"id":39,"name":"Магическая академия","slug":"magic-academy","is_nsfw":false},{"id":40,"name":"РПГ","slug":"rpg","is_nsfw":false},{"id":41,"name":"MMORPG","slug":"mmorpg","is_nsfw":false},{"id":42,"name":"Гильдии","slug":"guilds","is_nsfw":false},{"id":43,"name":"Любовный треугольник","slug":"love-triangle","is_nsfw":false},{"id":44,"name":"Холодный ГГ","slug":"cold-mc","is_nsfw":false},{"id":45,"name":"Легендарное оружие","slug":"legendary-weapon","is_nsfw":false},{"id":46,"name":"Проклятия","slug":"curses","is_nsfw":false},{"id":47,"name":"Короли","slug":"kings","is_nsfw":false},{"id":48,"name":"Академия","slug":"academy","is_nsfw":false},{"id":49,"name":"Гендер-бендер","slug":"gender-bender","is_nsfw":false},{"id":50,"name":"Суперсилы","slug":"superpowers","is_nsfw":false},{"id":51,"name":"Телепортация","slug":"teleportation","is_nsfw":false},{"id":52,"name":"Взрослый контент","slug":"adult","is_nsfw":true},{"id":53,"name":"18+","slug":"18plus","is_nsfw":true},{"id":54,"name":"NSFW","slug":"nsfw","is_nsfw":true}]';
             $tags = json_decode($tagsJson, true);
-            $tagInsert = $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?, ?, ?) ON CONFLICT (slug) DO NOTHING");
-            foreach ($tags as $t) { $tagInsert->execute([$t['name'], $t['slug'], $t['is_nsfw'] ? 'true' : 'false']); }
+            $tagInsert = $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?, ?, ?) ON CONFLICT DO NOTHING");
+            foreach ($tags as $t) { $tagInsert->execute([$t['name'], $t['slug'], $t['is_nsfw'] ? 1 : 0]); }
         }
     } catch(Exception $e) {}
     // Seed genres if empty
@@ -219,7 +219,7 @@ try {
                 ['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],
                 ['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports'],
             ];
-            $gInsert = $pdo->prepare("INSERT INTO genres (name, slug) VALUES (?, ?) ON CONFLICT (slug) DO NOTHING");
+            $gInsert = $pdo->prepare("INSERT INTO genres (name, slug) VALUES (?, ?) ON CONFLICT DO NOTHING");
             foreach ($defaultGenres as $g) { $gInsert->execute($g); }
         }
     } catch(Exception $e) {}
@@ -511,7 +511,6 @@ if ($path === '/api/top-week') {
 
 // API: Уровень пользователя
 if (preg_match('~^/api/user-level/(\d+)$~', $path, $m)) {
-    header('Content-Type: application/json');
     try {
         $account_id = (int)$m[1];
         $stmt = $pdo->prepare("SELECT user_xp, user_level FROM accounts WHERE id = ?");
@@ -522,28 +521,10 @@ if (preg_match('~^/api/user-level/(\d+)$~', $path, $m)) {
         $total_xp_to_level = 0;
         for ($i = 1; $i < $user['user_level']; $i++) { $total_xp_to_level += 100 + ($i - 1) * 50; }
         $current_xp = $user['user_xp'] - $total_xp_to_level;
-        $progress = $xp_for_level > 0 ? round(($current_xp / $xp_for_level) * 100) : 0;
+        $progress = round(($current_xp / $xp_for_level) * 100);
+        header('Content-Type: application/json');
         echo json_encode(['success' => true, 'level' => (int)$user['user_level'], 'xp' => (int)$user['user_xp'], 'xp_for_level' => (int)$xp_for_level, 'current_xp' => (int)$current_xp, 'progress' => min(100, max(0, (int)$progress))]);
-    } catch (Exception $e) { echo json_encode(['success' => false, 'error' => $e->getMessage()]); }
-    exit;
-}
-
-// API: Уровень пользователя по username
-if (preg_match('~^/api/user-level/by-username/([a-zA-Z0-9_]+)$~', $path, $m)) {
-    header('Content-Type: application/json');
-    try {
-        $username = $m[1];
-        $stmt = $pdo->prepare("SELECT id, user_xp, user_level FROM accounts WHERE username = ?");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
-        if (!$user) { echo json_encode(['success' => false, 'error' => 'Not found']); exit; }
-        $xp_for_level = 100 + ($user['user_level'] - 1) * 50;
-        $total_xp_to_level = 0;
-        for ($i = 1; $i < $user['user_level']; $i++) { $total_xp_to_level += 100 + ($i - 1) * 50; }
-        $current_xp = $user['user_xp'] - $total_xp_to_level;
-        $progress = $xp_for_level > 0 ? round(($current_xp / $xp_for_level) * 100) : 0;
-        echo json_encode(['success' => true, 'account_id' => (int)$user['id'], 'level' => (int)$user['user_level'], 'xp' => (int)$user['user_xp'], 'xp_for_level' => (int)$xp_for_level, 'current_xp' => (int)$current_xp, 'progress' => min(100, max(0, (int)$progress))]);
-    } catch (Exception $e) { echo json_encode(['success' => false, 'error' => $e->getMessage()]); }
+    } catch (Exception $e) { echo json_encode(['success' => false]); }
     exit;
 }
 
@@ -2518,7 +2499,7 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
         $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
         $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name, is_nsfw=EXCLUDED.is_nsfw");
-        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
+        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
         $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO NOTHING");
         foreach($genresData as $g)$gIns->execute($g);
         $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
@@ -2560,7 +2541,7 @@ if ($path==='/api/genres'){
         if(empty($tags)){
             $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
             $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING");
-            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?'true':'false']);
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
             $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
             $tags=array_map(function($t){$t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);return $t;},$tagsRaw);
         }
