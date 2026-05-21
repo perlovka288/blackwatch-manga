@@ -150,147 +150,130 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .lib-row:last-child{margin-bottom:0}
 .lib-label{font-size:12px;color:var(--text2);width:110px;flex-shrink:0}
 .lib-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden}
-.lib-bar{height:100%;border-radius:4px;transition:width .6s ease}
-.lib-count{font-size:11px;font-weight:600;color:var(--muted);width:28px;text-align:right;flex-shrink:0}
+.lib-bar{height:100%;border-radius:4px;transition:width .4s ease}
+.lib-count{font-size:11px;color:var(--muted);width:30px;text-align:right}
 
 /* ACHIEVEMENTS */
-.ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:10px}
-.ach-item{aspect-ratio:1;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:default;position:relative;transition:all .18s}
-.ach-item:hover{background:rgba(124,92,255,.1);border-color:var(--accent)}
-.ach-item.common{border-color:var(--border)}
-.ach-item.rare{border-color:#3b82f6;box-shadow:0 0 8px #3b82f633}
-.ach-item.legendary{border-color:#f59e0b;box-shadow:0 0 12px #f59e0b44}
-.ach-icon{font-size:24px;line-height:1}
-.ach-name{font-size:8px;color:var(--muted);text-align:center;padding:0 2px;line-height:1.2}
-.ach-tooltip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#222;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:11px;white-space:nowrap;z-index:10;pointer-events:none;opacity:0;transition:opacity .2s;color:var(--text2)}
-.ach-item:hover .ach-tooltip{opacity:1}
-.ach-empty{color:var(--muted);font-size:12px;padding:16px 0}
+.ach-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.ach-item{position:relative;width:100%;aspect-ratio:1;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;overflow:hidden}
+.ach-item.common{background:rgba(100,150,200,.1);border-color:rgba(100,150,200,.3)}
+.ach-item.rare{background:rgba(150,100,255,.1);border-color:rgba(150,100,255,.3)}
+.ach-item.epic{background:rgba(255,150,100,.1);border-color:rgba(255,150,100,.3)}
+.ach-item.legendary{background:rgba(255,200,100,.1);border-color:rgba(255,200,100,.3)}
+.ach-item:hover{transform:scale(1.05)}
+.ach-icon{font-size:28px;line-height:1}
+.ach-name{font-size:9px;color:var(--text2);text-align:center;margin-top:4px;word-break:break-word}
+.ach-tooltip{position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s}
+.ach-item:hover .ach-tooltip{opacity:1;bottom:100%}
+.ach-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px 0}
 
 /* COMMENTS */
-.comment-card{padding:12px 0;border-bottom:1px solid var(--border)}
-.comment-card:last-child{border-bottom:none}
-.comment-manga{font-size:11px;color:var(--accent);margin-bottom:4px;text-decoration:none;display:block}
-.comment-text{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:4px}
-.comment-meta{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:8px}
-.comment-likes{color:var(--muted);display:flex;align-items:center;gap:3px}
+.comment-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;font-size:12px}
+.comment-manga{color:var(--accent);text-decoration:none;font-weight:600}.comment-manga:hover{text-decoration:underline}
+.comment-text{color:var(--text2);margin:8px 0;line-height:1.5}
+.comment-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+.comment-likes{color:var(--orange)}
 
-/* PRIVATE */
-.private-block{text-align:center;padding:40px 20px;color:var(--muted)}
-.private-icon{font-size:48px;margin-bottom:12px}
-.private-text{font-size:14px}
+/* PRIVATE BLOCK */
+.private-block{text-align:center;padding:60px 20px;color:var(--muted)}
+.private-icon{font-size:60px;margin-bottom:20px}
+.private-text{font-size:16px}
 
 /* TOAST */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(22,22,22,.97);color:var(--text);padding:9px 20px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;border:1px solid var(--border2);animation:ti .25s ease;pointer-events:none}
-@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-@media(max-width:480px){.stats-grid{grid-template-columns:repeat(2,1fr)}.profile-top{flex-wrap:wrap}.profile-actions{margin-left:0;width:100%}}
+.toast{position:fixed;bottom:20px;right:20px;background:rgba(0,0,0,.8);color:#fff;padding:12px 20px;border-radius:10px;z-index:10000;animation:slideIn .3s ease}
+@keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
 </style>
 </head>
 <body>
 
 <div class="page-header">
-    <a href="/" class="back-btn">← Назад</a>
-    <div class="page-title"><?=$username?></div>
+    <a href="/" class="back-btn">← На главную</a>
+    <div class="page-title">Профиль</div>
 </div>
 
-<?php if ($bannerUrl): ?>
-<div class="profile-banner">
-    <img src="<?=htmlspecialchars($bannerUrl)?>" class="banner-img" alt="Banner">
+<div class="profile-banner" style="<?=$bannerUrl?'background-image:url('.htmlspecialchars($bannerUrl).');background-size:cover;':''?>">
+    <?php if ($bannerUrl): ?><img src="<?=htmlspecialchars($bannerUrl)?>" class="banner-img" alt=""><?php endif; ?>
     <div class="banner-gradient"></div>
 </div>
-<?php else: ?>
-<div class="profile-banner" style="background:<?=$bannerColor?>">
-    <div class="banner-gradient"></div>
-</div>
-<?php endif; ?>
 
 <div class="profile-wrap">
+    <?php if ($canView): ?>
+    <!-- ПРОФИЛЬ ИНФОРМАЦИЯ -->
     <div class="profile-top">
         <div class="avatar-wrap">
             <div class="avatar-ring">
                 <?php if ($avatarUrl): ?>
-                    <img src="<?=htmlspecialchars($avatarUrl)?>" alt="Avatar">
+                <img src="<?=htmlspecialchars($avatarUrl)?>" alt="<?=$username?>">
                 <?php else: ?>
-                    <?=mb_strtoupper(mb_substr($username, 0, 1))?>
+                👤
                 <?php endif; ?>
             </div>
-            <?php
-            $onlineStatus = $profile['online']['status'];
-            $dotColor = $onlineStatus === 'online' ? '#4ade80' : ($onlineStatus === 'recently' ? '#fb923c' : '#555');
-            ?>
-            <div class="online-dot-big" style="background:<?=$dotColor?>"></div>
+            <?php if ($profile['online']['status'] === 'online'): ?>
+            <div class="online-dot-big" style="background:#4ade80;box-shadow:0 0 8px #4ade80"></div>
+            <?php endif; ?>
         </div>
         <div class="profile-name-area">
             <div class="profile-username">
                 <?=$username?>
-                <?php if (!empty($profile['user']['is_verified'])): ?><span class="verified-badge" title="Верифицирован">✓</span><?php endif; ?>
-                <?php if (!empty($profile['user']['is_admin'])): ?>
-                    <span class="admin-badge"><?=htmlspecialchars($profile['user']['admin_tag'] ?? 'Админ')?></span>
-                <?php endif; ?>
+                <?php if ($profile['user']['is_admin']): ?><span class="admin-badge">АДМИН</span><?php endif; ?>
+                <?php if ($profile['user']['is_verified']): ?><span class="verified-badge">✓</span><?php endif; ?>
             </div>
-            <div class="profile-level"><?=$frame['label']?> &nbsp;·&nbsp; Уровень <?=(int)$profile['xp']['level']?></div>
-            <div class="profile-online"><?=htmlspecialchars($profile['online']['label'])?></div>
+            <div class="profile-level">
+                <?=$frame['label']?> · <?=(int)$profile['xp']['level']?> уровень
+            </div>
+            <div class="profile-online"><?=$profile['online']['label']?></div>
         </div>
         <div class="profile-actions">
-            <?php if ($isSelf): ?>
-                <a href="/settings" class="btn btn-outline">⚙️ Настройки</a>
-            <?php elseif ($currentAccount): ?>
-                <button class="btn btn-msg" onclick="openMessages(<?=$uid?>, '<?=$username?>')">💬 Написать</button>
-                <?php
-                $fsId     = $friendship ? (int)$friendship['id'] : 0;
-                $fsStatus = $friendship['status'] ?? '';
-                $fsIsMine = $friendship && (int)$friendship['requester_id'] === (int)$currentAccount['id'];
-                ?>
-                <?php if (!$friendship): ?>
-                    <button class="btn btn-accent" id="friend-btn" onclick="friendRequest(<?=$uid?>)">+ В друзья</button>
-                <?php elseif ($fsStatus === 'accepted'): ?>
-                    <button class="btn btn-outline" id="friend-btn" onclick="friendAction(<?=$fsId?>,'remove')">👥 Удалить</button>
-                <?php elseif ($fsStatus === 'pending' && $fsIsMine): ?>
-                    <button class="btn btn-outline" id="friend-btn" style="color:var(--muted)" onclick="friendAction(<?=$fsId?>,'reject')">⏳ Отменить</button>
-                <?php elseif ($fsStatus === 'pending' && !$fsIsMine): ?>
-                    <button class="btn btn-green" id="friend-btn" onclick="friendAction(<?=$fsId?>,'accept')">✓ Принять</button>
+            <?php if ($currentAccount && !$isSelf): ?>
+            <button class="btn btn-msg" onclick="openMessages(<?=$uid?>, '<?=addslashes($username)?>')">💬 Написать</button>
+            <button class="btn btn-accent" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>)" style="<?=$isSubscribed?'background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;':''?>">
+                <?=$isSubscribed?'✓ Подписан':'+ Подписаться'?>
+            </button>
+            <?php if ($friendship): ?>
+                <?php if ($friendship['status'] === 'pending' && $friendship['requester_id'] !== (int)$currentAccount['id']): ?>
+                <button class="btn btn-outline" onclick="friendAction(<?=(int)$friendship['id']?>, 'accept')">✓ Принять</button>
+                <button class="btn btn-outline" onclick="friendAction(<?=(int)$friendship['id']?>, 'reject')">✕ Отклонить</button>
+                <?php elseif ($friendship['status'] === 'accepted'): ?>
+                <button class="btn btn-outline" onclick="friendAction(<?=(int)$friendship['id']?>, 'remove')">👥 В друзьях</button>
+                <?php elseif ($friendship['status'] === 'pending'): ?>
+                <button class="btn btn-outline" onclick="friendAction(<?=(int)$friendship['id']?>, 'cancel')">⏳ Отменить</button>
                 <?php endif; ?>
-                <button class="btn <?=$isSubscribed?'btn-green':'btn-accent'?>" id="sub-btn" onclick="toggleSubscribe(<?=$uid?>)">
-                    <?=$isSubscribed?'✓ Подписан':'+ Подписаться'?>
-                </button>
             <?php else: ?>
-                <a href="/login" class="btn btn-accent">Войти</a>
+            <button class="btn btn-outline" id="friend-btn" onclick="friendRequest(<?=$uid?>)">👥 Добавить</button>
+            <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- XP BAR -->
+    <!-- XP ПРОГРЕСС -->
     <div class="xp-bar-wrap">
         <div class="xp-bar-label">
-            <span>⭐ <?=number_format((int)$profile['xp']['total'], 0, ',', ' ')?> XP</span>
-            <span>Lv<?=(int)$profile['xp']['level']?> → Lv<?=(int)$xpProg['next_lvl']?> &nbsp; <?=(int)$xpProg['current']?> / <?=(int)$xpProg['needed']?> XP</span>
+            <span>XP: <?=number_format($xpProg['current'])?> / <?=number_format($xpProg['needed'])?></span>
+            <span>→ Уровень <?=$xpProg['next_lvl']?></span>
         </div>
-        <div class="xp-bar">
-            <div class="xp-bar-fill" style="width:<?=(int)$xpProg['pct']?>%"></div>
-        </div>
+        <div class="xp-bar"><div class="xp-bar-fill" style="width:<?=$xpProg['pct']?>%"></div></div>
     </div>
 
     <!-- BIO -->
     <?php if ($bio): ?>
     <div class="bio-box"><?=$bio?></div>
-    <?php elseif ($isSelf): ?>
-    <div class="bio-box empty">Добавь описание профиля в настройках</div>
+    <?php else: ?>
+    <div class="bio-box empty">Нет описания профиля</div>
     <?php endif; ?>
-
-    <?php if ($canView): ?>
 
     <!-- STATS GRID -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-value"><?=number_format((int)($profile['user']['total_manga_read'] ?? $libStats['read'] ?? 0))?></div>
-            <div class="stat-label">📚 Прочитано</div>
+            <div class="stat-value"><?=number_format((int)($profile['user']['total_manga_read'] ?? 0))?></div>
+            <div class="stat-label">📚 Манг прочитано</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?=number_format((int)($profile['user']['total_chapters_read'] ?? 0))?></div>
-            <div class="stat-label">📑 Глав</div>
+            <div class="stat-label">📄 Глав прочитано</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?=number_format((int)($profile['user']['total_pages_read'] ?? 0))?></div>
-            <div class="stat-label">📄 Страниц</div>
+            <div class="stat-label">📖 Страниц прочитано</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?=number_format((int)($profile['user']['total_ratings'] ?? 0))?></div>
@@ -443,5 +426,4 @@ setInterval(() => fetch('/api/ping', {method:'POST'}), 60000);
 </html>
 <?php 
 }  // Закрытие if ($isProfileRoute) блока
-exit; 
 ?>
