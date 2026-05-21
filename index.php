@@ -1,5 +1,4 @@
 <?php
-// ===== ВРЕМЕННО ДЛЯ ДЕБАГА — убрать после фикса =====
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 ini_set('log_errors', '1');
@@ -8,30 +7,26 @@ error_reporting(E_ALL);
 
 ob_start();
 
-// Перехватываем фатальные ошибки — показываем страницу ошибки с точным текстом
+// Перехватываем фатальные ошибки — показываем точный текст ошибки
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        // Пишем в лог
         @file_put_contents('/tmp/bw_errors.log',
             date('[Y-m-d H:i:s] ') . $error['message'] . ' in ' . $error['file'] . ':' . $error['line'] . "\n",
             FILE_APPEND
         );
-        // Сбрасываем буфер
         while (ob_get_level() > 0) { @ob_end_clean(); }
-        // Отправляем заголовки напрямую
         if (!headers_sent()) {
             header('HTTP/1.1 500 Internal Server Error');
             header('Content-Type: text/html; charset=utf-8');
         }
-        $msg = htmlspecialchars($error['message'] . "\n" . 'in ' . $error['file'] . ' line ' . $error['line']);
+        $msg = htmlspecialchars($error['message'] . "\nin " . $error['file'] . ' line ' . $error['line']);
         echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatal Error</title></head>'
            . '<body style="background:#0c0c0c;color:#f2f2f2;font-family:monospace;padding:32px;margin:0">'
-           . '<h2 style="color:#e8192c;margin-bottom:16px">⚠️ Fatal Error</h2>'
+           . '<h2 style="color:#e8192c;margin-bottom:16px">Fatal Error</h2>'
            . '<pre style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:20px;white-space:pre-wrap;word-break:break-all;color:#f87171;font-size:13px;line-height:1.6">'
-           . $msg
-           . '</pre>'
-           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:inline-block;margin-top:16px;font-size:13px">← На главную</a>'
+           . $msg . '</pre>'
+           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:inline-block;margin-top:16px">На главную</a>'
            . '</body></html>';
         flush();
     } else {
