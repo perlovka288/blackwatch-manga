@@ -5,7 +5,7 @@
 // Обрабатывает маршруты: /u/USERNAME и /user/USERNAME
 // ============================================================
 
-// Маршруты профиля: /tg?user_id=TELEGRAM_ID или /u/USERNAME
+// Маршруты профиля: /tg?user_id=TELEGRAM_ID
 $profile = null;
 $isProfileRoute = false;
 
@@ -20,7 +20,6 @@ if ($path === '/tg' && !empty($_GET['user_id'])) {
     $tgAccount = $tgStmt->fetch();
     
     if ($tgAccount) {
-        // Получить профиль по account_id
         $idStmt = $pdo->prepare("SELECT username FROM accounts WHERE id=?");
         $idStmt->execute([(int)$tgAccount['id']]);
         $accData = $idStmt->fetch();
@@ -29,8 +28,8 @@ if ($path === '/tg' && !empty($_GET['user_id'])) {
         }
     }
 }
-// Маршрут: /u/USERNAME или /user/USERNAME
-elseif (preg_match('#^/u(?:ser)?/([a-zA-Z0-9_]{1,50})$#', $path, $m)) {
+// Маршрут: /user/USERNAME (с полным словом — без конфликта с /u/ из index.php)
+elseif (preg_match('#^/user/([a-zA-Z0-9_]{1,50})$#', $path, $m)) {
     $isProfileRoute = true;
     $profile = getUserProfile($pdo, $m[1]);
 }

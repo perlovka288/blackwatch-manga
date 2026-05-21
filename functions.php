@@ -5,6 +5,86 @@
 // require_once __DIR__ . '/functions.php';
 // ============================================================
 
+// ========================= СОЗДАНИЕ ТАБЛИЦ (если не существуют) =========================
+// Это гарантирует совместимость со старым index.php
+
+try {
+    global $pdo;
+    if (isset($pdo)) {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_xp (
+            account_id INT PRIMARY KEY,
+            total_xp INT DEFAULT 0,
+            level INT DEFAULT 1,
+            weekly_xp INT DEFAULT 0,
+            weekly_pages INT DEFAULT 0,
+            weekly_chapters INT DEFAULT 0,
+            weekly_comments INT DEFAULT 0,
+            week_start DATE DEFAULT CURRENT_DATE,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_stats (
+            account_id INT PRIMARY KEY,
+            total_manga_read INT DEFAULT 0,
+            total_chapters_read INT DEFAULT 0,
+            total_pages_read INT DEFAULT 0,
+            total_ratings INT DEFAULT 0,
+            total_comments INT DEFAULT 0,
+            comment_likes_received INT DEFAULT 0,
+            reading_streak INT DEFAULT 0,
+            last_read_date DATE DEFAULT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_online (
+            account_id INT PRIMARY KEY,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+        $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NULL");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS achievements (
+            id SERIAL PRIMARY KEY,
+            key VARCHAR(100) NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            icon TEXT DEFAULT '🏆',
+            description TEXT,
+            rarity VARCHAR(20) DEFAULT 'common',
+            requirement_type VARCHAR(50) NOT NULL,
+            requirement_value INT NOT NULL DEFAULT 1,
+            xp_reward INT DEFAULT 50
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_achievements (
+            account_id INT NOT NULL,
+            achievement_id INT NOT NULL,
+            progress INT DEFAULT 0,
+            unlocked_at TIMESTAMP DEFAULT NULL,
+            PRIMARY KEY (account_id, achievement_id)
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_notifications (
+            id SERIAL PRIMARY KEY,
+            account_id INT NOT NULL,
+            type VARCHAR(50) NOT NULL,
+            from_account_id INT DEFAULT NULL,
+            reference_id INT DEFAULT NULL,
+            text TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_subscriptions (
+            follower_id INT NOT NULL,
+            following_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (follower_id, following_id)
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comment_likes (
+            account_id INT NOT NULL,
+            comment_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (account_id, comment_id)
+        )");
+        $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
+        $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE");
+        $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS reply_to INT DEFAULT NULL");
+    }
+} catch (Exception $_e) { /* молча игнорируем — таблицы уже могут существовать */ }
+
 // ========================= XP КОНСТАНТЫ =========================
 
 define('XP_PAGE',     2);   // за 1 страницу

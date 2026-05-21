@@ -1,204 +1,75 @@
 <?php
-ini_set('display_errors', '0');
-ini_set('display_startup_errors', '0');
-ini_set('log_errors', '1');
-ini_set('error_log', '/tmp/bw_errors.log');
-error_reporting(E_ALL);
-
 ob_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
-// Перехватываем фатальные ошибки — показываем точный текст ошибки
-register_shutdown_function(function() {
-    $error = error_get_last();
-    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        @file_put_contents('/tmp/bw_errors.log',
-            date('[Y-m-d H:i:s] ') . $error['message'] . ' in ' . $error['file'] . ':' . $error['line'] . "\n",
-            FILE_APPEND
-        );
-        while (ob_get_level() > 0) { @ob_end_clean(); }
-        if (!headers_sent()) {
-            header('HTTP/1.1 500 Internal Server Error');
-            header('Content-Type: text/html; charset=utf-8');
-        }
-        $msg = htmlspecialchars($error['message'] . "\nin " . $error['file'] . ' line ' . $error['line']);
-        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatal Error</title></head>'
-           . '<body style="background:#0c0c0c;color:#f2f2f2;font-family:monospace;padding:32px;margin:0">'
-           . '<h2 style="color:#e8192c;margin-bottom:16px">Fatal Error</h2>'
-           . '<pre style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:20px;white-space:pre-wrap;word-break:break-all;color:#f87171;font-size:13px;line-height:1.6">'
-           . $msg . '</pre>'
-           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:inline-block;margin-top:16px">На главную</a>'
-           . '</body></html>';
-        flush();
-    } else {
-        while (ob_get_level() > 0) { @ob_end_flush(); }
-        flush();
-    }
-});
-
+$dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
 try {
-    $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', getenv('DB_HOST'), getenv('DB_PORT') ?: '5432', getenv('DB_NAME'));
     $pdo = new PDO($dsn, getenv('DB_USER'), getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 } catch (PDOException $e) { die("DB Error: " . $e->getMessage()); }
 
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, file_id TEXT, description TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, cover_imgbb_url TEXT, telegraph_url TEXT, is_series BOOLEAN DEFAULT FALSE)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapters (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, chapter_num FLOAT NOT NULL DEFAULT 1, title TEXT, telegraph_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapter_pages (id SERIAL PRIMARY KEY, chapter_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(50) NOT NULL, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, chapter_id INT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, tg_user_id BIGINT DEFAULT NULL, tg_link_token TEXT DEFAULT NULL, is_verified BOOLEAN DEFAULT FALSE, last_login TIMESTAMP DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account_id INT NOT NULL, ip TEXT, user_agent TEXT, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_custom_statuses (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name VARCHAR(100) NOT NULL, color VARCHAR(20) NOT NULL DEFAULT '#7c5cff', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_ratings (user_id BIGINT NOT NULL, manga_id INT NOT NULL, rating INT NOT NULL CHECK(rating BETWEEN 1 AND 10), PRIMARY KEY (user_id, manga_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS admin_messages (id SERIAL PRIMARY KEY, text TEXT NOT NULL, sent_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_deleted BOOLEAN DEFAULT FALSE)"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_series BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS chapter_id INT DEFAULT NULL"); } catch(Exception $e) {}
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga (id SERIAL PRIMARY KEY, title TEXT NOT NULL, file_id TEXT, description TEXT, likes INT DEFAULT 0, dislikes INT DEFAULT 0, added_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, cover_imgbb_url TEXT, telegraph_url TEXT, is_series BOOLEAN DEFAULT FALSE)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_pages (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapters (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, chapter_num FLOAT NOT NULL DEFAULT 1, title TEXT, telegraph_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_chapter_pages (id SERIAL PRIMARY KEY, chapter_id INT NOT NULL, page_url TEXT NOT NULL, page_order INT NOT NULL DEFAULT 0)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS votes (user_id BIGINT NOT NULL, manga_id INT NOT NULL, vote_type VARCHAR(10) NOT NULL, PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_manga_status (user_id BIGINT NOT NULL, manga_id INT NOT NULL, status VARCHAR(50) NOT NULL, PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS reading_progress (user_id BIGINT NOT NULL, manga_id INT NOT NULL, page_num INT DEFAULT 1, total_pages INT DEFAULT 0, chapter_id INT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_admins (user_id BIGINT PRIMARY KEY)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bot_archive (id SERIAL PRIMARY KEY, action_type VARCHAR(50) NOT NULL, action_text TEXT NOT NULL, action_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, tg_user_id BIGINT DEFAULT NULL, tg_link_token TEXT DEFAULT NULL, is_verified BOOLEAN DEFAULT FALSE, last_login TIMESTAMP DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account_id INT NOT NULL, ip TEXT, user_agent TEXT, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS suggestions (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, text TEXT NOT NULL, status VARCHAR(20) DEFAULT 'new', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS admin_tags (user_id BIGINT PRIMARY KEY, tag_name VARCHAR(100) NOT NULL)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_custom_statuses (id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name VARCHAR(100) NOT NULL, color VARCHAR(20) NOT NULL DEFAULT '#7c5cff', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_ratings (user_id BIGINT NOT NULL, manga_id INT NOT NULL, rating INT NOT NULL CHECK(rating BETWEEN 1 AND 10), PRIMARY KEY (user_id, manga_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS admin_messages (id SERIAL PRIMARY KEY, text TEXT NOT NULL, sent_by BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_deleted BOOLEAN DEFAULT FALSE)");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS cover_imgbb_url TEXT");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS telegraph_url TEXT");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS dislikes INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_series BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE manga_pages ADD COLUMN IF NOT EXISTS page_url TEXT");
+    $pdo->exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS chapter_id INT DEFAULT NULL");
     // New tables for friends, profile customization, email verification
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS email_verifications (id SERIAL PRIMARY KEY, email TEXT NOT NULL, code VARCHAR(6) NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS profile_customizations (account_id INT PRIMARY KEY, avatar_url TEXT DEFAULT NULL, banner_url TEXT DEFAULT NULL, banner_color VARCHAR(20) DEFAULT '#1a1a2e', bio TEXT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (id SERIAL PRIMARY KEY, requester_id INT NOT NULL, addressee_id INT NOT NULL, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(requester_id, addressee_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)"); } catch(Exception $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS email_verifications (id SERIAL PRIMARY KEY, email TEXT NOT NULL, code VARCHAR(6) NOT NULL, expires_at TIMESTAMP NOT NULL, used BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS profile_customizations (account_id INT PRIMARY KEY, avatar_url TEXT DEFAULT NULL, banner_url TEXT DEFAULT NULL, banner_color VARCHAR(20) DEFAULT '#1a1a2e', bio TEXT DEFAULT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (id SERIAL PRIMARY KEY, requester_id INT NOT NULL, addressee_id INT NOT NULL, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(requester_id, addressee_id))");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_code VARCHAR(6) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS verify_expires TIMESTAMP DEFAULT NULL");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR(20) DEFAULT 'public'");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS admin_tag VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE user_manga_status ADD COLUMN IF NOT EXISTS account_id INT DEFAULT NULL");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ums_account_id ON user_manga_status(account_id)");
 
     
     // ===== НОВЫЕ ТАБЛИЦЫ ДЛЯ КОММЕНТАРИЕВ, СООБЩЕНИЙ И СТАТИСТИКИ =====
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comments (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, account_id INT NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_manga ON manga_comments(manga_id)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_account ON manga_comments(account_id)"); } catch(Exception $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comments (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, account_id INT NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_manga ON manga_comments(manga_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_comments_account ON manga_comments(account_id)");
     
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS user_messages (id SERIAL PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, text TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_recipient ON user_messages(recipient_id)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_sender ON user_messages(sender_id)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_pair ON user_messages(sender_id, recipient_id)"); } catch(Exception $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_messages (id SERIAL PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, text TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_recipient ON user_messages(recipient_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_sender ON user_messages(sender_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_pair ON user_messages(sender_id, recipient_id)");
     
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_weekly_stats (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, week_start TIMESTAMP NOT NULL, views INT DEFAULT 0, likes INT DEFAULT 0, comments INT DEFAULT 0, score INT DEFAULT 0, UNIQUE(manga_id, week_start))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_weekly_stats ON manga_weekly_stats(week_start, score)"); } catch(Exception $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_weekly_stats (id SERIAL PRIMARY KEY, manga_id INT NOT NULL, week_start TIMESTAMP NOT NULL, views INT DEFAULT 0, likes INT DEFAULT 0, comments INT DEFAULT 0, score INT DEFAULT 0, UNIQUE(manga_id, week_start))");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_weekly_stats ON manga_weekly_stats(week_start, score)");
     
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS nsfw_confirmed BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_nsfw BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS is_nsfw BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS uploaded_by INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga ADD COLUMN IF NOT EXISTS views INT DEFAULT 0"); } catch(Exception $e) {}
-    // manga_comments: новые поля
-    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS likes INT DEFAULT 0"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE manga_comments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    // user_messages: мигрируем на схему from_account_id/to_account_id
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS from_account_id INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS to_account_id INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS reply_to_id INT DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_sender BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_deleted_by_receiver BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    // user_stats: недостающие поля
-    try { $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS last_read_date DATE DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"); } catch(Exception $e) {}
-    // user_online: флаг скрытия
-    try { $pdo->exec("ALTER TABLE user_online ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE"); } catch(Exception $e) {}
-    // user_achievements: прогресс и статус
-    try { $pdo->exec("ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0"); } catch(Exception $e) {}
-    // achievements: поля для новой схемы
-    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_type VARCHAR(50) DEFAULT NULL"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS requirement_value INT DEFAULT 1"); } catch(Exception $e) {}
-    try { $pdo->exec("ALTER TABLE achievements ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''"); } catch(Exception $e) {}
-    // comment_likes — алиас для manga_comment_likes
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS comment_likes (account_id INT NOT NULL, comment_id INT NOT NULL, PRIMARY KEY (account_id, comment_id))"); } catch(Exception $e) {}
-
-    // ===== ТАБЛИЦЫ ДЛЯ functions.php =====
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_xp (
-        account_id INT PRIMARY KEY,
-        total_xp INT DEFAULT 0,
-        level INT DEFAULT 1,
-        weekly_xp INT DEFAULT 0,
-        weekly_pages INT DEFAULT 0,
-        weekly_chapters INT DEFAULT 0,
-        weekly_comments INT DEFAULT 0,
-        week_start DATE DEFAULT CURRENT_DATE,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_stats (
-        account_id INT PRIMARY KEY,
-        total_manga_read INT DEFAULT 0,
-        total_chapters_read INT DEFAULT 0,
-        total_pages_read INT DEFAULT 0,
-        total_ratings INT DEFAULT 0,
-        total_comments INT DEFAULT 0,
-        comment_likes_received INT DEFAULT 0,
-        reading_streak INT DEFAULT 0
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_online (
-        account_id INT PRIMARY KEY,
-        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS achievements (
-        id SERIAL PRIMARY KEY,
-        key VARCHAR(100) NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        description TEXT,
-        icon TEXT DEFAULT '🏆',
-        rarity VARCHAR(20) DEFAULT 'common',
-        xp_reward INT DEFAULT 0,
-        condition_type VARCHAR(50),
-        condition_value INT DEFAULT 0
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_achievements (
-        id SERIAL PRIMARY KEY,
-        account_id INT NOT NULL,
-        achievement_id INT NOT NULL,
-        unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(account_id, achievement_id)
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_notifications (
-        id SERIAL PRIMARY KEY,
-        account_id INT NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        from_account_id INT DEFAULT NULL,
-        reference_id INT DEFAULT NULL,
-        text TEXT,
-        is_read BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_notifications_account ON user_notifications(account_id)"); } catch(Exception $e) {}
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_subscriptions (
-        id SERIAL PRIMARY KEY,
-        follower_id INT NOT NULL,
-        following_id INT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(follower_id, following_id)
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_comment_likes (
-        account_id INT NOT NULL,
-        comment_id INT NOT NULL,
-        PRIMARY KEY(account_id, comment_id)
-    )");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_xp INT DEFAULT 0");
+    $pdo->exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_level INT DEFAULT 1");
     // Tags & genres tables
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, is_nsfw BOOLEAN DEFAULT FALSE, manga_count INT DEFAULT 0)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS genres (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, manga_count INT DEFAULT 0)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_tags (manga_id INT NOT NULL, tag_id INT NOT NULL, PRIMARY KEY (manga_id, tag_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS manga_genres (manga_id INT NOT NULL, genre_id INT NOT NULL, PRIMARY KEY (manga_id, genre_id))"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_tags_manga ON manga_tags(manga_id)"); } catch(Exception $e) {}
-    try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_genres_manga ON manga_genres(manga_id)"); } catch(Exception $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, is_nsfw BOOLEAN DEFAULT FALSE, manga_count INT DEFAULT 0)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS genres (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, slug VARCHAR(100) NOT NULL UNIQUE, manga_count INT DEFAULT 0)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_tags (manga_id INT NOT NULL, tag_id INT NOT NULL, PRIMARY KEY (manga_id, tag_id))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS manga_genres (manga_id INT NOT NULL, genre_id INT NOT NULL, PRIMARY KEY (manga_id, genre_id))");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_tags_manga ON manga_tags(manga_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_manga_genres_manga ON manga_genres(manga_id)");
     // Seed tags from JSON if table is empty
     try {
         $tagCount = (int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
@@ -223,6 +94,7 @@ try {
             foreach ($defaultGenres as $g) { $gInsert->execute($g); }
         }
     } catch(Exception $e) {}
+} catch (Exception $e) {}
 
 // Стартуем сессию СРАЗУ — до любых функций авторизации
 if (session_status() === PHP_SESSION_NONE) {
@@ -318,18 +190,15 @@ if ($path === '/api/debug-session') {
 
 // ===== НОВЫЕ МОДУЛИ =====
 require_once __DIR__ . '/functions.php';
-
-// ===== ОБРАБОТКА ПАРАМЕТРА tg_user_id =====
-// Если пришёл параметр ?tg_user_id=TELEGRAM_ID, просто сохраняем в сессии и остаёмся на главной
-if (!empty($_GET["tg_user_id"]) && is_numeric($_GET["tg_user_id"]) && $path === "/") {
-    $_SESSION['tg_user_id'] = (int)$_GET["tg_user_id"];
-}
+require_once __DIR__ . '/profile_page.php';
+require_once __DIR__ . '/new_api_endpoints.php';
 
 $hardcodedAdmins = [1710365896, 1181510470];
 try {
     $stmtAdmins = $pdo->query("SELECT user_id FROM bot_admins");
     foreach ($stmtAdmins as $row) { if (!in_array((int)$row['user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['user_id']; }
 } catch (Exception $e) {}
+// Add TG IDs of account-based admins
 try {
     $accAdmStmt = $pdo->query("SELECT tg_user_id FROM accounts WHERE is_admin=TRUE AND tg_user_id IS NOT NULL");
     foreach ($accAdmStmt as $row) { if (!in_array((int)$row['tg_user_id'], $hardcodedAdmins)) $hardcodedAdmins[] = (int)$row['tg_user_id']; }
@@ -339,6 +208,7 @@ function isAdmin($userId, $admins) { return $userId > 0 && in_array((int)$userId
 
 function isAdminFull($pdo, $userId, $admins) {
     if (isAdmin($userId, $admins)) return true;
+    // Check account-based admin flag
     try {
         $s = $pdo->prepare("SELECT is_admin FROM accounts WHERE tg_user_id=? AND is_admin=TRUE");
         $s->execute([$userId]); if ($s->fetch()) return true;
@@ -346,6 +216,8 @@ function isAdminFull($pdo, $userId, $admins) {
     return false;
 }
 
+
+// ===== РАСЧЕТ УРОВНЯ ПОЛЬЗОВАТЕЛЯ =====
 function calculateUserLevel(&$pdo, $account_id) {
     try {
         $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
@@ -353,8 +225,12 @@ function calculateUserLevel(&$pdo, $account_id) {
         $user = $stmt->fetch();
         if (!$user) return;
         $xp = $user['user_xp'];
-        $level = 1; $xp_needed = 0;
-        while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) { $xp_needed += 100 + ($level - 1) * 50; $level++; }
+        $level = 1;
+        $xp_needed = 0;
+        while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
+            $xp_needed += 100 + ($level - 1) * 50;
+            $level++;
+        }
         $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
     } catch (Exception $e) {}
 }
@@ -366,26 +242,28 @@ function isAccountAdmin($pdo, $accountId) {
     } catch(Exception $e) { return false; }
 }
 
+/**
+ * Универсальная проверка прав админа — проверяет ВСЕ способы авторизации:
+ * 1) Веб-аккаунт с is_admin=TRUE
+ * 2) TG ID веб-аккаунта в hardcodedAdmins
+ * 3) TG ID из куки/GET-параметра в hardcodedAdmins
+ */
 function isAdminCombined(PDO $pdo, array $hardcodedAdmins): bool {
+    // 1. Веб-сессия (аккаунт)
     $acc = getCurrentAccount($pdo);
     if ($acc) {
         if (!empty($acc['is_admin'])) return true;
         if (!empty($acc['tg_user_id']) && in_array((int)$acc['tg_user_id'], $hardcodedAdmins)) return true;
     }
+    // 2. TG из куки / сессии
     $userId = getEffectiveUserId($pdo);
     if ($userId && in_array((int)$userId, $hardcodedAdmins)) return true;
+    // 3. Прямой GET-параметр tg_user_id (совместимость с JS ?tg_user_id=...)
     if (!empty($_GET['tg_user_id']) && is_numeric($_GET['tg_user_id'])) {
         if (in_array((int)$_GET['tg_user_id'], $hardcodedAdmins)) return true;
     }
     return false;
 }
-
-// ===== ПОДКЛЮЧАЕМ РОУТЫ (после всех определений функций) =====
-require_once __DIR__ . '/profile_page.php';
-require_once __DIR__ . '/new_api_endpoints.php';
-
-
-// (функции isAdmin, isAdminFull, calculateUserLevel, isAccountAdmin, isAdminCombined определены выше)
 
 $imgbbKeys = ['58ff4596fd55028a81cbf8c4e38388e1','6981ba08e7b2a8743aab2c8ea008f675','f9b8d27fa4029816d643c7814fd60c60','24dbed2ae9fea9369de6a7b68d0c3ee6','c3e6a55335c71a052c1a59b6a2d6d150'];
 
@@ -398,6 +276,28 @@ function sendTgNotify($userId, $text) {
     @curl_exec($ch); curl_close($ch);
 }
 
+
+// ===== НОВЫЕ API ENDPOINTS =====
+
+// Функция для расчета уровня (повторно, на случай если не была добавлена)
+if (!function_exists('calculateUserLevel')) {
+    function calculateUserLevel(&$pdo, $account_id) {
+        try {
+            $stmt = $pdo->prepare("SELECT user_xp FROM accounts WHERE id = ?");
+            $stmt->execute([$account_id]);
+            $user = $stmt->fetch();
+            if (!$user) return;
+            $xp = $user['user_xp'];
+            $level = 1;
+            $xp_needed = 0;
+            while ($xp_needed + (100 + ($level - 1) * 50) <= $xp) {
+                $xp_needed += 100 + ($level - 1) * 50;
+                $level++;
+            }
+            $pdo->prepare("UPDATE accounts SET user_level = ? WHERE id = ?")->execute([$level, $account_id]);
+        } catch (Exception $e) {}
+    }
+}
 
 // API: Комментарии под мангой
 // Add reply_to column to manga_comments if not exists
@@ -698,11 +598,9 @@ if ($path === '/admin') {
     if (!isAdminCombined($pdo, $hardcodedAdmins)) {
         http_response_code(403);
         ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>403</title>
-        <style>body{background:#0a0a0a;color:#f0f0f0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px}
-        .lock{font-size:64px;filter:grayscale(1)}h2{font-size:20px;font-weight:600;color:#fff}p{color:#666;font-size:14px}
-        a{color:#e8192c;text-decoration:none;font-weight:600;border:1px solid rgba(232,25,44,.3);padding:8px 20px;border-radius:8px;transition:.2s}
-        a:hover{background:rgba(232,25,44,.08)}</style></head><body>
-        <div class="lock" style="font-size:48px">&#128274;</div><h2>Доступ закрыт</h2><p>У тебя нет прав для просмотра этой страницы.</p><a href="/">← На главную</a>
+        <style>body{background:#0a0a0e;color:#f2f2f2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+        a{color:#e8192c;text-decoration:none}</style></head><body>
+        <div style="font-size:48px">🔒</div><h2>Нет доступа</h2><a href="/">← На главную</a>
         </body></html><?php exit;
     }
     $bodyClass = isset($_COOKIE['bw_theme']) && $_COOKIE['bw_theme'] === 'light' ? 'light' : '';
@@ -711,1493 +609,939 @@ if ($path === '/admin') {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin · BLACKWATCH</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<title>⚙️ Админ-панель · BLACKWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-/* ══════════════════════════════════════
-   RESET & ROOT TOKENS
-══════════════════════════════════════ */
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-a{text-decoration:none;color:inherit}
-button,input,textarea,select{font-family:inherit;outline:none}
-button{cursor:pointer;border:none;background:none}
-img{display:block}
 :root{
-  /* Palette */
-  --bg:       #0a0a0a;
-  --bg2:      #111111;
-  --surface:  #161616;
-  --surface2: #1c1c1c;
-  --surface3: #222222;
-  --border:   rgba(255,255,255,.07);
-  --border2:  rgba(255,255,255,.13);
-  --border3:  rgba(255,255,255,.20);
-  --text:     #f4f4f4;
-  --text2:    #a0a0a0;
-  --text3:    #606060;
-  --red:      #e8192c;
-  --red2:     #ff2d42;
-  --red-dim:  rgba(232,25,44,.12);
-  --red-glow: rgba(232,25,44,.25);
-  --green:    #22c55e;
-  --green-dim:rgba(34,197,94,.12);
-  --amber:    #f59e0b;
-  --amber-dim:rgba(245,158,11,.12);
-  --blue:     #3b82f6;
-  --blue-dim: rgba(59,130,246,.12);
-  --purple:   #8b5cf6;
-  --purple-dim:rgba(139,92,246,.12);
-  /* Layout */
-  --sidebar:  240px;
-  --topbar:   56px;
-  --radius:   10px;
-  --radius-lg:14px;
-  --t:        .18s ease;
-  --shadow:   0 4px 24px rgba(0,0,0,.5);
-  --glow-red: 0 0 20px rgba(232,25,44,.18);
+    --bg:#0a0a0e;--bg2:#111116;--card:#161620;--card2:#1e1e2a;--card3:#252535;
+    --border:#2a2a3a;--border2:#3a3a50;
+    --text:#f0f0f8;--text2:#8888a0;--muted:#4a4a60;
+    --accent:#e8192c;--accent2:#ff2d42;--accent-glow:rgba(232,25,44,.22);
+    --green:#22c55e;--green-glow:rgba(34,197,94,.18);
+    --amber:#f59e0b;--amber-glow:rgba(245,158,11,.18);
+    --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.18);
+    --blue:#3b82f6;--blue-glow:rgba(59,130,246,.18);
+    --red:#ef4444;--red-glow:rgba(239,68,68,.18);
+    --t:.2s ease;
+    --sidebar:220px;
+    --r:10px;
+    --shadow:0 4px 24px rgba(0,0,0,.6);
+    --inset:inset 0 1px 0 rgba(255,255,255,.05),0 4px 12px rgba(0,0,0,.4);
 }
 .light{
-  --bg:#f0f0f0;--bg2:#e8e8e8;--surface:#ffffff;--surface2:#f5f5f5;--surface3:#ededed;
-  --border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.13);--border3:rgba(0,0,0,.20);
-  --text:#0a0a0a;--text2:#505050;--text3:#a0a0a0;
-  --red-dim:rgba(232,25,44,.08);--red-glow:rgba(232,25,44,.18);
-  --shadow:0 4px 24px rgba(0,0,0,.1);
+    --bg:#ebebf0;--bg2:#e0e0e8;--card:#f8f8fc;--card2:#efeff5;--card3:#e6e6ef;
+    --border:#d0d0e0;--border2:#b8b8cc;
+    --text:#0a0a14;--text2:#505068;--muted:#9090a8;
+    --shadow:0 4px 24px rgba(0,0,0,.12);
+    --inset:inset 0 1px 0 rgba(255,255,255,.8),0 4px 12px rgba(0,0,0,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+
+/* ── LAYOUT ── */
+.adm-layout{display:flex;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.adm-sidebar{
+    width:var(--sidebar);flex-shrink:0;
+    background:var(--card);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+    position:fixed;top:0;left:0;height:100vh;
+    z-index:100;transition:transform var(--t);
+}
+.adm-logo{
+    padding:20px 18px 16px;
+    border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;
+    flex-shrink:0;
+}
+.adm-logo-icon{
+    width:34px;height:34px;border-radius:9px;
+    background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;flex-shrink:0;
+    box-shadow:0 0 14px var(--accent-glow);
+}
+.adm-logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--text)}
+.adm-logo-sub{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
+
+.adm-nav{flex:1;padding:10px 10px;overflow-y:auto;scrollbar-width:none}
+.adm-nav::-webkit-scrollbar{display:none}
+.adm-nav-section{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;padding:10px 8px 5px}
+.adm-nav-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 10px;border-radius:var(--r);
+    color:var(--text2);font-size:12px;font-weight:500;
+    cursor:pointer;transition:all var(--t);margin-bottom:2px;
+    border:1px solid transparent;
+    position:relative;
+}
+.adm-nav-item:hover{background:var(--card2);color:var(--text);border-color:var(--border)}
+.adm-nav-item.active{
+    background:rgba(232,25,44,.1);color:var(--accent);
+    border-color:rgba(232,25,44,.25);
+    box-shadow:0 0 0 1px rgba(232,25,44,.1);
+}
+.adm-nav-item.active .adm-nav-icon{color:var(--accent)}
+.adm-nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.adm-nav-badge{
+    margin-left:auto;min-width:18px;height:18px;
+    background:var(--accent);color:#fff;
+    font-size:9px;font-weight:700;
+    border-radius:9px;padding:0 5px;
+    display:flex;align-items:center;justify-content:center;
 }
 
-/* ══════════════════════════════════════
-   SCROLLBAR
-══════════════════════════════════════ */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
-::-webkit-scrollbar-thumb:hover{background:var(--border3)}
+.adm-sidebar-footer{
+    padding:12px 10px;border-top:1px solid var(--border);flex-shrink:0;
+    display:flex;flex-direction:column;gap:6px;
+}
+.adm-theme-btn{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
+    background:var(--card2);border:1px solid var(--border);
+    color:var(--text2);font-size:11px;font-weight:600;
+    cursor:pointer;transition:all var(--t);width:100%;
+}
+.adm-theme-btn:hover{border-color:var(--border2);color:var(--text)}
+.adm-back-btn{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:8px;
+    background:transparent;border:1px solid var(--border);
+    color:var(--muted);font-size:11px;font-weight:600;
+    cursor:pointer;transition:all var(--t);width:100%;text-decoration:none;
+}
+.adm-back-btn:hover{border-color:var(--border2);color:var(--text2)}
 
-/* ══════════════════════════════════════
-   LAYOUT SHELL
-══════════════════════════════════════ */
-.app{display:flex;height:100vh;overflow:hidden;background:var(--bg)}
+/* ── MAIN CONTENT ── */
+.adm-main{margin-left:var(--sidebar);flex:1;min-height:100vh;background:var(--bg)}
+.adm-topbar{
+    height:56px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 24px;gap:14px;
+    position:sticky;top:0;z-index:50;
+}
+.adm-topbar-title{font-size:15px;font-weight:700;flex:1}
+.adm-topbar-sub{font-size:11px;color:var(--muted)}
 
-/* ══════════════════════════════════════
-   SIDEBAR
-══════════════════════════════════════ */
-.sidebar{
-  width:var(--sidebar);flex-shrink:0;
-  background:var(--surface);
-  border-right:1px solid var(--border);
-  display:flex;flex-direction:column;
-  height:100vh;overflow:hidden;
-  position:relative;z-index:200;
-  transition:transform var(--t);
-}
+/* ── PANELS ── */
+.adm-panel{display:none;padding:24px;animation:fadeIn .18s ease}
+.adm-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-/* Logo area */
-.s-logo{
-  padding:20px 18px 16px;
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:12px;
-  flex-shrink:0;
+/* ── STAT CARDS ── */
+.scard-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.scard{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+    padding:14px 16px;
+    box-shadow:var(--inset);
+    transition:border-color var(--t),transform var(--t);
 }
-.s-logo-badge{
-  width:36px;height:36px;border-radius:10px;
-  background:var(--red);
-  display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;
-  box-shadow:var(--glow-red);
-}
-.s-logo-name{font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text)}
-.s-logo-tag{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:1px}
+.scard:hover{border-color:var(--border2);transform:translateY(-1px)}
+.scard-val{font-family:'Bebas Neue',sans-serif;font-size:36px;line-height:1;margin-bottom:4px}
+.scard-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 
-/* Nav */
-.s-nav{flex:1;padding:12px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
-.s-section{
-  font-size:9px;font-weight:700;color:var(--text3);
-  text-transform:uppercase;letter-spacing:1.2px;
-  padding:10px 8px 4px;margin-top:4px;
+/* ── SECTION HEADER ── */
+.adm-section-head{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;padding-bottom:10px;
+    border-bottom:1px solid var(--border);
 }
-.s-section:first-child{margin-top:0}
-.nav-item{
-  display:flex;align-items:center;gap:10px;
-  padding:9px 10px;border-radius:8px;
-  color:var(--text2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:all var(--t);
-  border:1px solid transparent;
-  position:relative;
-}
-.nav-item:hover{background:var(--surface2);color:var(--text);border-color:var(--border)}
-.nav-item.active{
-  background:var(--red-dim);color:var(--red);
-  border-color:var(--red-glow);
-}
-.nav-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
-.nav-label{flex:1}
-.nav-badge{
-  min-width:18px;height:18px;padding:0 5px;
-  background:var(--red);color:#fff;
-  font-size:9px;font-weight:800;
-  border-radius:9px;display:flex;align-items:center;justify-content:center;
+.adm-section-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.adm-section-badge{
+    background:var(--card2);border:1px solid var(--border);
+    border-radius:20px;padding:2px 9px;font-size:10px;color:var(--muted);font-weight:600;
 }
 
-/* Sidebar footer */
-.s-footer{
-  padding:12px 10px;border-top:1px solid var(--border);
-  flex-shrink:0;display:flex;flex-direction:column;gap:6px;
-}
-.s-footer-btn{
-  display:flex;align-items:center;gap:9px;
-  padding:9px 10px;border-radius:8px;
-  font-size:12px;font-weight:600;
-  cursor:pointer;transition:all var(--t);
-  border:1px solid var(--border);
-  color:var(--text2);background:var(--surface2);
-  width:100%;
-}
-.s-footer-btn:hover{border-color:var(--border2);color:var(--text)}
-
-/* ══════════════════════════════════════
-   MAIN CONTENT AREA
-══════════════════════════════════════ */
-.main{
-  flex:1;display:flex;flex-direction:column;
-  overflow:hidden;min-width:0;
-}
-
-/* Topbar */
-.topbar{
-  height:var(--topbar);flex-shrink:0;
-  background:var(--surface);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;padding:0 20px;gap:12px;
-  position:relative;z-index:100;
-}
-.topbar-hamburger{
-  display:none;width:32px;height:32px;border-radius:7px;
-  border:1px solid var(--border);background:var(--surface2);
-  align-items:center;justify-content:center;font-size:14px;
-  color:var(--text2);cursor:pointer;
-}
-.topbar-title{font-size:15px;font-weight:700;color:var(--text);flex:1}
-.topbar-sub{font-size:11px;color:var(--text3)}
-.topbar-actions{display:flex;align-items:center;gap:8px}
-
-/* Content area */
-.content{flex:1;overflow-y:auto;background:var(--bg)}
-.panel{display:none;padding:24px;animation:panelIn .2s ease}
-.panel.active{display:block}
-@keyframes panelIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-
-/* ══════════════════════════════════════
-   BUTTONS
-══════════════════════════════════════ */
+/* ── BUTTONS ── */
 .btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:8px 16px;border-radius:8px;
-  font-size:12px;font-weight:700;
-  cursor:pointer;transition:all var(--t);
-  border:1px solid;white-space:nowrap;
-  font-family:inherit;
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;
+    cursor:pointer;border:1px solid;transition:all var(--t);
+    font-family:inherit;white-space:nowrap;
 }
-.btn:active{transform:scale(.97)}
-.btn-red{background:var(--red);border-color:var(--red2);color:#fff;box-shadow:var(--glow-red)}
-.btn-red:hover{filter:brightness(1.1)}
-.btn-ghost{background:var(--surface2);border-color:var(--border);color:var(--text2)}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.btn:active{transform:translateY(0)}
+.btn-primary{background:var(--accent);border-color:var(--accent2);color:#fff;box-shadow:0 0 12px var(--accent-glow)}
+.btn-green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--green);box-shadow:0 0 8px var(--green-glow)}
+.btn-amber{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--amber)}
+.btn-purple{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:var(--purple)}
+.btn-blue{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:var(--blue)}
+.btn-red{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red)}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--border2);color:var(--text)}
-.btn-green{background:var(--green-dim);border-color:rgba(34,197,94,.3);color:var(--green)}
-.btn-green:hover{background:rgba(34,197,94,.18)}
-.btn-amber{background:var(--amber-dim);border-color:rgba(245,158,11,.3);color:var(--amber)}
-.btn-blue{background:var(--blue-dim);border-color:rgba(59,130,246,.3);color:var(--blue)}
-.btn-purple{background:var(--purple-dim);border-color:rgba(139,92,246,.3);color:var(--purple)}
-.btn-sm{padding:6px 12px;font-size:11px;border-radius:7px}
-.btn-xs{padding:4px 9px;font-size:10px;border-radius:6px}
-.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:8px}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
 .btn-wide{width:100%;justify-content:center}
-.btn-loading .btn-text{display:none}
-.btn-loading .spinner{display:inline-block}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:8px}
 
-/* ══════════════════════════════════════
-   STAT CARDS ROW
-══════════════════════════════════════ */
-.stats-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
-  gap:12px;margin-bottom:24px;
+/* ── INPUT ── */
+.adm-inp{
+    width:100%;background:var(--card2);border:1px solid var(--border);
+    border-radius:8px;color:var(--text);font-size:12px;
+    padding:9px 12px;outline:none;transition:border-color var(--t);
 }
-.stat-card{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-lg);padding:18px 20px;
-  transition:border-color var(--t),transform var(--t);
-  position:relative;overflow:hidden;
-}
-.stat-card::before{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,transparent 50%);
-  pointer-events:none;
-}
-.stat-card:hover{border-color:var(--border2);transform:translateY(-2px)}
-.stat-accent{border-color:rgba(232,25,44,.25)!important;background:rgba(232,25,44,.04)!important}
-.stat-num{
-  font-size:38px;font-weight:900;line-height:1;
-  letter-spacing:-1px;margin-bottom:6px;
-  font-variant-numeric:tabular-nums;
-}
-.stat-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-.stat-icon{
-  position:absolute;top:16px;right:16px;
-  font-size:20px;opacity:.4;
-}
+.adm-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.adm-inp::placeholder{color:var(--muted)}
+.adm-textarea{resize:none;min-height:80px;line-height:1.5}
+.adm-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px}
+.adm-field{margin-bottom:12px}
 
-/* ══════════════════════════════════════
-   CARDS / PANELS
-══════════════════════════════════════ */
-.card{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-lg);overflow:hidden;
+/* ── CARD CONTAINER ── */
+.adm-card{
+    background:var(--card);border:1px solid var(--border);
+    border-radius:var(--r);padding:16px;
+    box-shadow:var(--inset);
 }
-.card-head{
-  padding:16px 20px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-}
-.card-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
-.card-body{padding:16px 20px}
-.card-body-flush{padding:0}
-.card+.card{margin-top:14px}
+.adm-card+.adm-card{margin-top:10px}
 
-/* ══════════════════════════════════════
-   GRID LAYOUTS
-══════════════════════════════════════ */
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+/* ── TOP MANGA LIST ── */
+.top-list{display:flex;flex-direction:column;gap:4px}
+.top-row{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    transition:border-color var(--t);
+}
+.top-row:hover{border-color:var(--border2)}
+.top-idx{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);width:22px;flex-shrink:0;text-align:center}
+.top-name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-likes{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
 
-/* ══════════════════════════════════════
-   FORM ELEMENTS
-══════════════════════════════════════ */
-.field{margin-bottom:14px}
-.field:last-child{margin-bottom:0}
-.label{
-  display:block;font-size:10px;font-weight:700;
-  color:var(--text3);text-transform:uppercase;letter-spacing:.7px;
-  margin-bottom:6px;
+/* ── ADMIN LIST ── */
+.admin-row{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
+    transition:border-color var(--t);
 }
-.input{
-  width:100%;background:var(--surface2);
-  border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-size:12px;
-  padding:9px 12px;transition:border-color var(--t);
+.admin-row:hover{border-color:var(--border2)}
+.admin-av{
+    width:30px;height:30px;border-radius:8px;
+    background:rgba(232,25,44,.12);border:1px solid rgba(232,25,44,.2);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;flex-shrink:0;
 }
-.input:focus{border-color:rgba(232,25,44,.5);box-shadow:0 0 0 3px rgba(232,25,44,.08)}
-.input::placeholder{color:var(--text3)}
-.textarea{resize:none;min-height:90px;line-height:1.5}
-select.input{cursor:pointer}
-.input-row{display:flex;gap:8px}
-.input-row .input{flex:1}
+.admin-info{flex:1;min-width:0}
+.admin-name{font-size:12px;font-weight:600;color:var(--text)}
+.admin-id{font-size:10px;color:var(--muted);font-family:monospace}
 
-/* ══════════════════════════════════════
-   LISTS / TABLE ROWS
-══════════════════════════════════════ */
-.list{display:flex;flex-direction:column;gap:6px}
-.list-row{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 14px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:9px;
-  transition:border-color var(--t);
-}
-.list-row:hover{border-color:var(--border2)}
-.list-row-click{cursor:pointer}
-.list-row-click:hover{background:var(--surface3)}
-.row-icon{
-  width:34px;height:34px;border-radius:8px;
-  background:var(--surface3);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;
-  font-size:14px;flex-shrink:0;
-}
-.row-icon-red{background:var(--red-dim);border-color:var(--red-glow);color:var(--red)}
-.row-main{flex:1;min-width:0}
-.row-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-sub{font-size:10px;color:var(--text3);margin-top:2px;font-family:'JetBrains Mono',monospace}
-.row-end{display:flex;align-items:center;gap:6px;flex-shrink:0}
+/* ── ARCHIVE ── */
+.aitem{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px}
+.atype{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+.atext{font-size:12px;color:var(--text2);margin-bottom:3px}
+.adate{font-size:10px;color:var(--muted)}
 
-/* cover thumbnail */
-.cover-thumb{
-  width:30px;height:42px;border-radius:5px;
-  object-fit:cover;border:1px solid var(--border);flex-shrink:0;
-}
-.cover-placeholder{
-  width:30px;height:42px;border-radius:5px;
-  background:var(--surface3);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;
-  font-size:12px;flex-shrink:0;
-}
+/* ── MSG ── */
+.amsg-item{padding:11px 13px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;position:relative}
+.amsg-text{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:5px}
+.amsg-meta{font-size:10px;color:var(--muted)}
+.amsg-del{position:absolute;top:8px;right:8px}
 
-/* ══════════════════════════════════════
-   TOP MANGA LIST
-══════════════════════════════════════ */
-.top-item{
-  display:flex;align-items:center;gap:10px;
-  padding:8px 14px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:9px;
-  margin-bottom:5px;transition:border-color var(--t);
+/* ── MANGA EDIT LIST ── */
+.me-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:var(--card2);
+    border:1px solid var(--border);border-radius:8px;
+    cursor:pointer;transition:all var(--t);margin-bottom:5px;
 }
-.top-item:hover{border-color:var(--border2)}
-.top-num{
-  font-size:20px;font-weight:900;color:var(--text3);
-  width:24px;text-align:center;flex-shrink:0;
-  font-variant-numeric:tabular-nums;
-}
-.top-num.gold{color:#f59e0b}
-.top-num.silver{color:#94a3b8}
-.top-num.bronze{color:#a16207}
-.top-name{flex:1;font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top-likes{font-size:11px;font-weight:700;color:var(--red)}
+.me-item:hover{border-color:var(--border2);background:var(--card3)}
+.me-cover{width:32px;height:44px;border-radius:5px;object-fit:cover;background:var(--card3);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.me-title{font-size:12px;color:var(--text);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-badge{font-size:10px;color:var(--muted);flex-shrink:0}
 
-/* ══════════════════════════════════════
-   QUICK ACTIONS GRID
-══════════════════════════════════════ */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.qa-card{
-  padding:16px;border-radius:var(--radius-lg);border:1px solid;
-  cursor:pointer;transition:all var(--t);text-align:left;
-  display:flex;flex-direction:column;gap:6px;
-  background:var(--surface2);
-  font-family:inherit;
-}
-.qa-card:hover{transform:translateY(-2px);filter:brightness(1.08)}
-.qa-card:active{transform:scale(.98)}
-.qa-card-icon{font-size:22px;line-height:1}
-.qa-card-title{font-size:13px;font-weight:700}
-.qa-card-sub{font-size:11px;opacity:.6}
-.qa-red{border-color:var(--red-glow);color:var(--red)}
-.qa-green{border-color:rgba(34,197,94,.25);color:var(--green)}
-.qa-amber{border-color:rgba(245,158,11,.25);color:var(--amber)}
-.qa-purple{border-color:rgba(139,92,246,.25);color:var(--purple)}
-.qa-blue{border-color:rgba(59,130,246,.25);color:var(--blue)}
-
-/* ══════════════════════════════════════
-   ARCHIVE / LOG
-══════════════════════════════════════ */
-.log-item{
-  padding:12px 16px;border-bottom:1px solid var(--border);
-  display:flex;align-items:flex-start;gap:12px;
-}
-.log-item:last-child{border-bottom:none}
-.log-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--border2);margin-top:5px;flex-shrink:0;
-}
-.log-dot-add{background:var(--green)}
-.log-dot-edit{background:var(--amber)}
-.log-dot-del{background:var(--red)}
-.log-type{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-.log-text{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:3px}
-.log-time{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-
-/* ══════════════════════════════════════
-   TAGS / CHIPS
-══════════════════════════════════════ */
-.chip-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.chip{
-  padding:4px 11px;border-radius:20px;font-size:11px;
-  cursor:pointer;border:1px solid var(--border);color:var(--text2);
-  transition:all var(--t);
-}
-.chip:hover{border-color:var(--border2);color:var(--text)}
-.chip.on{background:var(--purple-dim);border-color:rgba(139,92,246,.4);color:var(--purple)}
-.chip.nsfw{border-color:rgba(232,25,44,.25);color:var(--red)}
-.chip.nsfw.on{background:var(--red-dim)}
-.tg-row{
-  display:flex;align-items:center;gap:8px;
-  padding:7px 10px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:8px;margin-bottom:4px;
-}
-.tg-name{flex:1;font-size:12px;color:var(--text);font-weight:500}
-.tg-slug{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-
-/* ══════════════════════════════════════
-   MESSAGES / SUGGESTIONS
-══════════════════════════════════════ */
-.msg-item{
-  padding:14px 16px;border-bottom:1px solid var(--border);
-  position:relative;
-}
-.msg-item:last-child{border-bottom:none}
-.msg-text{font-size:13px;color:var(--text);line-height:1.6;margin-bottom:6px;padding-right:80px}
-.msg-meta{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-.msg-del{position:absolute;top:12px;right:12px}
-
-.sug-item{
-  display:flex;align-items:flex-start;gap:12px;
-  padding:12px 16px;border-bottom:1px solid var(--border);
-}
-.sug-item:last-child{border-bottom:none}
-.sug-text{flex:1;font-size:12px;color:var(--text);line-height:1.6}
-.sug-meta{font-size:10px;color:var(--text3);margin-top:4px;font-family:'JetBrains Mono',monospace}
-
-/* ══════════════════════════════════════
-   CHAPTER ROWS
-══════════════════════════════════════ */
+/* ── CHAPTER ITEM ── */
 .ch-row{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:9px 12px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:8px;margin-bottom:5px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 11px;background:var(--card2);
+    border:1px solid var(--border);border-radius:7px;margin-bottom:4px;
 }
 .ch-row-label{font-size:12px;font-weight:600;color:var(--text)}
 
-/* ══════════════════════════════════════
-   FILE UPLOAD
-══════════════════════════════════════ */
-.upload-zone{
-  border:2px dashed var(--border2);border-radius:var(--radius-lg);
-  padding:28px 20px;text-align:center;cursor:pointer;
-  transition:all var(--t);background:var(--surface2);
-  position:relative;overflow:hidden;
+/* ── SUGGEST ── */
+.sug-item{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;display:flex;gap:10px;align-items:flex-start}
+.sug-text{font-size:12px;color:var(--text);flex:1;line-height:1.5}
+.sug-meta{font-size:10px;color:var(--muted);margin-top:3px}
+.sug-read-btn{padding:4px 10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:5px;color:var(--green);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:all var(--t)}
+.sug-read-btn:hover{background:rgba(34,197,94,.2)}
+
+/* ── TAGS / GENRES ── */
+.tg-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card2);border:1px solid var(--border);border-radius:7px;margin-bottom:4px}
+.tg-name{flex:1;font-size:12px;color:var(--text)}
+.tg-slug{font-size:10px;color:var(--muted);font-family:monospace}
+
+/* ── FILE UPLOAD ZONE ── */
+.adm-upload-zone{
+    border:2px dashed var(--border2);border-radius:10px;
+    padding:20px;text-align:center;cursor:pointer;
+    transition:all var(--t);background:var(--card2);
+    position:relative;overflow:hidden;
 }
-.upload-zone:hover{border-color:rgba(232,25,44,.4);background:rgba(232,25,44,.03)}
-.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.upload-icon{font-size:28px;margin-bottom:8px}
-.upload-text{font-size:12px;color:var(--text2);font-weight:500}
-.upload-hint{font-size:10px;color:var(--text3);margin-top:4px}
-.upload-count{font-size:12px;font-weight:700;color:var(--green);margin-top:8px}
+.adm-upload-zone:hover{border-color:var(--accent);background:rgba(232,25,44,.04)}
+.adm-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.adm-upload-icon{font-size:24px;margin-bottom:6px}
+.adm-upload-text{font-size:11px;color:var(--muted)}
+.adm-upload-hint{font-size:10px;color:var(--muted);margin-top:4px}
+.adm-preview-count{font-size:12px;font-weight:700;color:var(--green);margin-top:6px}
 
-.file-tabs{display:flex;gap:5px;margin-bottom:12px}
-.ftab{
-  padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;
-  cursor:pointer;transition:all var(--t);
-  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+/* ── FILE TABS ── */
+.adm-file-tabs{display:flex;gap:4px;margin-bottom:10px}
+.adm-ftab{
+    padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;
+    cursor:pointer;transition:all var(--t);
+    background:var(--card2);border:1px solid var(--border);color:var(--text2);
 }
-.ftab.active{background:var(--red-dim);border-color:var(--red-glow);color:var(--red)}
-.fpanel{display:none}
-.fpanel.active{display:block}
+.adm-ftab.active{background:rgba(232,25,44,.1);border-color:rgba(232,25,44,.3);color:var(--accent)}
+.adm-fpanel{display:none}
+.adm-fpanel.active{display:block}
 
-/* ══════════════════════════════════════
-   PROGRESS BAR
-══════════════════════════════════════ */
-.prog-bar{height:3px;background:var(--surface3);border-radius:2px;margin:12px 0;display:none;overflow:hidden}
-.prog-bar.show{display:block}
-.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
+/* ── PROGRESS BAR ── */
+.adm-upbar{height:4px;background:var(--card2);border-radius:2px;margin:10px 0;display:none;overflow:hidden}
+.adm-upbar.active{display:block}
+.adm-upbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--amber));border-radius:2px;transition:width .3s ease;width:0}
 
-/* ══════════════════════════════════════
-   RESULT BANNERS
-══════════════════════════════════════ */
-.result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:12px}
-.result.ok{display:block;background:var(--green-dim);border:1px solid rgba(34,197,94,.3);color:var(--green)}
-.result.err{display:block;background:var(--red-dim);border:1px solid var(--red-glow);color:var(--red)}
+/* ── RESULT BANNER ── */
+.adm-result{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:10px}
+.adm-result.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green)}
+.adm-result.error{display:block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red)}
 
-/* ══════════════════════════════════════
-   SPINNER
-══════════════════════════════════════ */
-.spinner{
-  width:13px;height:13px;border:2px solid rgba(255,255,255,.3);
-  border-top-color:#fff;border-radius:50%;
-  animation:spin .7s linear infinite;display:none;
-}
+/* ── SPINNER ── */
+.adm-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.loading .adm-spinner{display:inline-block}
+.loading .btn-label{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ══════════════════════════════════════
-   PAGINATION
-══════════════════════════════════════ */
-.pages{display:flex;gap:5px;align-items:center;margin-top:12px;flex-wrap:wrap}
+/* ── PAGINATION ── */
+.page-row{display:flex;gap:5px;align-items:center;margin-top:10px;flex-wrap:wrap}
 .page-btn{
-  padding:5px 12px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:6px;
-  color:var(--text2);font-size:11px;font-weight:600;
-  cursor:pointer;transition:all var(--t);font-family:inherit;
+    padding:5px 11px;background:var(--card2);border:1px solid var(--border);
+    border-radius:6px;color:var(--text2);font-size:11px;font-weight:600;
+    cursor:pointer;font-family:inherit;transition:all var(--t);
 }
 .page-btn:hover{border-color:var(--border2);color:var(--text)}
-.page-btn.active{background:var(--red);border-color:var(--red2);color:#fff}
-.page-info{font-size:11px;color:var(--text3)}
+.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
-/* ══════════════════════════════════════
-   DIVIDER
-══════════════════════════════════════ */
-.divider{height:1px;background:var(--border);margin:16px 0}
+/* ── GRID 2 COL ── */
+.adm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.adm-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 
-/* ══════════════════════════════════════
-   EMPTY STATE
-══════════════════════════════════════ */
-.empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:12px}
-.empty-icon{font-size:36px;margin-bottom:10px}
-
-/* ══════════════════════════════════════
-   ADMIN BADGE
-══════════════════════════════════════ */
-.admin-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;
-  background:var(--red-dim);border:1px solid var(--red-glow);color:var(--red);
+/* ── QUICK ACTIONS ── */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.qa-btn{
+    display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    padding:12px 14px;border-radius:var(--r);border:1px solid;
+    cursor:pointer;transition:all var(--t);text-align:left;
+    font-family:inherit;
 }
+.qa-btn:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.qa-btn-icon{font-size:20px;margin-bottom:3px}
+.qa-btn-label{font-size:12px;font-weight:700}
+.qa-btn-sub{font-size:10px;opacity:.7}
+.qa-green{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:var(--green)}
+.qa-amber{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:var(--amber)}
+.qa-purple{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:var(--purple)}
+.qa-blue{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:var(--blue)}
+.qa-red{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.25);color:var(--red)}
 
-/* ══════════════════════════════════════
-   ACTIVITY MINI CHART (fake bars)
-══════════════════════════════════════ */
-.mini-bars{display:flex;align-items:flex-end;gap:3px;height:40px}
-.mini-bar{flex:1;background:var(--surface3);border-radius:3px 3px 0 0;transition:height .5s ease,background .2s}
-.mini-bar:hover{background:var(--red)}
-
-/* ══════════════════════════════════════
-   MOBILE OVERLAY
-══════════════════════════════════════ */
-.overlay{
-  display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,.7);z-index:150;
-  backdrop-filter:blur(4px);
+/* ── ADD ADMIN FORM ── */
+.add-admin-box{
+    display:none;margin-top:10px;
+    padding:14px;background:rgba(239,68,68,.04);
+    border:1px solid rgba(239,68,68,.18);border-radius:10px;
 }
-.overlay.open{display:block}
+.add-admin-box.open{display:block}
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
-@media(max-width:900px){
-  .grid-2{grid-template-columns:1fr}
-  .grid-3{grid-template-columns:1fr 1fr}
+/* ── TAGS CHIP ── */
+.tag-chip-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag-chip{
+    padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;
+    border:1px solid var(--border);color:var(--text2);
+    transition:all var(--t);display:inline-flex;align-items:center;gap:3px;
 }
+.tag-chip.checked{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.4);color:var(--purple)}
+.tag-chip.nsfw{border-color:rgba(239,68,68,.3);color:var(--red)}
+.tag-chip.nsfw.checked{background:rgba(239,68,68,.12)}
+
+/* ── MOBILE MENU TOGGLE ── */
+.adm-menu-toggle{display:none;padding:8px;margin-right:4px;border-radius:7px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:16px}
+
+/* ── RESPONSIVE ── */
 @media(max-width:768px){
-  .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  .topbar-hamburger{display:flex}
-  .stats-grid{grid-template-columns:1fr 1fr}
-  .qa-grid{grid-template-columns:1fr}
-  .panel{padding:16px}
+    .adm-sidebar{transform:translateX(-100%)}
+    .adm-sidebar.open{transform:translateX(0)}
+    .adm-main{margin-left:0}
+    .adm-menu-toggle{display:flex;align-items:center;justify-content:center}
+    .scard-row{grid-template-columns:1fr 1fr}
+    .adm-grid2{grid-template-columns:1fr}
+    .qa-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:480px){
-  .stats-grid{grid-template-columns:1fr 1fr}
-  .grid-2,.grid-3{grid-template-columns:1fr}
-  .panel{padding:12px}
+    .scard-row{grid-template-columns:1fr 1fr}
+    .qa-grid{grid-template-columns:1fr}
+    .adm-panel{padding:14px}
 }
+
+/* ── OVERLAY for mobile ── */
+.adm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;backdrop-filter:blur(4px)}
+.adm-overlay.open{display:block}
 </style>
 </head>
 <body class="<?=htmlspecialchars($bodyClass)?>">
 
-<div class="app">
+<div class="adm-layout">
 
-<!-- ═══════════ SIDEBAR ═══════════ -->
-<aside class="sidebar" id="sidebar">
-  <div class="s-logo">
-    <div class="s-logo-badge"></div>
-    <div>
-      <div class="s-logo-name">BLACKWATCH</div>
-      <div class="s-logo-tag">Admin Panel</div>
-    </div>
-  </div>
-
-  <nav class="s-nav">
-    <div class="s-section">Обзор</div>
-    <div class="nav-item active" onclick="nav('dashboard',this)">
-      <span class="nav-icon">◈</span>
-      <span class="nav-label">Дашборд</span>
-    </div>
-    <div class="nav-item" onclick="nav('archive',this)">
-      <span class="nav-icon">◷</span>
-      <span class="nav-label">Журнал действий</span>
+<!-- SIDEBAR -->
+<aside class="adm-sidebar" id="adm-sidebar">
+    <div class="adm-logo">
+        <div class="adm-logo-icon">⚙️</div>
+        <div>
+            <div class="adm-logo-text">BLACKWATCH</div>
+            <div class="adm-logo-sub">Admin Panel</div>
+        </div>
     </div>
 
-    <div class="s-section">Контент</div>
-    <div class="nav-item" onclick="nav('edit',this)">
-      <span class="nav-icon">✎</span>
-      <span class="nav-label">Редактирование</span>
-    </div>
-    <div class="nav-item" onclick="nav('add-chapter',this)">
-      <span class="nav-icon">＋</span>
-      <span class="nav-label">Добавить главу</span>
-    </div>
-    <div class="nav-item" onclick="nav('add-manga',this)">
-      <span class="nav-icon"></span>
-      <span class="nav-label">Добавить мангу</span>
-    </div>
-    <div class="nav-item" onclick="nav('tags',this)">
-      <span class="nav-icon">⊞</span>
-      <span class="nav-label">Теги и жанры</span>
-    </div>
+    <nav class="adm-nav">
+        <div class="adm-nav-section">Обзор</div>
+        <div class="adm-nav-item active" onclick="admNav('stats',this)">
+            <span class="adm-nav-icon">📊</span> Статистика
+        </div>
+        <div class="adm-nav-item" onclick="admNav('archive',this)">
+            <span class="adm-nav-icon">🗂</span> Архив действий
+        </div>
 
-    <div class="s-section">Пользователи</div>
-    <div class="nav-item" onclick="nav('messages',this)">
-      <span class="nav-icon">✉</span>
-      <span class="nav-label">Рассылка</span>
-      <span class="nav-badge" id="msg-badge" style="display:none"></span>
-    </div>
-    <div class="nav-item" onclick="nav('suggestions',this)">
-      <span class="nav-icon">☆</span>
-      <span class="nav-label">Предложения</span>
-      <span class="nav-badge" id="sug-badge" style="display:none"></span>
-    </div>
-    <div class="nav-item" onclick="nav('admins',this)">
-      <span class="nav-icon">◈</span>
-      <span class="nav-label">Администраторы</span>
-    </div>
-  </nav>
+        <div class="adm-nav-section">Контент</div>
+        <div class="adm-nav-item" onclick="admNav('edit',this)">
+            <span class="adm-nav-icon">✏️</span> Редактирование
+        </div>
+        <div class="adm-nav-item" onclick="admNav('add-chapter',this)">
+            <span class="adm-nav-icon">📚</span> Добавить главу
+        </div>
+        <div class="adm-nav-item" onclick="admNav('tags',this)">
+            <span class="adm-nav-icon">🏷</span> Теги и жанры
+        </div>
 
-  <div class="s-footer">
-    <button class="s-footer-btn" onclick="toggleTheme()">
-      <span id="theme-icon"></span>
-      <span id="theme-label">Сменить тему</span>
-    </button>
-    <a href="/" class="s-footer-btn" style="text-decoration:none">
-      <span>←</span>
-      <span>На главную</span>
-    </a>
-  </div>
+        <div class="adm-nav-section">Пользователи</div>
+        <div class="adm-nav-item" onclick="admNav('messages',this)">
+            <span class="adm-nav-icon">📨</span> Сообщения
+            <span class="adm-nav-badge" id="msg-nav-badge" style="display:none"></span>
+        </div>
+        <div class="adm-nav-item" onclick="admNav('suggestions',this)">
+            <span class="adm-nav-icon">💡</span> Предложения
+            <span class="adm-nav-badge" id="sug-nav-badge" style="display:none"></span>
+        </div>
+        <div class="adm-nav-item" onclick="admNav('admins',this)">
+            <span class="adm-nav-icon">🛡</span> Администраторы
+        </div>
+    </nav>
+
+    <div class="adm-sidebar-footer">
+        <button class="adm-theme-btn" onclick="admToggleTheme()">
+            <span id="adm-theme-icon">🌙</span>
+            <span id="adm-theme-label">Тёмная тема</span>
+        </button>
+        <a href="/" class="adm-back-btn">← На главную</a>
+    </div>
 </aside>
 
-<!-- ═══════════ OVERLAY ═══════════ -->
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<!-- MOBILE OVERLAY -->
+<div class="adm-overlay" id="adm-overlay" onclick="closeSidebar()"></div>
 
-<!-- ═══════════ MAIN ═══════════ -->
-<div class="main">
+<!-- MAIN -->
+<main class="adm-main">
 
-  <!-- TOPBAR -->
-  <div class="topbar">
-    <button class="topbar-hamburger" id="hamburger" onclick="openSidebar()">☰</button>
-    <div style="flex:1">
-      <div class="topbar-title" id="topbar-title">Дашборд</div>
-    </div>
-    <div class="topbar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="nav('add-chapter',null)">+ Глава</button>
-      <button class="btn btn-red btn-sm" onclick="nav('add-manga',null)">+ Манга</button>
-    </div>
-  </div>
-
-  <!-- CONTENT -->
-  <div class="content">
-
-    <!-- ═══ PANEL: DASHBOARD ═══ -->
-    <div class="panel active" id="panel-dashboard">
-
-      <!-- Stat cards -->
-      <div class="stats-grid" id="stat-cards">
-        <?php for($i=0;$i<6;$i++): ?>
-        <div class="stat-card">
-          <div class="stat-num" style="color:var(--text3)">—</div>
-          <div class="stat-label">Загрузка...</div>
+    <!-- TOPBAR -->
+    <div class="adm-topbar">
+        <button class="adm-menu-toggle" onclick="openSidebar()">☰</button>
+        <div style="flex:1">
+            <div class="adm-topbar-title" id="topbar-title">📊 Статистика</div>
         </div>
-        <?php endfor; ?>
-      </div>
-
-      <div class="grid-2" style="gap:16px">
-
-        <!-- Top Manga -->
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Топ по лайкам</div>
-            <button class="btn btn-ghost btn-xs" onclick="nav('edit',null)">Редактировать →</button>
-          </div>
-          <div class="card-body-flush">
-            <div id="top-manga-list" style="padding:12px 16px">
-              <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Быстрые действия</div>
-          </div>
-          <div class="card-body">
-            <div class="qa-grid">
-              <button class="qa-card qa-green" onclick="nav('add-manga',null)">
-                <div class="qa-card-icon">+</div>
-                <div class="qa-card-title">Новая манга</div>
-                <div class="qa-card-sub">ZIP, обложка, описание</div>
-              </button>
-              <button class="qa-card qa-amber" onclick="nav('add-chapter',null)">
-                <div class="qa-card-icon"></div>
-                <div class="qa-card-title">Новая глава</div>
-                <div class="qa-card-sub">Загрузить страницы</div>
-              </button>
-              <button class="qa-card qa-purple" onclick="nav('messages',null)">
-                <div class="qa-card-icon"></div>
-                <div class="qa-card-title">Написать всем</div>
-                <div class="qa-card-sub">Уведомление</div>
-              </button>
-              <button class="qa-card qa-blue" onclick="nav('suggestions',null)">
-                <div class="qa-card-icon"></div>
-                <div class="qa-card-title">Предложения</div>
-                <div class="qa-card-sub" id="qa-sug-count">—</div>
-              </button>
-            </div>
-            <div style="margin-top:10px">
-              <button class="qa-card qa-red" onclick="nav('admins',null)" style="width:100%;flex-direction:row;align-items:center;gap:12px;padding:13px 16px">
-                <div class="qa-card-icon" style="font-size:18px"></div>
-                <div>
-                  <div class="qa-card-title">Управление администраторами</div>
-                  <div class="qa-card-sub">Добавить или удалить</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div><!-- /panel-dashboard -->
-
-    <!-- ═══ PANEL: ARCHIVE ═══ -->
-    <div class="panel" id="panel-archive">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Журнал действий</div>
-          <button class="btn btn-ghost btn-sm" onclick="loadArchive(0)">↺ Обновить</button>
-        </div>
-        <div class="card-body-flush" id="archive-list">
-          <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
-        </div>
-        <div class="card-body" style="padding-top:0">
-          <div class="pages" id="archive-pages"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL: EDIT ═══ -->
-    <div class="panel" id="panel-edit">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Редактирование манги</div>
-        </div>
-        <div class="card-body">
-          <div id="edit-search-row" style="display:flex;gap:8px;margin-bottom:14px">
-            <input class="input" id="edit-search" type="text" placeholder="Поиск по названию..." onkeydown="if(event.key==='Enter')searchManga()">
-            <button class="btn btn-red" onclick="searchManga()">Найти</button>
-          </div>
-          <div id="manga-list">
-            <div class="empty"><div class="empty-icon"></div>Введите название для поиска</div>
-          </div>
-          <div class="pages" id="edit-pages"></div>
-          <div id="edit-form-wrap" style="display:none">
-            <button class="btn btn-ghost btn-sm" onclick="backToList()" style="margin-bottom:16px">← Назад</button>
-            <div id="edit-form"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL: ADD CHAPTER ═══ -->
-    <div class="panel" id="panel-add-chapter">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Добавить главу</div>
-        </div>
-        <div class="card-body">
-          <div class="field">
-            <label class="label">Серия / Манга</label>
-            <div class="input-row" style="margin-bottom:10px">
-              <input class="input" id="ch-search" type="text" placeholder="Поиск серии..." onkeydown="if(event.key==='Enter')searchForChapter()">
-              <button class="btn btn-red" onclick="searchForChapter()">Найти</button>
-            </div>
-            <div id="ch-manga-list">
-              <div style="color:var(--text3);font-size:12px">Введите название и нажмите «Найти»</div>
-            </div>
-          </div>
-
-          <div id="ch-form" style="display:none">
-            <div class="divider"></div>
-            <div class="field">
-              <label class="label">Номер и название главы</label>
-              <div style="display:grid;grid-template-columns:130px 1fr;gap:8px">
-                <input class="input" type="number" id="ch-num" placeholder="№ главы (1, 2.5...)" step="0.1" min="0">
-                <input class="input" type="text" id="ch-title" placeholder="Название (необязательно)">
-              </div>
-            </div>
-
-            <div class="field">
-              <label class="label">Страницы</label>
-              <div class="file-tabs">
-                <div class="ftab active" id="ftab-zip" onclick="switchTab('zip')">ZIP-архив</div>
-                <div class="ftab" id="ftab-photos" onclick="switchTab('photos')">Изображения</div>
-              </div>
-              <div class="fpanel active" id="fpanel-zip">
-                <div class="upload-zone">
-                  <input type="file" id="ch-zip" accept=".zip" onchange="chZipChange(this)">
-                  <div class="upload-icon"></div>
-                  <div class="upload-text">ZIP со страницами главы</div>
-                  <div class="upload-hint">Нажмите или перетащите файл</div>
-                  <div class="upload-count" id="ch-zip-count"></div>
-                </div>
-              </div>
-              <div class="fpanel" id="fpanel-photos">
-                <div class="upload-zone">
-                  <input type="file" id="ch-photos" accept="image/*" multiple onchange="chPhotosChange(this)">
-                  <div class="upload-icon"></div>
-                  <div class="upload-text">Выберите страницы (несколько файлов)</div>
-                  <div class="upload-hint">Нажмите или перетащите файлы</div>
-                  <div class="upload-count" id="ch-photos-count"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="prog-bar" id="ch-progress"><div class="prog-fill" id="ch-progress-fill"></div></div>
-
-            <button class="btn btn-red btn-wide" id="ch-submit" onclick="submitChapter()">
-              <span class="spinner" id="ch-spinner"></span>
-              <span class="btn-text">Загрузить главу</span>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-green btn-sm" onclick="admNav('add-chapter', document.querySelector('.adm-nav-item:nth-child(5)'))">
+                + Глава
             </button>
-            <div class="result" id="ch-result"></div>
-          </div>
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">
+                ➕ Манга
+            </button>
         </div>
-      </div>
     </div>
 
-    <!-- ═══ PANEL: TAGS ═══ -->
-    <div class="panel" id="panel-tags">
-      <div class="grid-2">
-        <!-- Genres -->
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Жанры <span id="genre-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
-          </div>
-          <div class="card-body">
-            <div class="field">
-              <div class="input-row">
-                <input class="input" id="new-genre-name" placeholder="Название">
-                <input class="input" id="new-genre-slug" placeholder="slug">
-                <button class="btn btn-purple btn-sm" onclick="addGenre()">+</button>
-              </div>
-            </div>
-            <div id="genres-list"><div class="empty" style="padding:20px 0"><div class="empty-icon"></div>Загрузка...</div></div>
-          </div>
+    <!-- ══ PANEL: STATS ══ -->
+    <div class="adm-panel active" id="adm-panel-stats">
+        <div class="scard-row" id="adm-stat-cards">
+            <?php for($i=0;$i<6;$i++): ?>
+            <div class="scard"><div class="scard-val" style="color:var(--muted)">—</div><div class="scard-label">Загрузка...</div></div>
+            <?php endfor; ?>
         </div>
-        <!-- Tags -->
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Теги <span id="tag-count" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text3);font-weight:600"></span></div>
-          </div>
-          <div class="card-body">
-            <div class="field">
-              <div class="input-row">
-                <input class="input" id="new-tag-name" placeholder="Название">
-                <input class="input" id="new-tag-slug" placeholder="slug">
-                <button class="btn btn-purple btn-sm" onclick="addTag()">+</button>
-              </div>
-              <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text2);cursor:pointer">
-                <input type="checkbox" id="new-tag-nsfw"> NSFW тег
-              </label>
-            </div>
-            <div id="tags-list"><div class="empty" style="padding:20px 0"><div class="empty-icon"></div>Загрузка...</div></div>
-          </div>
-        </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-ghost" onclick="reseedTags()">↺ Загрузить стандартные теги</button>
-        <button class="btn btn-ghost" onclick="dedupTags()">Удалить дубли</button>
-        <span style="font-size:11px;color:var(--text3)">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
-      </div>
-    </div>
 
-    <!-- ═══ PANEL: MESSAGES ═══ -->
-    <div class="panel" id="panel-messages">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Рассылка пользователям</div>
-          </div>
-          <div class="card-body">
-            <div class="field">
-              <label class="label">Текст сообщения</label>
-              <textarea class="input textarea" id="msg-text" placeholder="Введите текст сообщения для всех пользователей..."></textarea>
-            </div>
-            <button class="btn btn-red btn-wide" onclick="sendMessage()">Отправить всем</button>
-            <div class="result" id="msg-result"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Отправленные</div>
-            <button class="btn btn-ghost btn-xs" onclick="loadMessages()">↺</button>
-          </div>
-          <div class="card-body-flush" id="msg-list">
-            <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL: SUGGESTIONS ═══ -->
-    <div class="panel" id="panel-suggestions">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Предложения пользователей</div>
-          <button class="btn btn-ghost btn-sm" onclick="loadSuggestions(0)">↺ Обновить</button>
-        </div>
-        <div class="card-body-flush" id="sug-list">
-          <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
-        </div>
-        <div class="card-body" style="padding-top:0">
-          <div class="pages" id="sug-pages"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL: ADMINS ═══ -->
-    <div class="panel" id="panel-admins">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Список администраторов</div>
-            <button class="btn btn-ghost btn-xs" onclick="loadAdmins()">↺</button>
-          </div>
-          <div class="card-body-flush" id="admins-list">
-            <div class="empty"><div class="empty-icon"></div>Загрузка...</div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Назначить администратора</div>
-          </div>
-          <div class="card-body">
-            <div class="field">
-              <label class="label">Email или Telegram ID</label>
-              <input class="input" id="ap-input" type="text" placeholder="admin@example.com или 123456789">
-            </div>
-            <div class="field">
-              <label class="label">Роль / Тег</label>
-              <input class="input" id="ap-tag" type="text" placeholder="Редактор, Модератор...">
-            </div>
-            <button class="btn btn-red btn-wide" onclick="submitAddAdmin()">Назначить администратором</button>
-            <div class="result" id="ap-result"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL: ADD MANGA ═══ -->
-    <div class="panel" id="panel-add-manga">
-      <div class="card" style="max-width:680px">
-        <div class="card-head">
-          <div class="card-title">Добавить мангу</div>
-          <button class="btn btn-ghost btn-xs" onclick="resetAddMangaForm()">↺ Сбросить</button>
-        </div>
-        <div class="card-body">
-
-          <!-- Тип -->
-          <div class="field">
-            <label class="label">Тип</label>
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-red btn-sm" id="am-type-single" onclick="amSetType('single')" style="flex:1">Обычная</button>
-              <button class="btn btn-ghost btn-sm" id="am-type-series" onclick="amSetType('series')" style="flex:1">Серия глав</button>
-            </div>
-          </div>
-
-          <!-- Название -->
-          <div class="field">
-            <label class="label">Название</label>
-            <input class="input" type="text" id="am-title" placeholder="Название манги...">
-          </div>
-
-          <!-- Описание -->
-          <div class="field">
-            <label class="label">Описание</label>
-            <textarea class="input textarea" id="am-desc" placeholder="Краткое описание..." style="min-height:80px"></textarea>
-          </div>
-
-          <!-- Жанры -->
-          <div class="field" id="am-genres-wrap" style="display:none">
-            <label class="label">Жанры</label>
-            <div id="am-genres-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
-          </div>
-
-          <!-- Теги -->
-          <div class="field" id="am-tags-wrap" style="display:none">
-            <label class="label">Теги</label>
-            <div id="am-tags-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
-          </div>
-
-          <!-- Обложка -->
-          <div class="field">
-            <label class="label">Обложка</label>
-            <div class="upload-zone" id="am-cover-zone">
-              <input type="file" id="am-cover-input" accept="image/*" onchange="amOnCoverChange(this)">
-              <div class="upload-icon"></div>
-              <div class="upload-text">Загрузить обложку</div>
-              <div class="upload-hint">JPG, PNG, WebP • Нажмите или перетащите</div>
-              <div class="upload-count" id="am-cover-count"></div>
-            </div>
-          </div>
-
-          <!-- Страницы (только для обычной) -->
-          <div id="am-pages-section">
-            <div class="field">
-              <label class="label">Страницы</label>
-              <div class="file-tabs">
-                <div class="ftab active" id="am-ftab-zip" onclick="amSwitchTab('zip')">ZIP-архив</div>
-                <div class="ftab" id="am-ftab-photos" onclick="amSwitchTab('photos')">Изображения</div>
-              </div>
-              <div class="fpanel active" id="am-fpanel-zip">
-                <div class="upload-zone">
-                  <input type="file" id="am-zip" accept=".zip" onchange="amOnZipChange(this)">
-                  <div class="upload-icon"></div>
-                  <div class="upload-text">ZIP со страницами</div>
-                  <div class="upload-hint">Сортировка по дате • Нажмите или перетащите</div>
-                  <div class="upload-count" id="am-zip-count"></div>
+        <div class="adm-grid2" style="gap:14px">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">♥ Топ по лайкам</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admNav('edit',document.querySelector('[onclick*=edit]'))">Ред-ть →</button>
                 </div>
-              </div>
-              <div class="fpanel" id="am-fpanel-photos">
-                <div class="upload-zone">
-                  <input type="file" id="am-photos" accept="image/*" multiple onchange="amOnPhotosChange(this)">
-                  <div class="upload-icon"></div>
-                  <div class="upload-text">Выберите страницы</div>
-                  <div class="upload-hint">001.jpg, 002.jpg... • Нажмите или перетащите</div>
-                  <div class="upload-count" id="am-photos-count"></div>
+                <div class="top-list" id="adm-top-list">
+                    <div style="color:var(--muted);font-size:12px;padding:8px 0">Загрузка...</div>
                 </div>
-              </div>
             </div>
-          </div>
-
-          <div class="prog-bar" id="am-progress"><div class="prog-fill" id="am-progress-fill"></div></div>
-
-          <button class="btn btn-red btn-wide" id="am-submit" onclick="amSubmitManga()">
-            <span class="spinner" id="am-spinner"></span>
-            <span class="btn-text">Опубликовать</span>
-          </button>
-          <div class="result" id="am-result"></div>
-
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">⚡ Быстрые действия</div>
+                </div>
+                <div class="qa-grid">
+                    <button class="qa-btn qa-green" onclick="window.location.href='/'">
+                        <div class="qa-btn-icon">➕</div>
+                        <div class="qa-btn-label">Добавить мангу</div>
+                        <div class="qa-btn-sub">ZIP, обложка, описание</div>
+                    </button>
+                    <button class="qa-btn qa-amber" onclick="admNav('add-chapter',null)">
+                        <div class="qa-btn-icon">📚</div>
+                        <div class="qa-btn-label">Новая глава</div>
+                        <div class="qa-btn-sub">Загрузить страницы</div>
+                    </button>
+                    <button class="qa-btn qa-purple" onclick="admNav('messages',null)">
+                        <div class="qa-btn-icon">📨</div>
+                        <div class="qa-btn-label">Написать всем</div>
+                        <div class="qa-btn-sub">Уведомление</div>
+                    </button>
+                    <button class="qa-btn qa-blue" onclick="admNav('suggestions',null)">
+                        <div class="qa-btn-icon">💡</div>
+                        <div class="qa-btn-label">Предложки</div>
+                        <div class="qa-btn-sub" id="qa-sug-sub">0 новых</div>
+                    </button>
+                    <button class="qa-btn qa-red" onclick="admNav('admins',null)" style="grid-column:1/-1">
+                        <div class="qa-btn-icon">🛡</div>
+                        <div class="qa-btn-label">Управление админами</div>
+                        <div class="qa-btn-sub">Добавить / удалить</div>
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
 
-  </div><!-- /content -->
-</div><!-- /main -->
-</div><!-- /app -->
+    <!-- ══ PANEL: ARCHIVE ══ -->
+    <div class="adm-panel" id="adm-panel-archive">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">🗂 Архив действий</div>
+                <button class="btn btn-ghost btn-sm" onclick="loadAdmArchive(0)">↺ Обновить</button>
+            </div>
+            <div id="adm-archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="page-row" id="adm-archive-pages"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: EDIT ══ -->
+    <div class="adm-panel" id="adm-panel-edit">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">✏️ Редактирование манги</div>
+            </div>
+            <div id="adm-edit-search-row" style="display:flex;gap:8px;margin-bottom:12px">
+                <input class="adm-inp" id="adm-edit-search" type="text" placeholder="🔍 Поиск манги..." onkeydown="if(event.key==='Enter')admSearchManga()">
+                <button class="btn btn-primary" onclick="admSearchManga()">Найти</button>
+            </div>
+            <div id="adm-manga-list"><div style="color:var(--muted);font-size:12px;padding:8px 0">Введи название или оставь пустым</div></div>
+            <div class="page-row" id="adm-edit-pages"></div>
+            <div id="adm-edit-form-wrap" style="display:none">
+                <button class="btn btn-ghost btn-sm" onclick="admBackToList()" style="margin-bottom:14px">← Назад к списку</button>
+                <div id="adm-edit-form"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: ADD CHAPTER ══ -->
+    <div class="adm-panel" id="adm-panel-add-chapter">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">📚 Добавить главу</div>
+            </div>
+            <div class="adm-field">
+                <label class="adm-label">Манга / Серия</label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input class="adm-inp" id="adm-ch-search" type="text" placeholder="Поиск серии..." onkeydown="if(event.key==='Enter')admSearchForChapter()">
+                    <button class="btn btn-primary" onclick="admSearchForChapter()">Найти</button>
+                </div>
+                <div id="adm-ch-manga-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Найдите серию выше</div></div>
+            </div>
+            <div id="adm-ch-form" style="display:none">
+                <div style="height:1px;background:var(--border);margin:12px 0"></div>
+                <div class="adm-field">
+                    <label class="adm-label">Новая глава</label>
+                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+                        <input class="adm-inp" type="number" id="adm-ch-num" placeholder="№ (1, 2, 2.5...)" step="0.1" min="0">
+                        <input class="adm-inp" type="text" id="adm-ch-title" placeholder="Название (необязательно)">
+                    </div>
+                </div>
+                <div class="adm-field">
+                    <div class="adm-file-tabs">
+                        <div class="adm-ftab active" id="adm-ch-tab-zip" onclick="admSwitchChTab('zip')">📦 ZIP</div>
+                        <div class="adm-ftab" id="adm-ch-tab-photos" onclick="admSwitchChTab('photos')">📸 Фото</div>
+                    </div>
+                    <div class="adm-fpanel active" id="adm-ch-panel-zip">
+                        <div class="adm-upload-zone">
+                            <input type="file" id="adm-ch-zip" accept=".zip" onchange="admChZipChange(this)">
+                            <div class="adm-upload-icon">📦</div>
+                            <div class="adm-upload-text">ZIP архив со страницами</div>
+                            <div class="adm-upload-hint">Нажмите или перетащите файл</div>
+                            <div class="adm-preview-count" id="adm-ch-zip-preview"></div>
+                        </div>
+                    </div>
+                    <div class="adm-fpanel" id="adm-ch-panel-photos">
+                        <div class="adm-upload-zone">
+                            <input type="file" id="adm-ch-photos" accept="image/*" multiple onchange="admChPhotosChange(this)">
+                            <div class="adm-upload-icon">📸</div>
+                            <div class="adm-upload-text">Страницы главы (несколько файлов)</div>
+                            <div class="adm-upload-hint">Нажмите или перетащите файлы</div>
+                            <div class="adm-preview-count" id="adm-ch-photos-preview"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="adm-upbar" id="adm-ch-upbar"><div class="adm-upbar-fill" id="adm-ch-upbar-fill"></div></div>
+                <button class="btn btn-primary btn-wide" id="adm-ch-submit" onclick="admSubmitChapter()">
+                    <span class="adm-spinner"></span>
+                    <span class="btn-label">📤 Загрузить главу</span>
+                </button>
+                <div class="adm-result" id="adm-ch-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: TAGS ══ -->
+    <div class="adm-panel" id="adm-panel-tags">
+        <div class="adm-grid2">
+            <!-- GENRES -->
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🎭 Жанры <span class="adm-section-badge" id="adm-genre-count">0</span></div>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px">
+                    <input class="adm-inp" id="adm-new-genre-name" placeholder="Название">
+                    <input class="adm-inp" id="adm-new-genre-slug" placeholder="slug">
+                    <button class="btn btn-purple btn-sm" onclick="admAddGenre()">+</button>
+                </div>
+                <div id="adm-genres-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+            <!-- TAGS -->
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🏷 Теги <span class="adm-section-badge" id="adm-tag-count">0</span></div>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                    <input class="adm-inp" id="adm-new-tag-name" placeholder="Название">
+                    <input class="adm-inp" id="adm-new-tag-slug" placeholder="slug">
+                    <button class="btn btn-purple btn-sm" onclick="admAddTag()">+</button>
+                </div>
+                <div style="margin-bottom:10px">
+                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px">
+                        <input type="checkbox" id="adm-new-tag-nsfw"> 🔞 NSFW тег
+                    </label>
+                </div>
+                <div id="adm-tags-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-purple" onclick="admReseedTags()">🔄 Загрузить дефолтные теги и жанры</button>
+            <button class="btn btn-red" onclick="admDedupTags()">🧹 Удалить дубли</button>
+            <span style="font-size:11px;color:var(--muted);align-self:center">Если жанров &gt;15 или тегов &gt;54 — удали дубли</span>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: MESSAGES ══ -->
+    <div class="adm-panel" id="adm-panel-messages">
+        <div class="adm-grid2">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">📨 Написать всем пользователям</div>
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Сообщение</label>
+                    <textarea class="adm-inp adm-textarea" id="adm-msg-text" placeholder="Введи текст сообщения..."></textarea>
+                </div>
+                <button class="btn btn-primary btn-wide" onclick="admSendMessage()">📨 Отправить всем</button>
+                <div class="adm-result" id="adm-msg-result"></div>
+            </div>
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">📋 Отправленные сообщения</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admLoadMessages()">↺</button>
+                </div>
+                <div id="adm-msg-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: SUGGESTIONS ══ -->
+    <div class="adm-panel" id="adm-panel-suggestions">
+        <div class="adm-card">
+            <div class="adm-section-head">
+                <div class="adm-section-title">💡 Предложения пользователей</div>
+                <button class="btn btn-ghost btn-sm" onclick="admLoadSuggestions(0)">↺ Обновить</button>
+            </div>
+            <div id="adm-sug-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="page-row" id="adm-sug-pages"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL: ADMINS ══ -->
+    <div class="adm-panel" id="adm-panel-admins">
+        <div class="adm-grid2">
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">🛡 Список администраторов</div>
+                    <button class="btn btn-ghost btn-sm" onclick="admLoadAdmins()">↺</button>
+                </div>
+                <div id="adm-admins-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            </div>
+            <div class="adm-card">
+                <div class="adm-section-head">
+                    <div class="adm-section-title">⚡ Назначить администратора</div>
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Email или TG ID</label>
+                    <input class="adm-inp" id="adm-ap-input" type="text" placeholder="admin@example.com или 123456789">
+                </div>
+                <div class="adm-field">
+                    <label class="adm-label">Тег (роль)</label>
+                    <input class="adm-inp" id="adm-ap-tag" type="text" placeholder="Редактор, Модератор...">
+                </div>
+                <button class="btn btn-red btn-wide" onclick="admSubmitAddAdmin()">✓ Назначить администратора</button>
+                <div class="adm-result" id="adm-ap-result"></div>
+            </div>
+        </div>
+    </div>
+
+</main><!-- /adm-main -->
+</div><!-- /adm-layout -->
 
 <script>
-/* ══ HELPERS ══ */
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function $id(id){return document.getElementById(id);}
-function showResult(id,ok,msg){const el=$id(id);el.className='result '+(ok?'ok':'err');el.textContent=msg;}
+function escH(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
-/* ══ THEME ══ */
-function toggleTheme(){
-  const light=document.body.classList.toggle('light');
-  document.documentElement.classList.toggle('light',light);
-  document.cookie='bw_theme='+(light?'light':'dark')+';max-age='+(86400*365)+';path=/';
-  $id('theme-icon').textContent=light?'☀️':'';
+// ── THEME ──
+function admToggleTheme(){
+    const isLight=document.body.classList.toggle('light');
+    document.documentElement.classList.toggle('light',isLight);
+    document.cookie='bw_theme='+(isLight?'light':'dark')+';max-age='+(86400*365)+';path=/';
+    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
+    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
 }
-(function(){const l=document.body.classList.contains('light');$id('theme-icon').textContent=l?'☀️':'';})();
+// Init theme
+(function(){
+    const isLight=document.body.classList.contains('light');
+    document.getElementById('adm-theme-icon').textContent=isLight?'☀️':'🌙';
+    document.getElementById('adm-theme-label').textContent=isLight?'Светлая тема':'Тёмная тема';
+})();
 
-/* ══ SIDEBAR ══ */
-function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('open');}
-function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
+// ── MOBILE SIDEBAR ──
+function openSidebar(){document.getElementById('adm-sidebar').classList.add('open');document.getElementById('adm-overlay').classList.add('open');}
+function closeSidebar(){document.getElementById('adm-sidebar').classList.remove('open');document.getElementById('adm-overlay').classList.remove('open');}
 
-/* ══ NAVIGATION ══ */
-const titles={dashboard:'Дашборд',archive:'Журнал действий',edit:'Редактирование манги','add-chapter':'Добавить главу','add-manga':'Добавить мангу',tags:'Теги и жанры',messages:'Рассылка',suggestions:'Предложения пользователей',admins:'Администраторы'};
-function nav(tab,el){
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
-  const p=$id('panel-'+tab);if(p)p.classList.add('active');
-  if(el)el.classList.add('active');
-  else{document.querySelectorAll('.nav-item').forEach(i=>{if(i.getAttribute('onclick')?.includes("'"+tab+"'"))i.classList.add('active');});}
-  $id('topbar-title').textContent=titles[tab]||tab;
-  closeSidebar();
-  const loaders={dashboard:loadStats,archive:()=>loadArchive(0),edit:()=>loadMangaList('',0),'add-manga':amLoadGenresAndTags,tags:loadTagsPanel,messages:loadMessages,suggestions:()=>loadSuggestions(0),admins:loadAdmins};
-  loaders[tab]?.();
+// ── NAV ──
+const panelTitles={stats:'📊 Статистика',archive:'🗂 Архив действий',edit:'✏️ Редактирование',['add-chapter']:'📚 Добавить главу',tags:'🏷 Теги и жанры',messages:'📨 Сообщения',suggestions:'💡 Предложения',admins:'🛡 Администраторы'};
+function admNav(tab,el){
+    document.querySelectorAll('.adm-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.adm-nav-item').forEach(i=>i.classList.remove('active'));
+    const panel=document.getElementById('adm-panel-'+tab);
+    if(panel)panel.classList.add('active');
+    if(el)el.classList.add('active');
+    else{// find nav item by onclick
+        document.querySelectorAll('.adm-nav-item').forEach(i=>{if(i.getAttribute('onclick')&&i.getAttribute('onclick').includes("'"+tab+"'"))i.classList.add('active');});
+    }
+    document.getElementById('topbar-title').textContent=panelTitles[tab]||tab;
+    closeSidebar();
+    if(tab==='stats')admLoadStats();
+    if(tab==='archive')admLoadArchive(0);
+    if(tab==='edit')admLoadMangaList('',0);
+    if(tab==='tags')admLoadTagsPanel();
+    if(tab==='messages')admLoadMessages();
+    if(tab==='suggestions')admLoadSuggestions(0);
+    if(tab==='admins')admLoadAdmins();
 }
 
-/* ══ STATS ══ */
-async function loadStats(){
-  try{
-    const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());
-    const d=await r.json();
-    if(d.error){$id('stat-cards').innerHTML='<div class="empty">Нет прав доступа</div>';return;}
+// ── STATS ──
+async function admLoadStats(){
+    try{const r=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const d=await r.json();
+    if(d.error){document.getElementById('adm-stat-cards').innerHTML='<div style="color:var(--muted)">Нет прав</div>';return;}
     const cards=[
-      {num:d.manga_count,label:'Всего манги',icon:'',color:'var(--text)'},
-      {num:d.users_count,label:'Пользователей',icon:'',color:'var(--green)'},
-      {num:d.votes_count,label:'Голосований',icon:'♥',color:'var(--red)',accent:true},
-      {num:d.chapters_count,label:'Глав загружено',icon:'',color:'var(--text)'},
-      {num:d.new_today,label:'Новых сегодня',icon:'',color:'var(--amber)'},
-      {num:d.suggest_count,label:'Предложений',icon:'☆',color:'var(--blue)'},
+        {val:d.manga_count,label:'📚 Манг',color:'var(--text)'},
+        {val:d.users_count,label:'👤 Юзеров',color:'var(--green)'},
+        {val:d.votes_count,label:'👍 Голосов',color:'var(--amber)'},
+        {val:d.chapters_count,label:'📖 Глав',color:'var(--text)'},
+        {val:d.new_today,label:'🔥 Сегодня',color:'var(--accent)'},
+        {val:d.suggest_count,label:'💡 Предложек',color:'var(--blue)'},
     ];
-    $id('stat-cards').innerHTML=cards.map(c=>`
-      <div class="stat-card${c.accent?' stat-accent':''}">
-        <div class="stat-icon">${c.icon}</div>
-        <div class="stat-num" style="color:${c.color}">${c.num}</div>
-        <div class="stat-label">${c.label}</div>
-      </div>`).join('');
-
-    // Top manga
-    const top=(d.top_manga||[]);
-    $id('top-manga-list').innerHTML=top.length?top.map((m,i)=>{
-      const cls=i===0?'gold':i===1?'silver':i===2?'bronze':'';
-      return`<div class="top-item"><div class="top-num ${cls}">${i+1}</div><div class="top-name">${esc(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`;
-    }).join(''):'<div class="empty"><div class="empty-icon"></div>Нет данных</div>';
-
-    // Suggestion count
-    if(d.suggest_count>0){const b=$id('sug-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
-    const qs=$id('qa-sug-count');if(qs)qs.textContent=d.suggest_count+' новых';
-  }catch(e){}
+    document.getElementById('adm-stat-cards').innerHTML=cards.map(c=>`<div class="scard"><div class="scard-val" style="color:${c.color}">${c.val}</div><div class="scard-label">${c.label}</div></div>`).join('');
+    document.getElementById('adm-top-list').innerHTML=(d.top_manga||[]).map((m,i)=>`<div class="top-row"><div class="top-idx">${i+1}</div><div class="top-name">${escH(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Нет данных</div>';
+    const sb=d.suggest_count>0;if(sb){const b=document.getElementById('sug-nav-badge');if(b){b.textContent=d.suggest_count;b.style.display='flex';}}
+    const qa=document.getElementById('qa-sug-sub');if(qa)qa.textContent=d.suggest_count+' новых';
+    }catch(e){}
 }
 
-/* ══ ARCHIVE ══ */
-async function loadArchive(pg){
-  try{
-    const r=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());
-    const d=await r.json();
-    const dotClass=t=>t.includes('add')?'log-dot-add':t.includes('del')?'log-dot-del':'log-dot-edit';
-    $id('archive-list').innerHTML=d.items?.length
-      ?'<div>'+d.items.map(a=>`<div class="log-item"><div class="log-dot ${dotClass(a.action_type)}"></div><div style="flex:1"><div class="log-type">${esc(a.action_type)}</div><div class="log-text">${esc(a.action_text)}</div><div class="log-time">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div></div>`).join('')+'</div>'
-      :'<div class="empty">Журнал пуст</div>';
-    pager('archive-pages',pg,d.total,20,n=>`loadArchive(${n})`);
-  }catch(e){}
+// ── ARCHIVE ──
+async function admLoadArchive(pg){
+    try{const r=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    document.getElementById('adm-archive-list').innerHTML=d.items.map(a=>`<div class="aitem"><div class="atype">${escH(a.action_type)}</div><div class="atext">${escH(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">Пусто</div>';
+    const tp=Math.ceil(d.total/20);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadArchive(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadArchive(${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-archive-pages').innerHTML=p;}catch(e){}
 }
 
-/* ══ PAGER ══ */
-function pager(id,pg,total,limit,fn){
-  const tp=Math.ceil(total/limit);
-  let h='';
-  if(pg>0)h+=`<button class="page-btn" onclick="${fn(pg-1)}">← Назад</button>`;
-  if(tp>1)h+=`<span class="page-info">${pg+1} / ${tp}</span>`;
-  if(pg+1<tp)h+=`<button class="page-btn" onclick="${fn(pg+1)}">Вперёд →</button>`;
-  $id(id).innerHTML=h;
+// ── EDIT ──
+let admEditQ='',admEditPg=0;
+async function admLoadMangaList(q='',pg=0){
+    admEditQ=q;admEditPg=pg;
+    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    if(!d.items?.length){document.getElementById('adm-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Ничего не найдено</div>';document.getElementById('adm-edit-pages').innerHTML='';return;}
+    document.getElementById('adm-manga-list').innerHTML=d.items.map(m=>{const src=m.cover_imgbb_url||'';return`<div class="me-item" onclick="admOpenEdit(${m.id})">${src?`<img class="me-cover" src="${escH(src)}" alt="" onerror="this.style.display='none'">`:''}<div class="me-cover" style="${src?'display:none':'display:flex'}">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`;}).join('');
+    const tp=Math.ceil(d.total/10);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadMangaList('${escH(admEditQ)}',${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-edit-pages').innerHTML=p;}catch(e){}
 }
-
-/* ══ EDIT MANGA ══ */
-let _editQ='',_editPg=0;
-async function loadMangaList(q='',pg=0){
-  _editQ=q;_editPg=pg;
-  try{
-    const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());
-    const d=await r.json();
-    if(!d.items?.length){
-      $id('manga-list').innerHTML='<div class="empty"><div class="empty-icon"></div>Ничего не найдено</div>';
-      $id('edit-pages').innerHTML='';return;
-    }
-    $id('manga-list').innerHTML='<div class="list">'+d.items.map(m=>{
-      const src=m.cover_imgbb_url||'';
-      return`<div class="list-row list-row-click" onclick="openEdit(${m.id})">
-        ${src?`<img class="cover-thumb" src="${esc(src)}" onerror="this.style.display='none'">`:``}
-        <div class="${src?'cover-placeholder':'cover-placeholder'}" style="${src?'display:none':''}"></div>
-        <div class="row-main"><div class="row-title">${esc(m.title)}</div></div>
-        <div class="row-end"><span style="font-size:11px;color:var(--text3)">${m.is_series?'Серия':'Манга'}</span></div>
-      </div>`;
-    }).join('')+'</div>';
-    pager('edit-pages',pg,d.total,10,n=>`loadMangaList('${esc(_editQ)}',${n})`);
-  }catch(e){}
-}
-function searchManga(){loadMangaList($id('edit-search').value.trim(),0);}
-$id('edit-search').addEventListener('keydown',e=>{if(e.key==='Enter')searchManga();});
-async function openEdit(mangaId){
-  try{
-    const r=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());
-    const manga=await r.json();
-    $id('manga-list').style.display='none';
-    $id('edit-pages').style.display='none';
-    $id('edit-search-row').style.display='none';
-    $id('edit-form-wrap').style.display='block';
+function admSearchManga(){admLoadMangaList(document.getElementById('adm-edit-search').value.trim(),0);}
+document.getElementById('adm-edit-search').addEventListener('keydown',e=>{if(e.key==='Enter')admSearchManga();});
+async function admOpenEdit(mangaId){
+    try{const r=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await r.json();
+    document.getElementById('adm-manga-list').style.display='none';document.getElementById('adm-edit-pages').style.display='none';document.getElementById('adm-edit-search-row').style.display='none';
+    document.getElementById('adm-edit-form-wrap').style.display='block';
     let chapHtml='';
-    if(manga.is_series&&manga.chapters?.length){
-      chapHtml=`<div class="field" style="margin-top:16px"><label class="label">Главы</label><div class="list">`+manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+esc(ch.title):''}</div><button class="btn btn-ghost btn-xs" onclick="delChapter(${ch.id},this)">Удалить</button></div>`).join('')+`</div></div>`;
-    }
+    if(manga.is_series&&manga.chapters?.length){chapHtml=`<div class="adm-field" style="margin-top:14px"><label class="adm-label">Главы</label>${manga.chapters.map(ch=>`<div class="ch-row"><div class="ch-row-label">Гл. ${ch.chapter_num}${ch.title?' — '+escH(ch.title):''}</div><button class="btn btn-red btn-sm" onclick="admDelChapter(${ch.id},this)">🗑 Удалить</button></div>`).join('')}</div>`;}
     let allG=[],allT=[],mgIds=new Set(),mtIds=new Set();
     try{const gr=await fetch('/api/genres');const gd=await gr.json();allG=gd.genres||[];allT=gd.tags||[];}catch(e){}
     try{const mr=await fetch(`/api/manga/${mangaId}/genres`);const md=await mr.json();md.genres?.forEach(g=>mgIds.add(g.id));md.tags?.forEach(t=>mtIds.add(t.id));}catch(e){}
-    const genHtml=allG.length?`<div class="field"><label class="label">Жанры</label><div class="chip-wrap">${allG.map(g=>`<label class="chip${mgIds.has(g.id)?' on':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(g.name)}</label>`).join('')}</div></div>`:'';
-    const tagHtml=allT.length?`<div class="field"><label class="label">Теги</label><div class="chip-wrap">${allT.map(t=>`<label class="chip${mtIds.has(t.id)?' on':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('on',this.checked)">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
-    $id('edit-form').innerHTML=`
-      <div class="field"><label class="label">Название</label><input class="input" id="ef-title" value="${esc(manga.title)}"></div>
-      <div class="field"><label class="label">Описание</label><textarea class="input textarea" id="ef-desc">${esc(manga.description||'')}</textarea></div>
-      <div class="field"><label class="label">Ссылка Telegraph</label><input class="input" id="ef-link" value="${esc(manga.telegraph_url||'')}"></div>
-      <div class="field"><label class="label">Обложка</label>
-        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
-          ${manga.cover_imgbb_url?`<img id="ef-cover-preview" src="${esc(manga.cover_imgbb_url)}" style="width:60px;height:82px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`:'<div id="ef-cover-preview" style="width:60px;height:82px;border-radius:8px;border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text3);flex-shrink:0">🖼</div>'}
-          <div style="flex:1;min-width:120px">
-            <div style="position:relative;border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .2s;text-align:center;font-size:11px;color:var(--text3);background:var(--surface2)" id="ef-cover-dropzone" onclick="document.getElementById('ef-cover-file').click()" onmouseover="this.style.borderColor='var(--border3)'" onmouseout="this.style.borderColor='var(--border2)'">
-              <input type="file" id="ef-cover-file" accept="image/*" style="display:none" onchange="uploadEditCover(this, ${mangaId})">
-              <div id="ef-cover-upload-status">Нажми чтобы загрузить новую обложку</div>
-            </div>
-            <input class="input" id="ef-cover" value="${esc(manga.cover_imgbb_url||'')}" placeholder="или вставь URL обложки" style="margin-top:6px;font-size:11px">
-          </div>
-        </div></div>
-      ${genHtml}${tagHtml}${chapHtml}
-      <div style="display:flex;gap:8px;margin-top:16px">
-        <button class="btn btn-red" style="flex:1" onclick="saveManga(${mangaId})">Сохранить</button>
-        <button class="btn btn-ghost" onclick="delManga(${mangaId})">Удалить</button>
-      </div>
-      <div class="result" id="ef-result"></div>`;
-  }catch(e){alert('❌ Ошибка загрузки');}
+    const genHtml=allG.length?`<div class="adm-field"><label class="adm-label">🎭 Жанры</label><div class="tag-chip-list">${allG.map(g=>`<label class="tag-chip${mgIds.has(g.id)?' checked':''}"><input type="checkbox" data-gid="${g.id}" ${mgIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagHtml=allT.length?`<div class="adm-field"><label class="adm-label">🏷 Теги</label><div class="tag-chip-list">${allT.map(t=>`<label class="tag-chip${mtIds.has(t.id)?' checked':''}${t.is_nsfw?' nsfw':''}"><input type="checkbox" data-tid="${t.id}" ${mtIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').classList.toggle('checked',this.checked)">${escH(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    document.getElementById('adm-edit-form').innerHTML=`
+        <div class="adm-field"><label class="adm-label">Название</label><input class="adm-inp" type="text" id="aef-title" value="${escH(manga.title)}"></div>
+        <div class="adm-field"><label class="adm-label">Описание</label><textarea class="adm-inp adm-textarea" id="aef-desc">${escH(manga.description||'')}</textarea></div>
+        <div class="adm-field"><label class="adm-label">Ссылка Telegraph</label><input class="adm-inp" type="text" id="aef-link" value="${escH(manga.telegraph_url||'')}"></div>
+        <div class="adm-field"><label class="adm-label">URL обложки</label><input class="adm-inp" type="text" id="aef-cover" value="${escH(manga.cover_imgbb_url||'')}">
+        ${manga.cover_imgbb_url?`<img src="${escH(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-top:8px">`:''}</div>
+        ${genHtml}${tagHtml}${chapHtml}
+        <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-primary" style="flex:1" onclick="admSaveManga(${mangaId})">💾 Сохранить изменения</button>
+            <button class="btn btn-red" onclick="admDelManga(${mangaId})">🗑 Удалить</button>
+        </div>
+        <div class="adm-result" id="aef-result"></div>`;
+    }catch(e){alert('❌ Ошибка загрузки');}
 }
-function backToList(){$id('edit-form-wrap').style.display='none';$id('manga-list').style.display='block';$id('edit-pages').style.display='flex';$id('edit-search-row').style.display='flex';}
-async function saveManga(id){
-  try{
-    const res=await fetch(`/api/admin/manga/${id}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$id('ef-title').value.trim(),description:$id('ef-desc').value.trim(),telegraph_url:$id('ef-link').value.trim(),cover_imgbb_url:$id('ef-cover').value.trim()})});
+function admBackToList(){document.getElementById('adm-edit-form-wrap').style.display='none';document.getElementById('adm-manga-list').style.display='block';document.getElementById('adm-edit-pages').style.display='flex';document.getElementById('adm-edit-search-row').style.display='flex';}
+async function admSaveManga(id){
+    try{const res=await fetch(`/api/admin/manga/${id}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('aef-title').value.trim(),description:document.getElementById('aef-desc').value.trim(),telegraph_url:document.getElementById('aef-link').value.trim(),cover_imgbb_url:document.getElementById('aef-cover').value.trim()})});
     const data=await res.json();
-    const gIds=[...$id('edit-form').querySelectorAll('input[data-gid]:checked')].map(el=>+el.dataset.gid);
-    const tIds=[...$id('edit-form').querySelectorAll('input[data-tid]:checked')].map(el=>+el.dataset.tid);
+    const gIds=[...document.querySelectorAll('#adm-edit-form input[data-gid]:checked')].map(el=>+el.dataset.gid);
+    const tIds=[...document.querySelectorAll('#adm-edit-form input[data-tid]:checked')].map(el=>+el.dataset.tid);
     try{await fetch(`/api/admin/manga/${id}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:gIds,tag_ids:tIds})});}catch(e){}
-    showResult('ef-result',data.success,data.success?'Сохранено':'Ошибка сохранения');
-  }catch(e){}
+    const b=document.getElementById('aef-result');
+    if(data.success){b.className='adm-result success';b.textContent='✅ Сохранено!';}else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
 }
-async function delManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){backToList();loadMangaList(_editQ,_editPg);}}catch(e){}}
-async function delChapter(id,btn){if(!confirm('Удалить главу?'))return;try{const r=await fetch(`/api/admin/chapter/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)btn.closest('.ch-row').remove();}catch(e){}}
+async function admDelManga(id){if(!confirm('Удалить мангу?'))return;try{const r=await fetch(`/api/admin/manga/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){admBackToList();admLoadMangaList(admEditQ,admEditPg);}}catch(e){}}
+async function admDelChapter(id,btn){if(!confirm('Удалить главу?'))return;try{const r=await fetch(`/api/admin/chapter/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){btn.closest('.ch-row').remove();}}catch(e){}}
 
-/* ══ ADD CHAPTER ══ */
-let _chMangaId=null,_chFiles=[];
-async function searchForChapter(){
-  const q=$id('ch-search').value.trim();
-  try{
-    const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());
-    const d=await r.json();
-    if(!d.items?.length){$id('ch-manga-list').innerHTML='<div style="color:var(--text3);font-size:12px">Не найдено</div>';return;}
-    $id('ch-manga-list').innerHTML='<div class="list">'+d.items.map(m=>`<div class="list-row list-row-click" onclick="selectChManga(${m.id},'${esc(m.title).replace(/'/g,"\\'")}')"><div class="cover-placeholder"></div><div class="row-main"><div class="row-title">${esc(m.title)}</div></div><div class="row-end" style="color:var(--text3);font-size:11px">${m.is_series?'Серия':'Манга'}</div></div>`).join('')+'</div>';
-  }catch(e){}
+// ── ADD CHAPTER ──
+let admChMangaId=null,admChFiles=[];
+async function admSearchForChapter(){
+    const q=document.getElementById('adm-ch-search').value.trim();
+    try{const r=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const d=await r.json();
+    if(!d.items?.length){document.getElementById('adm-ch-manga-list').innerHTML='<div style="color:var(--muted);font-size:12px">Не найдено</div>';return;}
+    document.getElementById('adm-ch-manga-list').innerHTML=d.items.map(m=>`<div class="me-item" onclick="admSelectChManga(${m.id},'${escH(m.title).replace(/'/g,"\\'")}')"><div class="me-cover" style="display:flex">📖</div><div class="me-title">${escH(m.title)}</div><div class="me-badge">${m.is_series?'📚':'📄'}</div></div>`).join('');}catch(e){}
 }
-function selectChManga(id,title){
-  _chMangaId=id;
-  $id('ch-form').style.display='block';
-  $id('ch-manga-list').innerHTML=`<div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:9px;padding:10px 14px;font-weight:700;color:var(--green);font-size:12px">${esc(title)}</div>`;
-}
-function switchTab(tab){
-  ['zip','photos'].forEach(t=>{
-    $id('ftab-'+t).classList.toggle('active',t===tab);
-    $id('fpanel-'+t).classList.toggle('active',t===tab);
-  });
-}
-function chPhotosChange(input){_chFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));$id('ch-photos-count').textContent=`📸 ${_chFiles.length} стр. выбрано`;}
-async function chZipChange(input){
-  if(!input.files[0])return;
-  const prev=$id('ch-zip-count');prev.textContent='⏳ Распаковка...';
-  try{
-    const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);
-    const allowed=['jpg','jpeg','png','webp','gif'];const files=[];
-    zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
-    files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
-    const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
-    _chFiles=blobs;prev.textContent=`${blobs.length} стр. распаковано`;
-  }catch(e){prev.textContent='❌ '+e.message;}
-}
-async function submitChapter(){
-  if(!_chMangaId){alert('❌ Выберите серию!');return;}
-  const chNum=parseFloat($id('ch-num').value);const chTitle=$id('ch-title').value.trim();
-  if(!chNum||chNum<0){alert('❌ Укажи номер главы!');return;}
-  if(!_chFiles.length){alert('❌ Загрузи страницы!');return;}
-  const btn=$id('ch-submit');btn.disabled=true;
-  const spinner=$id('ch-spinner');spinner.style.display='inline-block';
-  btn.querySelector('.btn-text').style.display='none';
-  const prog=$id('ch-progress'),fill=$id('ch-progress-fill');prog.classList.add('show');fill.style.width='2%';
-  const rb=$id('ch-result');rb.className='result';rb.textContent='';
-  try{
-    const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
-    if(!kd.success){alert('❌ Нет доступа к ключам');return;}
-    const keys=kd.keys,urls=[],total=_chFiles.length;
-    for(let i=0;i<total;i++){fill.style.width=(2+Math.round(i/total*90))+'%';const u=await uploadOneToImgbb(_chFiles[i],keys);if(u)urls.push(u);}
-    fill.style.width='95%';
-    const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:_chMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
-    const data=await res.json();fill.style.width='100%';
-    showResult('ch-result',data.success,data.success?`Глава ${chNum} добавлена! ${urls.length} стр.`:'❌ '+(data.error||'Ошибка'));
-  }catch(e){showResult('ch-result',false,'❌ '+e.message);}
-  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').style.display='';
+function admSelectChManga(id,title){admChMangaId=id;document.getElementById('adm-ch-form').style.display='block';document.getElementById('adm-ch-manga-list').innerHTML=`<div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.22);border-radius:8px;padding:9px 12px;font-weight:600;color:var(--purple);font-size:12px">✅ ${escH(title)}</div>`;}
+function admSwitchChTab(tab){['zip','photos'].forEach(t=>{document.getElementById('adm-ch-tab-'+t).classList.toggle('active',t===tab);document.getElementById('adm-ch-panel-'+t).classList.toggle('active',t===tab);});}
+function admChPhotosChange(input){admChFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));document.getElementById('adm-ch-photos-preview').textContent=`📸 ${admChFiles.length} стр. выбрано`;}
+async function admChZipChange(input){if(!input.files[0])return;const prev=document.getElementById('adm-ch-zip-preview');prev.textContent='⏳ Распаковка...';try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}admChFiles=blobs;prev.textContent=`📦 ${blobs.length} стр. распаковано`;}catch(e){prev.textContent='❌ '+e.message;}}
+async function admSubmitChapter(){
+    if(!admChMangaId){alert('❌ Выбери серию!');return;}
+    const chNum=parseFloat(document.getElementById('adm-ch-num').value);const chTitle=document.getElementById('adm-ch-title').value.trim();
+    if(!chNum||chNum<0){alert('❌ Укажи номер!');return;}if(!admChFiles.length){alert('❌ Загрузи страницы!');return;}
+    const btn=document.getElementById('adm-ch-submit');btn.disabled=true;btn.classList.add('loading');
+    const pb=document.getElementById('adm-ch-upbar'),pf=document.getElementById('adm-ch-upbar-fill');pb.classList.add('active');pf.style.width='2%';
+    const rb=document.getElementById('adm-ch-result');rb.className='adm-result';rb.textContent='';
+    try{const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();if(!kd.success){alert('❌ Нет доступа');btn.disabled=false;btn.classList.remove('loading');return;}
+    const keys=kd.keys,urls=[],total=admChFiles.length;
+    for(let i=0;i<total;i++){pf.style.width=(2+Math.round(i/total*90))+'%';const u=await uploadOneToImgbb(admChFiles[i],keys);if(u)urls.push(u);}
+    pf.style.width='95%';
+    const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:admChMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:urls,tg_user_id:getTgUser()})});
+    const data=await res.json();pf.style.width='100%';
+    if(data.success){rb.className='adm-result success';rb.textContent=`✅ Глава ${chNum} добавлена! ${urls.length} стр.`;}
+    else{rb.className='adm-result error';rb.textContent='❌ '+(data.error||'Ошибка');}
+    }catch(e){rb.className='adm-result error';rb.textContent='❌ '+e.message;}
+    btn.disabled=false;btn.classList.remove('loading');
 }
 
-/* ══ TAGS ══ */
-async function loadTagsPanel(){
-  try{
-    const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
-    $id('genre-count').textContent=d.genres?.length||0;
-    $id('tag-count').textContent=d.tags?.length||0;
-    $id('genres-list').innerHTML=d.genres?.length
-      ?d.genres.map(g=>`<div class="tg-row"><div class="tg-name">${esc(g.name)}</div><div class="tg-slug">${esc(g.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delGenre(${g.id},this)">🗑</button></div>`).join('')
-      :'<div class="empty" style="padding:16px 0"><div class="empty-icon"></div>Нет жанров</div>';
-    $id('tags-list').innerHTML=d.tags?.length
-      ?d.tags.map(t=>`<div class="tg-row" style="${t.is_nsfw?'border-color:rgba(232,25,44,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${esc(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${esc(t.slug)}</div><button class="btn btn-ghost btn-xs btn-icon" onclick="delTag(${t.id},this)">🗑</button></div>`).join('')
-      :'<div class="empty" style="padding:16px 0"><div class="empty-icon"></div>Нет тегов</div>';
-  }catch(e){}
+// ── TAGS ──
+async function admLoadTagsPanel(){
+    try{const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
+    document.getElementById('adm-genre-count').textContent=d.genres?.length||0;
+    document.getElementById('adm-tag-count').textContent=d.tags?.length||0;
+    const gl=document.getElementById('adm-genres-list');
+    gl.innerHTML=d.genres?.length?d.genres.map(g=>`<div class="tg-item"><div class="tg-name">${escH(g.name)}</div><div class="tg-slug">${escH(g.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelGenre(${g.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет жанров</div>';
+    const tl=document.getElementById('adm-tags-list');
+    tl.innerHTML=d.tags?.length?d.tags.map(t=>`<div class="tg-item" style="${t.is_nsfw?'border-color:rgba(239,68,68,.2)':''}"><div class="tg-name" style="${t.is_nsfw?'color:var(--red)':''}">${escH(t.name)}${t.is_nsfw?' 🔞':''}</div><div class="tg-slug">${escH(t.slug)}</div><button class="btn btn-red btn-sm btn-icon" onclick="admDelTag(${t.id},this)">🗑</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет тегов</div>';
+    }catch(e){}
 }
-async function addGenre(){const name=$id('new-genre-name').value.trim();const slug=$id('new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){$id('new-genre-name').value='';$id('new-genre-slug').value='';loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function delGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
-async function addTag(){const name=$id('new-tag-name').value.trim();const slug=$id('new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=$id('new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){$id('new-tag-name').value='';$id('new-tag-slug').value='';$id('new-tag-nsfw').checked=false;loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function delTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)loadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
-async function reseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
-async function dedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`Тегов: ${d.tags}, жанров: ${d.genres}`);loadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admAddGenre(){const name=document.getElementById('adm-new-genre-name').value.trim();const slug=document.getElementById('adm-new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});const d=await r.json();if(d.success){document.getElementById('adm-new-genre-name').value='';document.getElementById('adm-new-genre-slug').value='';admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDelGenre(id,btn){if(!confirm('Удалить жанр?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function admAddTag(){const name=document.getElementById('adm-new-tag-name').value.trim();const slug=document.getElementById('adm-new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');const nsfw=document.getElementById('adm-new-tag-nsfw').checked;if(!name||!slug){alert('❌ Заполни название и slug');return;}try{const r=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:nsfw})});const d=await r.json();if(d.success){document.getElementById('adm-new-tag-name').value='';document.getElementById('adm-new-tag-slug').value='';document.getElementById('adm-new-tag-nsfw').checked=false;admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDelTag(id,btn){if(!confirm('Удалить тег?'))return;btn.disabled=true;try{const r=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const d=await r.json();if(d.success)admLoadTagsPanel();else{alert('❌ '+(d.error||'Ошибка'));btn.disabled=false;}}catch(e){btn.disabled=false;}}
+async function admReseedTags(){if(!confirm('Загрузить все стандартные теги и жанры?'))return;try{const r=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
+async function admDedupTags(){if(!confirm('Удалить дубли жанров и тегов?'))return;try{const r=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});const d=await r.json();if(d.success){alert(`✅ Тегов: ${d.tags}, жанров: ${d.genres}`);admLoadTagsPanel();}else alert('❌ '+(d.error||'Ошибка'));}catch(e){}}
 
-/* ══ MESSAGES ══ */
-async function loadMessages(){
-  try{
-    const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
-    $id('msg-list').innerHTML=d.items?.length
-      ?'<div>'+d.items.map(m=>`<div class="msg-item" id="amsg-${m.id}"><div class="msg-del"><button class="btn btn-ghost btn-xs" onclick="delMessage(${m.id})">Удалить</button></div><div class="msg-text">${esc(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon"></div>Сообщений нет</div>';
-  }catch(e){}
+// ── MESSAGES ──
+async function admLoadMessages(){
+    try{const r=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const d=await r.json();
+    document.getElementById('adm-msg-list').innerHTML=d.items?.length?d.items.map(m=>`<div class="amsg-item" id="amsg-${m.id}"><div class="amsg-del"><button class="btn btn-red btn-sm" onclick="admDelMessage(${m.id})">Удалить</button></div><div class="amsg-text">${escH(m.text)}</div><div class="amsg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Сообщений нет</div>';
+    }catch(e){}
 }
-async function sendMessage(){
-  const text=$id('msg-text').value.trim();
-  if(!text){alert('Введи сообщение');return;}
-  try{
-    const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});
-    const d=await r.json();
-    showResult('msg-result',d.success,d.success?'Сообщение отправлено':'Ошибка');
-    if(d.success){$id('msg-text').value='';loadMessages();}
-  }catch(e){}
+async function admSendMessage(){
+    const text=document.getElementById('adm-msg-text').value.trim();
+    if(!text){alert('Введи сообщение');return;}
+    try{const r=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await r.json();
+    const b=document.getElementById('adm-msg-result');
+    if(d.success){b.className='adm-result success';b.textContent='✅ Сообщение отправлено!';document.getElementById('adm-msg-text').value='';admLoadMessages();}
+    else{b.className='adm-result error';b.textContent='❌ Ошибка';}}catch(e){}
 }
-async function delMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=$id('amsg-'+id);if(el)el.remove();}catch(e){}}
+async function admDelMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=document.getElementById('amsg-'+id);if(el)el.remove();}catch(e){}}
 
-/* ══ SUGGESTIONS ══ */
-async function loadSuggestions(pg){
-  try{
-    const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
-    $id('sug-list').innerHTML=d.items?.length
-      ?'<div>'+d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${esc(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="btn btn-green btn-xs" onclick="markSug(${s.id},this)">✓ Прочитано</button></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon"></div>Новых предложений нет</div>';
-    pager('sug-pages',pg,d.total,15,n=>`loadSuggestions(${n})`);
-  }catch(e){}
+// ── SUGGESTIONS ──
+async function admLoadSuggestions(pg){
+    try{const r=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const d=await r.json();
+    document.getElementById('adm-sug-list').innerHTML=d.items?.length?d.items.map(s=>`<div class="sug-item" id="sug-${s.id}"><div style="flex:1"><div class="sug-text">${escH(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div></div><button class="sug-read-btn" onclick="admMarkSug(${s.id},this)">✓ Прочитано</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Новых предложений нет</div>';
+    const tp=Math.ceil(d.total/15);let p='';if(pg>0)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg-1})">← Назад</button>`;if(tp>1)p+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${tp}</span>`;if((pg+1)<tp)p+=`<button class="page-btn" onclick="admLoadSuggestions(${pg+1})">Вперёд →</button>`;
+    document.getElementById('adm-sug-pages').innerHTML=p;}catch(e){}
 }
-async function markSug(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
+async function admMarkSug(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
 
-/* ══ ADMINS ══ */
-async function loadAdmins(){
-  try{
-    const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
-    $id('admins-list').innerHTML=d.admins?.length
-      ?'<div>'+d.admins.map(a=>`<div class="list-row"><div class="row-icon row-icon-red"></div><div class="row-main"><div class="row-title">${esc(a.tag)}</div><div class="row-sub">ID: ${a.user_id}</div></div><div class="row-end"><button class="btn btn-ghost btn-xs" onclick="navigator.clipboard?.writeText?.('${a.user_id}')">Копировать</button></div></div>`).join('')+'</div>'
-      :'<div class="empty"><div class="empty-icon"></div>Нет данных</div>';
-  }catch(e){}
+// ── ADMINS ──
+async function admLoadAdmins(){
+    try{const r=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const d=await r.json();
+    document.getElementById('adm-admins-list').innerHTML=d.admins?.length?d.admins.map(a=>`<div class="admin-row"><div class="admin-av">🛡</div><div class="admin-info"><div class="admin-name">${escH(a.tag)}</div><div class="admin-id">ID: ${a.user_id}</div></div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText?.('${a.user_id}');alert('📋 Скопировано')">Копировать</button></div>`).join(''):'<div style="color:var(--muted);font-size:12px">Нет данных</div>';
+    }catch(e){}
 }
-async function submitAddAdmin(){
-  const input=$id('ap-input').value.trim();const tag=$id('ap-tag').value.trim()||'Администратор';
-  if(!input){showResult('ap-result',false,'❌ Введи email или TG ID');return;}
-  let endpoint='/api/admin/assign',body={tag,action:'add'};
-  if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}
-  try{
-    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const d=await r.json();
-    showResult('ap-result',d.success,d.success?d.message:d.error);
-    if(d.success){$id('ap-input').value='';$id('ap-tag').value='';setTimeout(loadAdmins,1500);}
-  }catch(e){showResult('ap-result',false,'❌ Ошибка сети');}
+async function admSubmitAddAdmin(){
+    const input=document.getElementById('adm-ap-input').value.trim();const tag=document.getElementById('adm-ap-tag').value.trim()||'Администратор';
+    const rb=document.getElementById('adm-ap-result');
+    if(!input){rb.className='adm-result error';rb.textContent='❌ Введи email или TG ID';return;}
+    let endpoint='/api/admin/assign',body={tag,action:'add'};
+    if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}
+    try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();
+    if(d.success){rb.className='adm-result success';rb.textContent='✅ '+d.message;document.getElementById('adm-ap-input').value='';document.getElementById('adm-ap-tag').value='';setTimeout(()=>admLoadAdmins(),1500);}
+    else{rb.className='adm-result error';rb.textContent='❌ '+d.error;}}catch(e){rb.className='adm-result error';rb.textContent='❌ Ошибка сети';}
 }
 
-/* ══ AUTO SLUG ══ */
-function autoSlug(nameId,slugId){const n=$id(nameId),s=$id(slugId);if(n&&s)n.addEventListener('input',()=>{if(!s.dataset.manual)s.value=n.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});if(s)s.addEventListener('input',()=>s.dataset.manual='1');}
-autoSlug('new-genre-name','new-genre-slug');
-autoSlug('new-tag-name','new-tag-slug');
+// ── AUTO SLUG ──
+function autoSlug(nameId,slugId){const n=document.getElementById(nameId),s=document.getElementById(slugId);if(n&&s)n.addEventListener('input',()=>{if(!s.dataset.manual)s.value=n.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});if(s)s.addEventListener('input',()=>s.dataset.manual='1');}
+autoSlug('adm-new-genre-name','adm-new-genre-slug');
+autoSlug('adm-new-tag-name','adm-new-tag-slug');
 
-/* ══ IMGBB HELPERS ══ */
+// ── IMGBB HELPERS (from main page) ──
 let _jszip=null;
 async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
-async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
+async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read error'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
 
-/* ══ ADD MANGA PANEL ══ */
-let _amType='single', _amCoverFile=null, _amPhotoFiles=[];
-let _amGenresLoaded=false;
-
-function amSetType(t){
-  _amType=t;
-  $id('am-type-single').className='btn btn-sm '+(t==='single'?'btn-red':'btn-ghost');
-  $id('am-type-series').className='btn btn-sm '+(t==='series'?'btn-red':'btn-ghost');
-  const ps=$id('am-pages-section');
-  if(ps)ps.style.display=t==='single'?'block':'none';
-}
-function amSwitchTab(tab){
-  ['zip','photos'].forEach(t=>{
-    $id('am-ftab-'+t).classList.toggle('active',t===tab);
-    $id('am-fpanel-'+t).classList.toggle('active',t===tab);
-  });
-}
-function amOnCoverChange(input){
-  if(!input.files[0])return;
-  _amCoverFile=input.files[0];
-  $id('am-cover-count').textContent=_amCoverFile.name;
-}
-function amOnPhotosChange(input){
-  _amPhotoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
-  $id('am-photos-count').textContent=_amPhotoFiles.length+' файлов';
-}
-async function amOnZipChange(input){
-  if(!input.files[0])return;
-  $id('am-zip-count').textContent='⏳ Распаковка...';
-  try{
-    const{JSZip}=await loadJSZip();
-    const zip=await JSZip.loadAsync(input.files[0]);
-    const allowed=['jpg','jpeg','png','webp','gif'];const files=[];
-    zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
-    files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});
-    const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
-    _amPhotoFiles=blobs;$id('am-zip-count').textContent=blobs.length+' стр. распаковано';
-  }catch(e){$id('am-zip-count').textContent='❌ '+e.message;}
-}
-async function amLoadGenresAndTags(){
-  if(_amGenresLoaded)return;
-  try{
-    const r=await fetch('/api/genres?_='+Date.now());const d=await r.json();
-    const gl=$id('am-genres-list'),tl=$id('am-tags-list');
-    const gw=$id('am-genres-wrap'),tw=$id('am-tags-wrap');
-    if(d.genres?.length){
-      gw.style.display='block';
-      gl.innerHTML=d.genres.map(g=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid var(--border);border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s;color:var(--text2)"><input type="checkbox" data-am-gid="${g.id}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--surface3)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border3)':'var(--border)'">${esc(g.name)}</label>`).join('');
-    }
-    if(d.tags?.length){
-      tw.style.display='block';
-      tl.innerHTML=d.tags.map(t=>`<label style="font-size:11px;cursor:pointer;padding:3px 9px;border:1px solid ${t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;display:inline-flex;align-items:center;gap:3px;transition:all .15s;color:var(--text2)"><input type="checkbox" data-am-tid="${t.id}" data-nsfw="${t.is_nsfw?1:0}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--surface3)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border3)':(this.dataset.nsfw==='1'?'rgba(239,68,68,0.3)':'var(--border)')">${esc(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('');
-    }
-    _amGenresLoaded=true;
-  }catch(e){}
-}
-async function amSubmitManga(){
-  const title=($id('am-title').value||'').trim();
-  const desc=($id('am-desc').value||'').trim();
-  const isSeries=_amType==='series';
-  if(!title){showResult('am-result',false,'❌ Введи название!');return;}
-  if(!isSeries&&!_amPhotoFiles.length&&!_amCoverFile){showResult('am-result',false,'❌ Загрузи хотя бы обложку!');return;}
-  const btn=$id('am-submit');btn.disabled=true;
-  const spinner=$id('am-spinner');spinner.style.display='inline-block';
-  btn.querySelector('.btn-text').textContent='Загрузка...';
-  const prog=$id('am-progress'),fill=$id('am-progress-fill');prog.classList.add('show');fill.style.width='2%';
-  showResult('am-result',true,'');$id('am-result').className='result';
-  try{
-    const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
-    if(!kd.success||!kd.keys?.length){showResult('am-result',false,'❌ Нет доступа к ключам');btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='Опубликовать';return;}
-    const keys=kd.keys;let coverUrl=null;
-    if(_amCoverFile){fill.style.width='5%';coverUrl=await uploadOneToImgbb(_amCoverFile,keys);}
-    const pageUrls=[];
-    if(!isSeries&&_amPhotoFiles.length){const total=_amPhotoFiles.length;for(let i=0;i<total;i++){fill.style.width=(5+Math.round(i/total*88))+'%';btn.querySelector('.btn-text').textContent=`⬆️ ${i+1}/${total}`;const u=await uploadOneToImgbb(_amPhotoFiles[i],keys);if(u)pageUrls.push(u);}}
-    fill.style.width='95%';
-    const genreIds=[...document.querySelectorAll('#am-genres-list input[data-am-gid]:checked')].map(e=>parseInt(e.dataset.amGid));
-    const tagIds=[...document.querySelectorAll('#am-tags-list input[data-am-tid]:checked')].map(e=>parseInt(e.dataset.amTid));
-    const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:genreIds,tag_ids:tagIds})});
-    const data=await res.json();fill.style.width='100%';
-    if(data.success){showResult('am-result',true,`<strong>Манга добавлена!</strong>${isSeries?' Серия создана':''}${data.pages>0?' · '+data.pages+' стр.':''}`);$id('am-result').className='result ok';}
-    else{showResult('am-result',false,'❌ '+(data.error||'Неизвестная ошибка'));$id('am-result').className='result err';}
-  }catch(e){showResult('am-result',false,'❌ '+e.message);$id('am-result').className='result err';}
-  btn.disabled=false;spinner.style.display='none';btn.querySelector('.btn-text').textContent='Опубликовать';
-}
-function resetAddMangaForm(){
-  $id('am-title').value='';$id('am-desc').value='';
-  _amCoverFile=null;_amPhotoFiles=[];
-  $id('am-cover-count').textContent='';$id('am-zip-count').textContent='';$id('am-photos-count').textContent='';
-  if($id('am-cover-input'))$id('am-cover-input').value='';
-  if($id('am-zip'))$id('am-zip').value='';
-  if($id('am-photos'))$id('am-photos').value='';
-  document.querySelectorAll('#am-genres-list input,#am-tags-list input').forEach(cb=>{cb.checked=false;if(cb.closest('label')){cb.closest('label').style.background='transparent';cb.closest('label').style.borderColor=cb.dataset.nsfw==='1'?'rgba(239,68,68,0.3)':'var(--border)';}});
-  const p=$id('am-progress'),f=$id('am-progress-fill');if(p)p.classList.remove('show');if(f)f.style.width='0%';
-  const r=$id('am-result');if(r){r.className='result';r.textContent='';}
-  amSetType('single');
-}
-// Drag & drop for add-manga zones
-['am-cover-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
-
-
-// Upload cover in edit form
-async function uploadEditCover(input, mangaId) {
-    if (!input.files[0]) return;
-    const statusEl = document.getElementById('ef-cover-upload-status');
-    const previewEl = document.getElementById('ef-cover-preview');
-    if (statusEl) statusEl.textContent = '⏳ Загружаю на imgbb...';
-    try {
-        const kr = await fetch('/api/imgbb-keys?tg_user_id=' + getTgUser());
-        const kd = await kr.json();
-        if (!kd.success || !kd.keys?.length) {
-            if (statusEl) statusEl.textContent = '❌ Нет доступа к ключам';
-            return;
-        }
-        const url = await uploadOneToImgbb(input.files[0], kd.keys);
-        if (url) {
-            document.getElementById('ef-cover').value = url;
-            if (previewEl) { previewEl.src = url; previewEl.style.display = 'block'; }
-            if (statusEl) statusEl.textContent = 'Обложка загружена!';
-            // Auto-save cover
-            showResult('ef-result', true, 'Обложка загружена! Нажми Сохранить.');
-        } else {
-            if (statusEl) statusEl.textContent = '❌ Ошибка загрузки';
-        }
-    } catch(e) {
-        if (statusEl) statusEl.textContent = '❌ ' + e.message;
-    }
-}
-
-/* ══ INIT ══ */
-loadStats();
+// ── INIT ──
+admLoadStats();
 </script>
 </body></html>
 <?php exit;
@@ -2208,7 +1552,7 @@ if ($path==='/api/save-manga'&&$_SERVER['REQUEST_METHOD']==='POST'){
     try{
         if(!isAdminCombined($pdo,$hardcodedAdmins)){echo json_encode(['success'=>false,'error'=>'Нет прав']);exit;}$userId=getEffectiveUserId($pdo);
         $input=json_decode(file_get_contents('php://input'),true);
-        $title=trim($input['title']??'');$description=trim($input['description']??'');$coverUrl=trim($input['cover_url']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));$isSeries=!empty($input['is_series']) && $input['is_series'] !== false && $input['is_series'] !== '' ? true : false;
+        $title=trim($input['title']??'');$description=trim($input['description']??'');$coverUrl=trim($input['cover_url']??'');$pageUrls=array_values(array_filter($input['page_urls']??[]));$isSeries=!empty($input['is_series']);
         if(!$title){echo json_encode(['success'=>false,'error'=>'Название обязательно']);exit;}
         $telegraphLink=null;if(!empty($pageUrls)&&!$isSeries)$telegraphLink=createTelegraphPage('♥ '.$title,$pageUrls);
         $insertStmt=$pdo->prepare("INSERT INTO manga (title,telegraph_url,description,cover_imgbb_url,added_by,is_series) VALUES (?,?,?,?,?,?) RETURNING id");
@@ -2453,10 +1797,10 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $input=json_decode(file_get_contents('php://input'),true);
     $name=trim($input['name']??'');
     $slug=trim($input['slug']??'');
-    $isNsfw = !empty($input['is_nsfw']) ? true : false;
+    $isNsfw=!empty($input['is_nsfw']);
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?'true':'false']);
+    try{$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug,$isNsfw?1:0]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
@@ -2478,7 +1822,7 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $slug=trim($input['slug']??'');
     if(!$name||!$slug){echo json_encode(['success'=>false,'error'=>'Укажи название и slug']);exit;}
     $slug=preg_replace('/[^a-z0-9\-]/','',$slug);
-    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO NOTHING")->execute([$name,$slug]);
+    try{$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING")->execute([$name,$slug]);
     echo json_encode(['success'=>true]);}catch(Exception $e){echo json_encode(['success'=>false,'error'=>$e->getMessage()]);}exit;
 }
 
@@ -2499,8 +1843,8 @@ if ($path==='/api/admin/reseed-tags' && $_SERVER['REQUEST_METHOD']==='POST') {
         $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
         $genresData=[['Экшен','action'],['Романтика','romance'],['Фэнтези','fantasy'],['Комедия','comedy'],['Драма','drama'],['Ужасы','horror'],['Мистика','mystery'],['Приключения','adventure'],['Боевые искусства','martial-arts'],['Психология','psychology'],['Сёнен','shounen'],['Сёдзё','shoujo'],['Сейнен','seinen'],['Иссекай','isekai'],['Спорт','sports']];
         $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name, is_nsfw=EXCLUDED.is_nsfw");
-        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
-        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT(slug) DO NOTHING");
+        foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
+        $gIns=$pdo->prepare("INSERT INTO genres(name,slug)VALUES(?,?) ON CONFLICT DO NOTHING");
         foreach($genresData as $g)$gIns->execute($g);
         $tc=(int)$pdo->query("SELECT COUNT(*) FROM tags")->fetchColumn();
         $gc=(int)$pdo->query("SELECT COUNT(*) FROM genres")->fetchColumn();
@@ -2541,7 +1885,7 @@ if ($path==='/api/genres'){
         if(empty($tags)){
             $tagsData=[['Реинкарнация','reincarnation',false],['Перерождение','rebirth',false],['Система','system',false],['Подземелья','dungeons',false],['Некромант','necromancer',false],['Культивация','cultivation',false],['Монстродевушки','monster-girls',false],['Цундере','tsundere',false],['Яндере','yandere',false],['Путешествие во времени','time-travel',false],['Боги','gods',false],['Зомби','zombies',false],['Школьная жизнь','school-life',false],['Ассасины','assassins',false],['Мафия','mafia',false],['Виртуальная реальность','vr',false],['Игровой мир','game-world',false],['Постапокалипсис','apocalypse',false],['Игра на выживание','survival-game',false],['Кулинария','cooking',false],['Драконы','dragons',false],['Зверолюди','beast-people',false],['Эльфы','elves',false],['Тёмное фэнтези','dark-fantasy',false],['Герой','hero',false],['Злодейка','villainess',false],['Строительство королевства','kingdom-building',false],['Регрессия','regression',false],['Охотники','hunters',false],['Гениальный ГГ','genius-mc',false],['Антигерой','antihero',false],['Ниндзя','ninja',false],['Пираты','pirates',false],['Космос','space',false],['Месть','revenge',false],['Турнир','tournament',false],['Сильный ГГ','op-mc',false],['Слабый в Сильный','weak-to-strong',false],['Магическая академия','magic-academy',false],['РПГ','rpg',false],['MMORPG','mmorpg',false],['Гильдии','guilds',false],['Любовный треугольник','love-triangle',false],['Холодный ГГ','cold-mc',false],['Легендарное оружие','legendary-weapon',false],['Проклятия','curses',false],['Короли','kings',false],['Академия','academy',false],['Гендер-бендер','gender-bender',false],['Суперсилы','superpowers',false],['Телепортация','teleportation',false],['Взрослый контент','adult',true],['18+','18plus',true],['NSFW','nsfw',true]];
             $tIns=$pdo->prepare("INSERT INTO tags(name,slug,is_nsfw)VALUES(?,?,?) ON CONFLICT(slug) DO NOTHING");
-            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],(bool)$t[2]]);
+            foreach($tagsData as $t)$tIns->execute([$t[0],$t[1],$t[2]?1:0]);
             $tagsRaw=$pdo->query("SELECT id,name,slug,is_nsfw FROM tags ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
             $tags=array_map(function($t){$t['is_nsfw']=($t['is_nsfw']==='t'||$t['is_nsfw']===true||$t['is_nsfw']==='1'||$t['is_nsfw']===1);return $t;},$tagsRaw);
         }
@@ -2912,32 +2256,19 @@ if (preg_match('#^/api/profile/view/([a-zA-Z0-9_]+)$#',$path,$m) && $_SERVER['RE
         'privacy'=>$privacy,'can_view_library'=>$canView,'is_friend'=>$isFriend,'is_self'=>$isSelf,
         'custom'=>$custom
     ];
-    // Get tg_user_id for target to also count bot-added statuses
-    $tgIdForTarget = (int)($target['tg_user_id'] ?? 0);
-    $acWhereTarget = $tgIdForTarget
-        ? "(account_id={$tid} OR user_id={$tgIdForTarget})"
-        : "account_id={$tid}";
     if ($canView) {
-        // Stats — с учётом tg_user_id и всех вариантов статусов
-        $data['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereTarget}")->fetchColumn();
-        $data['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereTarget}")->fetchColumn();
-        $data['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereTarget}")->fetchColumn();
-        $data['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereTarget}")->fetchColumn();
-        $data['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereTarget}")->fetchColumn();
-        $data['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereTarget}")->fetchColumn();
-        // Chapters and pages read
-        $data['chapters_read'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM reading_progress WHERE user_id={$tgIdForTarget}"  .($tgIdForTarget ? "" : " AND 1=0"))->fetchColumn();
-        // Library items (account_id only for join)
-        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE {$acWhereTarget} ORDER BY s.manga_id DESC LIMIT 30");
-        $libStmt->execute();$data['library']=$libStmt->fetchAll();
+        // Stats — всегда публичные
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
+        // Library items
+        $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
+        $libStmt->execute([$tid]);$data['library']=$libStmt->fetchAll();
     } else {
         // Даже для приватных профилей — показываем базовую статистику
-        $data['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereTarget}")->fetchColumn();
-        $data['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereTarget}")->fetchColumn();
-        $data['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereTarget}")->fetchColumn();
-        $data['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereTarget}")->fetchColumn();
-        $data['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereTarget}")->fetchColumn();
-        $data['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereTarget}")->fetchColumn();
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$data['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$data['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$data['now']=(int)$stNow->fetchColumn();
         $data['library'] = []; // библиотека скрыта
     }
     // Friends list (only if can_view or public)
@@ -3409,7 +2740,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <body>
 <div class="page-header">
     <a href="/" class="back-btn">← Назад</a>
-    <h1 class="page-title">Сообщения</h1>
+    <h1 class="page-title">💬 Сообщения</h1>
 </div>
 <div class="messages-container">
     <div class="msg-list" id="msg-list"></div>
@@ -3617,7 +2948,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 
     <?php if (!$account['is_verified']): ?>
     <div class="verify-banner">
-        <div class="verify-icon"></div>
+        <div class="verify-icon">📧</div>
         <div class="verify-info">
             <p>Подтверди email <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong> — мы отправили 6-значный код.</p>
             <div class="verify-input-row">
@@ -3631,7 +2962,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 
     <?php if ($needsReauth): ?>
     <div class="reauth-banner">
-        <div style="font-size:22px;flex-shrink:0"></div>
+        <div style="font-size:22px;flex-shrink:0">🔑</div>
         <div style="flex:1">
             <p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">Ежемесячное подтверждение. Нажми чтобы подтвердить аккаунт.</p>
             <button onclick="openReauthModal()" style="padding:7px 14px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Подтвердить сейчас</button>
@@ -3650,24 +2981,24 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
             <div class="avatar">
                 <?php if (!empty($custom['avatar_url'])): ?>
                 <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                <?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
+                <?php else: ?>👤<?php endif; ?>
             </div>
         </div>
         <div class="profile-header-row">
             <div class="profile-name-col">
                 <div class="username">
                     <?=htmlspecialchars($account['username'])?>
-                    <?php if ($isAccountAdmin): ?><span class="admin-badge"><?=htmlspecialchars($accountAdminTag ?? 'ADMIN')?></span><?php endif; ?>
-                    <?php if ($account['is_verified']): ?><span class="verify-badge">Верифицирован</span><?php endif; ?>
+                    <?php if ($isAccountAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($accountAdminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($account['is_verified']): ?><span class="verify-badge">✓ Верифицирован</span><?php endif; ?>
                 </div>
                 <div class="email"><?=htmlspecialchars($account['email'])?></div>
                 <?php if (!empty($custom['bio'])): ?>
                 <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
                 <?php endif; ?>
                 <div class="joined">На сайте с: <?=date('d.m.Y', strtotime($account['created_at']))?></div>
-                <div style="margin-top:8px"><a href="/u/<?=htmlspecialchars($account['username'])?>" class="profile-link">Открыть публичный профиль</a></div>
+                <div style="margin-top:8px"><a href="/u/<?=htmlspecialchars($account['username'])?>" class="profile-link">👁 Открыть публичный профиль</a></div>
             </div>
-            <a href="/profile/edit" class="edit-profile-btn">Редактировать</a>
+            <a href="/profile/edit" class="edit-profile-btn">✏️ Редактировать</a>
         </div>
     </div>
 
@@ -3687,13 +3018,13 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
         $pct = $xpForLvl > 0 ? min(100, round($curXpInLevel / $xpForLvl * 100)) : 0;
         $xpProgress = ['pct'=>$pct,'current'=>$curXpInLevel,'needed'=>$xpForLvl,'next_lvl'=>$curLevel+1];
         // Level label
-        if ($curLevel >= 50) $lvlLabel = ['color'=>'#f59e0b','label'=>'Легенда'];
-        elseif ($curLevel >= 30) $lvlLabel = ['color'=>'#8b5cf6','label'=>'Мастер'];
-        elseif ($curLevel >= 15) $lvlLabel = ['color'=>'#3b82f6','label'=>'Опытный'];
-        elseif ($curLevel >= 5)  $lvlLabel = ['color'=>'#10b981','label'=>'Читатель'];
-        else                     $lvlLabel = ['color'=>'#6b7280','label'=>'Новичок'];
+        if ($curLevel >= 50) $lvlLabel = ['color'=>'#f59e0b','label'=>'👑 Легенда'];
+        elseif ($curLevel >= 30) $lvlLabel = ['color'=>'#8b5cf6','label'=>'💎 Мастер'];
+        elseif ($curLevel >= 15) $lvlLabel = ['color'=>'#3b82f6','label'=>'⚡ Опытный'];
+        elseif ($curLevel >= 5)  $lvlLabel = ['color'=>'#10b981','label'=>'📚 Читатель'];
+        else                     $lvlLabel = ['color'=>'#6b7280','label'=>'🌑 Новичок'];
         $levelFrame = $lvlLabel;
-    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'Новичок']; }
+    } catch(Exception $e) { $totalXp=0;$curLevel=1;$xpProgress=['pct'=>0,'current'=>0,'needed'=>100,'next_lvl'=>2];$levelFrame=['color'=>'#6b7280','label'=>'🌑 Новичок']; }
     ?>
     <div class="card" style="padding:0;overflow:hidden">
         <div style="padding:18px 22px 18px">
@@ -3702,7 +3033,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                     <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Уровень</span>
                     <span style="background:<?=htmlspecialchars($levelFrame['color'])?>;color:#fff;font-size:11px;font-weight:800;padding:3px 11px;border-radius:20px;letter-spacing:.3px"><?=htmlspecialchars($levelFrame['label'])?> <?=$curLevel?></span>
                 </div>
-                <span style="font-size:12px;color:var(--muted);font-weight:600"><?=number_format($totalXp)?> XP</span>
+                <span style="font-size:12px;color:var(--muted);font-weight:600">⭐ <?=number_format($totalXp)?> XP</span>
             </div>
             <div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden">
                 <div style="background:linear-gradient(90deg,<?=htmlspecialchars($levelFrame['color'])?>,<?=htmlspecialchars($levelFrame['color'])?>aa);height:100%;width:<?=$xpProgress['pct']?>%;border-radius:6px;transition:width .6s;box-shadow:0 0 8px <?=htmlspecialchars($levelFrame['color'])?>66"></div>
@@ -3729,25 +3060,25 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     } catch(Exception $e) { $totalLib=0; $readingLib=0; $readLib=0; }
     ?>
     <div class="card">
-        <div class="sec-title">Библиотека</div>
+        <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row" id="stats-row">
-            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">Всего</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">Прочитано</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$totalLib?></div><div class="stat-l">📖 Всего</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$readLib?></div><div class="stat-l">✅ Прочитано</div></a>
             <a class="stat" href="/library"><div class="stat-n"><?=$readingLib?></div><div class="stat-l">▶ Читаю</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$planLib?></div><div class="stat-l">В планах</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$dropLib?></div><div class="stat-l">Брошено</div></a>
-            <a class="stat" href="/library"><div class="stat-n"><?=$pauseLib?></div><div class="stat-l">На паузе</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$planLib?></div><div class="stat-l">📋 В планах</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$dropLib?></div><div class="stat-l">❌ Брошено</div></a>
+            <a class="stat" href="/library"><div class="stat-n"><?=$pauseLib?></div><div class="stat-l">⏸ На паузе</div></a>
         </div>
     </div>
 
     <!-- PRIVACY -->
     <div class="card">
-        <div class="sec-title">Видимость профиля</div>
+        <div class="sec-title">🔒 Видимость профиля</div>
         <?php $privacy = $account['profile_privacy'] ?? 'public'; ?>
         <div class="privacy-row">
-            <button class="privacy-btn <?=$privacy==='public'?'active-public':''?>" onclick="setPrivacy('public')">Открытый</button>
-            <button class="privacy-btn <?=$privacy==='friends'?'active-friends':''?>" onclick="setPrivacy('friends')">Для друзей</button>
-            <button class="privacy-btn <?=$privacy==='private'?'active-private':''?>" onclick="setPrivacy('private')">Закрытый</button>
+            <button class="privacy-btn <?=$privacy==='public'?'active-public':''?>" onclick="setPrivacy('public')">🌐 Открытый</button>
+            <button class="privacy-btn <?=$privacy==='friends'?'active-friends':''?>" onclick="setPrivacy('friends')">👥 Для друзей</button>
+            <button class="privacy-btn <?=$privacy==='private'?'active-private':''?>" onclick="setPrivacy('private')">🔒 Закрытый</button>
         </div>
         <div style="padding:0 24px 16px;font-size:11px;color:var(--muted)" id="privacy-desc">
             <?php if($privacy==='public'): ?>Профиль виден всем пользователям
@@ -3759,7 +3090,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- FRIENDS -->
     <div class="card">
         <div class="friends-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:14px">Друзья <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(<?=$friendsCount?>)</span></div>
+            <div class="sec-title" style="padding:0;margin-bottom:14px">👥 Друзья <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(<?=$friendsCount?>)</span></div>
             <div class="friend-add-row">
                 <input type="text" id="friend-username" placeholder="Username друга..." oninput="searchUsers(this.value)">
                 <button class="friend-add-btn" onclick="addFriend()">+ Добавить</button>
@@ -3772,11 +3103,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- TELEGRAM -->
     <div class="card">
         <div class="tg-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:13px">Telegram</div>
+            <div class="sec-title" style="padding:0;margin-bottom:13px">🤖 Telegram</div>
             <?php if ($account['tg_user_id']): ?>
             <div class="tg-connected">
                 <div>
-                    <div class="tg-info">Telegram привязан</div>
+                    <div class="tg-info">✅ Telegram привязан</div>
                     <div class="tg-meta">TG ID: <?=(int)$account['tg_user_id']?></div>
                 </div>
                 <button class="unlink-btn" onclick="unlinkTg()">Отвязать</button>
@@ -3793,7 +3124,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                 <div class="command-box"><span id="cmd-text"></span><button class="copy-cmd" onclick="copyCmd()">Копировать</button></div>
                 <p style="font-size:11px;color:var(--muted);margin-top:7px">Токен действителен 10 минут.</p>
             </div>
-            <button class="gen-btn" id="gen-btn" onclick="genLink()">Получить команду привязки</button>
+            <button class="gen-btn" id="gen-btn" onclick="genLink()">🔗 Получить команду привязки</button>
             <?php endif; ?>
         </div>
     </div>
@@ -3802,11 +3133,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- ADMIN MANAGEMENT (only for superadmins) -->
     <div class="card">
         <div class="admin-inner">
-            <div class="sec-title" style="padding:0;margin-bottom:13px">Управление администраторами</div>
+            <div class="sec-title" style="padding:0;margin-bottom:13px">⚡ Управление администраторами</div>
             <div class="admin-add-row">
                 <input type="text" id="new-admin-input" placeholder="Email или TG ID пользователя">
                 <input type="text" id="new-admin-tag" placeholder="Тег (например: Редактор)">
-                <button class="admin-add-btn" onclick="addAdmin()">Добавить администратора</button>
+                <button class="admin-add-btn" onclick="addAdmin()">➕ Добавить администратора</button>
             </div>
             <div id="admin-result" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Список администраторов</div>
@@ -3821,7 +3152,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <!-- REAUTH MODAL -->
 <div class="modal-overlay" id="reauth-modal">
 <div class="modal-box">
-    <h2>Подтверждение</h2>
+    <h2>🔑 Подтверждение</h2>
     <p>Ежемесячное подтверждение. Введи пароль, затем код из письма.</p>
     <div class="err-msg" id="reauth-err"></div>
     <div id="reauth-step1">
@@ -3845,20 +3176,20 @@ async function verifyEmail(){
     if(code.length!==6){showToast('Введи 6 цифр');return;}
     const res=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
     const d=await res.json();
-    if(d.success){showToast('Email подтверждён!');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('✅ Email подтверждён!');setTimeout(()=>location.reload(),800);}
     else showToast('❌ '+d.error);
 }
 async function resendCode(){
     const res=await fetch('/api/auth/resend-verify',{method:'POST'});
     const d=await res.json();
-    showToast(d.success?'Код отправлен заново':'❌ '+d.error);
+    showToast(d.success?'📧 Код отправлен заново':'❌ '+d.error);
 }
 
 async function genLink(){const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='Генерируем...';try{const res=await fetch('/api/auth/tg-link-token',{method:'POST'});const d=await res.json();if(d.success){document.getElementById('cmd-text').textContent=d.command;document.getElementById('link-command').style.display='block';btn.textContent='🔄 Обновить команду';}else showToast('Ошибка: '+d.error);}catch(e){showToast('Ошибка сети');}btn.disabled=false;}
-function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('Скопировано!');}
+function copyCmd(){navigator.clipboard?.writeText(document.getElementById('cmd-text').textContent);showToast('✅ Скопировано!');}
 async function unlinkTg(){if(!confirm('Отвязать Telegram?'))return;const res=await fetch('/api/auth/tg-unlink',{method:'POST'});const d=await res.json();if(d.success){showToast('Telegram отвязан');setTimeout(()=>location.reload(),800);}}
 
-async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');if(rows)rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total||0}</div><div class="stat-l">Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.read||0}</div><div class="stat-l">Прочитано</div></a><a class="stat" href="/library"><div class="stat-n">${d.now||0}</div><div class="stat-l">▶ Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.will||0}</div><div class="stat-l">В планах</div></a><a class="stat" href="/library"><div class="stat-n">${d.drop||0}</div><div class="stat-l">Брошено</div></a><a class="stat" href="/library"><div class="stat-n">${d.pause||0}</div><div class="stat-l">На паузе</div></a>`;}}catch(e){}}
+async function loadStats(){try{const res=await fetch('/api/auth/profile-stats');const d=await res.json();if(d.success){const rows=document.getElementById('stats-row');if(rows)rows.innerHTML=`<a class="stat" href="/library"><div class="stat-n">${d.total||0}</div><div class="stat-l">📖 Всего</div></a><a class="stat" href="/library"><div class="stat-n">${d.read||0}</div><div class="stat-l">✅ Прочитано</div></a><a class="stat" href="/library"><div class="stat-n">${d.now||0}</div><div class="stat-l">▶ Читаю</div></a><a class="stat" href="/library"><div class="stat-n">${d.will||0}</div><div class="stat-l">📋 В планах</div></a><a class="stat" href="/library"><div class="stat-n">${d.drop||0}</div><div class="stat-l">❌ Брошено</div></a><a class="stat" href="/library"><div class="stat-n">${d.pause||0}</div><div class="stat-l">⏸ На паузе</div></a>`;}}catch(e){}}
 
 async function setPrivacy(mode){
     const btns=document.querySelectorAll('.privacy-btn');
@@ -3869,7 +3200,7 @@ async function setPrivacy(mode){
     document.getElementById('privacy-desc').textContent=labels[mode];
     const res=await fetch('/api/profile/privacy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
     const d=await res.json();
-    if(d.success){showToast(labels[mode]);}
+    if(d.success){showToast('✅ '+labels[mode]);}
     else showToast('❌ Ошибка');
 }
 
@@ -3891,12 +3222,12 @@ async function loadFriends(){
     if(!d.friends||!d.friends.length){list.innerHTML='<div style="color:var(--muted);font-size:12px">Друзей пока нет</div>';return;}
     list.innerHTML=d.friends.map(f=>{
         const isPending=f.status==='pending';const isMine=f.is_mine;
-        const avatarHtml=f.avatar_url?`<img src="${escapeHtml(f.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div class="friend-avatar"></div>`;
+        const avatarHtml=f.avatar_url?`<img src="${escapeHtml(f.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div class="friend-avatar">👤</div>`;
         let actions='';
-        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">Принять</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
+        if(isPending&&!isMine)actions=`<button class="f-btn accept" onclick="friendAction(${f.id},'accept')">✓ Принять</button><button class="f-btn reject" onclick="friendAction(${f.id},'reject')">✕</button>`;
         else if(isPending&&isMine)actions=`<span style="font-size:10px;color:var(--muted)">⏳ Ожидание...</span>`;
         else actions=`<button class="f-btn remove" onclick="friendAction(${f.id},'remove')">Удалить</button>`;
-        return `<div class="friend-item"><div class="friend-avatar" style="overflow:hidden">${avatarHtml}</div><div style="flex:1;min-width:0"><a href="/u/${escapeHtml(f.username)}" class="friend-name">${escapeHtml(f.username)}</a><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
+        return `<div class="friend-item"><div class="friend-avatar" style="overflow:hidden">${avatarHtml}</div><div style="flex:1;min-width:0"><a href="/u/${escapeHtml(f.username)}" class="friend-name">${escapeHtml(f.username)}</a><div class="friend-status">${isPending?(isMine?'Запрос отправлен':'Входящий запрос'):'👥 Друг'}</div></div><div class="friend-actions">${actions}</div></div>`;
     }).join('');}catch(e){}
 }
 async function addFriend(){
@@ -3904,12 +3235,12 @@ async function addFriend(){
     if(!username){showToast('Введи имя пользователя');return;}
     const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){showToast('Запрос отправлен');document.getElementById('friend-username').value='';document.getElementById('user-suggestions').innerHTML='';loadFriends();}
+    if(d.success){showToast('✅ Запрос отправлен!');document.getElementById('friend-username').value='';document.getElementById('user-suggestions').innerHTML='';loadFriends();}
     else showToast('❌ '+(d.error||'Ошибка'));
 }
 async function friendAction(id,action){
     await fetch(`/api/friends/${id}/${action}`,{method:'POST'});loadFriends();
-    showToast(action==='accept'?'Принято':action==='reject'?'Отклонено':'Удалено');
+    showToast(action==='accept'?'✅ Принято!':action==='reject'?'Отклонено':'Удалено');
 }
 
 function openReauthModal(){document.getElementById('reauth-modal').classList.add('open');}
@@ -3929,7 +3260,7 @@ async function reauthStep2(){
     if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
     const res=await fetch('/api/auth/reauth-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'code',code})});
     const d=await res.json();
-    if(d.success){showToast('Подтверждено!');document.getElementById('reauth-modal').classList.remove('open');setTimeout(()=>location.reload(),500);}
+    if(d.success){showToast('✅ Подтверждено!');document.getElementById('reauth-modal').classList.remove('open');setTimeout(()=>location.reload(),500);}
     else{err.textContent=d.error||'Неверный код';err.classList.add('show');}
 }
 
@@ -3945,7 +3276,7 @@ async function addAdmin(){
     else{body.email=input;}
     const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
-    if(d.success){result.style.color='var(--green)';result.textContent=d.message;loadAdminsList();}
+    if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;loadAdminsList();}
     else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}
 }
 async function removeAdmin(tgId){
@@ -3961,7 +3292,7 @@ async function loadAdminsList(){
     document.getElementById('admins-full-list').innerHTML=d.admins.map(a=>`
         <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:5px">
             <div>
-                <div style="font-size:12px;font-weight:600;color:${a.is_super?'#ef4444':'var(--text2)'}">${escapeHtml(a.tag||'Администратор')}${a.is_super?' (super)':''}</div>
+                <div style="font-size:12px;font-weight:600;color:${a.is_super?'#ef4444':'var(--text2)'}">${escapeHtml(a.tag||'Администратор')}${a.is_super?' ⭐':''}</div>
                 <div style="font-size:10px;color:var(--muted)">${a.username?'@'+escapeHtml(a.username)+' · ':''}TG: ${a.tg_id}</div>
                 ${a.email?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(a.email)}</div>`:''}
             </div>
@@ -4035,7 +3366,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
     <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('visuals')">🖼 Внешний вид</button>
-        <button class="tab-btn" onclick="switchTab('account')">Аккаунт</button>
+        <button class="tab-btn" onclick="switchTab('account')">👤 Аккаунт</button>
     </div>
 
     <!-- TAB: VISUALS -->
@@ -4050,7 +3381,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
                     <img id="avatar-preview" class="avatar-preview" src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
                     <div class="upload-overlay">📷 Изменить</div>
                     <?php else: ?>
-                    <div class="upload-ph">Загрузить фото</div>
+                    <div class="upload-ph"><span>👤</span>Загрузить</div>
                     <div class="upload-overlay">📷</div>
                     <?php endif; ?>
                 </div>
@@ -4087,7 +3418,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
         <!-- BIO -->
         <div class="card">
-            <div class="card-title">О себе</div>
+            <div class="card-title">📝 О себе</div>
             <div class="fg">
                 <label class="fl">Биография</label>
                 <textarea class="fta" id="cust-bio" placeholder="Расскажи о себе..." maxlength="300"><?=htmlspecialchars($custom['bio']??'')?></textarea>
@@ -4097,7 +3428,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <!-- Скрытые поля для хранения URL фото перед сохранением -->
             <input type="hidden" id="avatar-pending-url" value="">
             <input type="hidden" id="banner-pending-url" value="">
-            <button class="save-btn" onclick="saveBio()">Сохранить изменения</button>
+            <button class="save-btn" onclick="saveBio()">💾 Сохранить изменения</button>
         </div>
     </div>
 
@@ -4105,7 +3436,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="tab-panel" id="tab-account">
         <!-- CHANGE USERNAME -->
         <div class="card">
-            <div class="card-title">Изменить никнейм</div>
+            <div class="card-title">🔤 Изменить никнейм</div>
             <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['username'])?></strong></p>
             <div class="fg">
                 <label class="fl">Новый никнейм</label>
@@ -4118,7 +3449,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
         <!-- CHANGE EMAIL -->
         <div class="card">
-            <div class="card-title">Изменить email</div>
+            <div class="card-title">📧 Изменить email</div>
             <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Текущий: <strong style="color:var(--text2)"><?=htmlspecialchars($account['email'])?></strong></p>
             <div id="email-step1">
                 <div class="fg">
@@ -4173,7 +3504,7 @@ async function uploadImage(input, type){
         const res = await fetch('/api/profile/upload-image?type='+type, {method:'POST', body:formData});
         const d = await res.json();
         if(d.success){
-            statusEl.textContent = 'Загружено. Нажми Сохранить чтобы применить';
+            statusEl.textContent = '✅ Загружено! Нажми "Сохранить" чтобы применить';
             // Сохраняем URL в скрытое поле для последующего сохранения
             document.getElementById(type+'-pending-url').value = d.url;
             if(type==='avatar'){
@@ -4216,10 +3547,10 @@ async function saveBio(){
     const res=await fetch('/api/profile/customization',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();
     if(d.success){
-        ok.textContent='Сохранено!';ok.classList.add('show');
+        ok.textContent='✅ Сохранено!';ok.classList.add('show');
         document.getElementById('avatar-pending-url').value='';
         document.getElementById('banner-pending-url').value='';
-        showToast('Профиль обновлён!');
+        showToast('✅ Профиль обновлён!');
     }
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
@@ -4231,7 +3562,7 @@ async function changeUsername(){
     if(!username){err.textContent='Введи новый никнейм';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-username',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){ok.textContent='Никнейм изменён! Перезагружаю...';ok.classList.add('show');setTimeout(()=>location.reload(),1000);}
+    if(d.success){ok.textContent='✅ Никнейм изменён! Перезагружаю...';ok.classList.add('show');setTimeout(()=>location.reload(),1000);}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 
@@ -4243,7 +3574,7 @@ async function changeEmailStep1(){
     if(!password||!new_email){err.textContent='Заполни все поля';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'request',password,new_email})});
     const d=await res.json();
-    if(d.success){ok.textContent=d.message;ok.classList.add('show');document.getElementById('email-step1').style.display='none';document.getElementById('email-step2').style.display='block';}
+    if(d.success){ok.textContent='📧 '+d.message;ok.classList.add('show');document.getElementById('email-step1').style.display='none';document.getElementById('email-step2').style.display='block';}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 async function changeEmailStep2(){
@@ -4253,7 +3584,7 @@ async function changeEmailStep2(){
     if(code.length!==6){err.textContent='Введи 6 цифр';err.classList.add('show');return;}
     const res=await fetch('/api/profile/change-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step:'confirm',code})});
     const d=await res.json();
-    if(d.success){ok.textContent='Email изменён!';ok.classList.add('show');showToast('Email обновлён!');setTimeout(()=>location.reload(),1000);}
+    if(d.success){ok.textContent='✅ Email изменён!';ok.classList.add('show');showToast('✅ Email обновлён!');setTimeout(()=>location.reload(),1000);}
     else{err.textContent='❌ '+(d.error||'Ошибка');err.classList.add('show');}
 }
 </script>
@@ -4262,7 +3593,7 @@ async function changeEmailStep2(){
 // /u/username — PUBLIC USER PROFILE PAGE
 if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $targetUsername = $um[1];
-    $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag,user_xp,user_level FROM accounts WHERE username=?");
+    $stmt = $pdo->prepare("SELECT id,username,created_at,is_verified,tg_user_id,profile_privacy,is_admin,admin_tag FROM accounts WHERE username=?");
     $stmt->execute([$targetUsername]);
     $target = $stmt->fetch();
     if (!$target) { http_response_code(404); echo '<!DOCTYPE html><html><body style="background:#0c0c0c;color:#f2f2f2;font-family:Outfit,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">😔</div><h1 style="font-size:22px">Пользователь не найден</h1><a href="/" style="color:#7c5cff;text-decoration:none;margin-top:16px;display:block">← В каталог</a></div></body></html>'; exit; }
@@ -4275,6 +3606,7 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
         $viewerIsAdmin = in_array($vtg,$hardcodedAdmins) || (!empty($viewer['is_admin'])&&$viewer['is_admin']);
     }
     $isSelf = $viewer && (int)$viewer['id'] === $tid;
+    if ($isSelf) { header('Location: /profile'); exit; }
     $isFriend = false;
     $friendshipId = null;
     $friendshipStatus = null;
@@ -4297,19 +3629,11 @@ if (preg_match('#^/u/([a-zA-Z0-9_]{2,30})$#', $path, $um)) {
     $targetIsAdmin = in_array($tgid,$hardcodedAdmins) || (!empty($target['is_admin'])&&$target['is_admin']);
     $adminTag = $target['admin_tag'] ?? null;
     $libItems = [];
-    $libStats = ['total'=>0,'read'=>0,'now'=>0,'will'=>0,'drop'=>0,'pause'=>0];
-    // Stats with tg_user_id support and all status variants
-    $tgIdTarget = (int)($target['tg_user_id'] ?? 0);
-    $acWhereU = $tgIdTarget
-        ? "(account_id={$tid} OR user_id={$tgIdTarget})"
-        : "account_id={$tid}";
-    $libStats['total'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE {$acWhereU}")->fetchColumn();
-    $libStats['read']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('read','Прочитано') AND {$acWhereU}")->fetchColumn();
-    $libStats['now']   = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('now','reading','Читаю') AND {$acWhereU}")->fetchColumn();
-    $libStats['will']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('will','Запланировано') AND {$acWhereU}")->fetchColumn();
-    $libStats['drop']  = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('drop','Брошено') AND {$acWhereU}")->fetchColumn();
-    $libStats['pause'] = (int)$pdo->query("SELECT COUNT(DISTINCT manga_id) FROM user_manga_status WHERE status IN ('pause','На паузе') AND {$acWhereU}")->fetchColumn();
+    $libStats = ['total'=>0,'read'=>0,'now'=>0];
     if ($canView) {
+        $stTotal=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=?");$stTotal->execute([$tid]);$libStats['total']=(int)$stTotal->fetchColumn();
+        $stRead=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='read'");$stRead->execute([$tid]);$libStats['read']=(int)$stRead->fetchColumn();
+        $stNow=$pdo->prepare("SELECT COUNT(*) FROM user_manga_status WHERE account_id=? AND status='now'");$stNow->execute([$tid]);$libStats['now']=(int)$stNow->fetchColumn();
         $libStmt=$pdo->prepare("SELECT m.id,m.title,m.cover_imgbb_url,s.status FROM user_manga_status s JOIN manga m ON s.manga_id=m.id WHERE s.account_id=? ORDER BY s.manga_id DESC LIMIT 30");
         $libStmt->execute([$tid]);$libItems=$libStmt->fetchAll();
     }
@@ -4383,15 +3707,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <div class="avatar">
                 <?php if (!empty($custom['avatar_url'])): ?>
                 <img src="<?=htmlspecialchars($custom['avatar_url'])?>" alt="">
-                <?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
+                <?php else: ?>👤<?php endif; ?>
             </div>
         </div>
         <div class="profile-header-row">
             <div>
                 <div class="username">
                     <?=htmlspecialchars($target['username'])?>
-                    <?php if ($targetIsAdmin): ?><span class="admin-badge"><?=htmlspecialchars($adminTag ?? 'ADMIN')?></span><?php endif; ?>
-                    <?php if ($target['is_verified']): ?><span class="verify-badge">Верифицирован</span><?php endif; ?>
+                    <?php if ($targetIsAdmin): ?><span class="admin-badge">⚡ <?=htmlspecialchars($adminTag ?? 'ADMIN')?></span><?php endif; ?>
+                    <?php if ($target['is_verified']): ?><span class="verify-badge">✓</span><?php endif; ?>
                 </div>
                 <?php if (!empty($custom['bio'])): ?>
                 <div class="bio-text"><?=nl2br(htmlspecialchars($custom['bio']))?></div>
@@ -4401,18 +3725,18 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <?php if ($viewer): ?>
             <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-end">
                 <?php if ($friendshipStatus === 'accepted'): ?>
-                <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">Друзья</button>
+                <button class="friend-action-btn btn-friends" onclick="removeFriend(<?=$friendshipId?>)">👥 Друзья</button>
                 <?php elseif ($friendshipStatus === 'pending' && $friendshipIsMine): ?>
-                <button class="friend-action-btn btn-pending">Ожидание</button>
+                <button class="friend-action-btn btn-pending">⏳ Ожидание</button>
                 <?php elseif ($friendshipStatus === 'pending' && !$friendshipIsMine): ?>
-                <button class="friend-action-btn btn-accept" onclick="acceptFriend(<?=$friendshipId?>)">Принять</button>
+                <button class="friend-action-btn btn-accept" onclick="acceptFriend(<?=$friendshipId?>)">✓ Принять</button>
                 <?php else: ?>
-                <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">В друзья</button>
+                <button class="friend-action-btn btn-add-friend" onclick="addFriend('<?=htmlspecialchars($target['username'])?>')">+ В друзья</button>
                 <?php endif; ?>
-                <button class="friend-action-btn" style="background:rgba(255,255,255,0.05);border-color:var(--border2);color:var(--text2);font-size:11px;padding:6px 12px" onclick="openMsgToUser(<?=$tid?>,'<?=htmlspecialchars($target['username'])?>')">Написать</button>
+                <button class="friend-action-btn" style="background:rgba(255,255,255,0.05);border-color:var(--border2);color:var(--text2);font-size:11px;padding:6px 12px" onclick="openMsgToUser(<?=$tid?>,'<?=htmlspecialchars($target['username'])?>')">✉️ Написать</button>
             </div>
             <?php else: ?>
-            <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">В друзья</a>
+            <a href="/login" class="friend-action-btn btn-add-friend" style="text-decoration:none">+ В друзья</a>
             <?php endif; ?>
         </div>
     </div>
@@ -4421,20 +3745,17 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="card" style="padding:18px 20px">
         <div style="display:flex;align-items:center;gap:14px">
             <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#5a4ca0);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;flex-shrink:0"><?=$targetLevel?></div>
-            <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px">Уровень <?=$targetLevel?></div><div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:linear-gradient(90deg,#7c5cff,#a78bfa);width:<?=$xpProgress?>%;border-radius:3px"></div></div><div style="font-size:10px;color:var(--muted)"><?=$currentXp?>/<?=$xpForLevel?> XP до следующего уровня</div></div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px">⭐ Уровень <?=$targetLevel?></div><div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px"><div style="height:100%;background:linear-gradient(90deg,#7c5cff,#a78bfa);width:<?=$xpProgress?>%;border-radius:3px"></div></div><div style="font-size:10px;color:var(--muted)"><?=$currentXp?>/<?=$xpForLevel?> XP до следующего уровня</div></div>
             <div style="text-align:right;flex-shrink:0"><div style="font-size:18px;font-weight:800;color:var(--text2)"><?=$targetXp?></div><div style="font-size:9px;color:var(--muted)">Всего XP</div></div>
         </div>
     </div>
     <?php if ($canView): ?>
     <div class="card">
-        <div class="sec-title">Библиотека</div>
+        <div class="sec-title">📚 Библиотека</div>
         <div class="stats-row">
             <div class="stat"><div class="stat-n"><?=$libStats['total']?></div><div class="stat-l">Всего</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">Прочитано</div></div>
             <div class="stat"><div class="stat-n"><?=$libStats['now']?></div><div class="stat-l">Читает</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['will']?></div><div class="stat-l">В планах</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['drop']?></div><div class="stat-l">Брошено</div></div>
-            <div class="stat"><div class="stat-n"><?=$libStats['pause']?></div><div class="stat-l">На паузе</div></div>
+            <div class="stat"><div class="stat-n"><?=$libStats['read']?></div><div class="stat-l">Прочитано</div></div>
         </div>
         <?php if (!empty($libItems)): ?>
         <div class="lib-grid">
@@ -4442,9 +3763,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
             <a class="lib-card" href="/read/<?=(int)$li['id']?>">
                 <?php if(!empty($li['cover_imgbb_url'])): ?>
                 <img class="lib-cover" src="<?=htmlspecialchars($li['cover_imgbb_url'])?>" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">
-                <div class="lib-cover-ph" style="display:none"></div>
+                <div class="lib-cover-ph" style="display:none">📖</div>
                 <?php else: ?>
-                <div class="lib-cover-ph"></div>
+                <div class="lib-cover-ph">📖</div>
                 <?php endif; ?>
                 <div class="lib-title"><?=htmlspecialchars($li['title'])?></div>
             </a>
@@ -4453,19 +3774,19 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <?php endif; ?>
     </div>
     <?php elseif ($privacy === 'private'): ?>
-    <div class="card"><div class="private-notice">Профиль закрыт</div></div>
+    <div class="card"><div class="private-notice">🔒 Профиль закрыт</div></div>
     <?php else: ?>
-    <div class="card"><div class="private-notice">Только для друзей<br><small style="font-size:11px;margin-top:6px;display:block">Добавь пользователя в друзья чтобы видеть библиотеку</small></div></div>
+    <div class="card"><div class="private-notice">👥 Только для друзей<br><small style="font-size:11px;margin-top:6px;display:block">Добавь пользователя в друзья чтобы видеть библиотеку</small></div></div>
     <?php endif; ?>
 
     <?php if (!empty($friendsList)): ?>
     <div class="card">
-        <div class="sec-title">Друзья</div>
+        <div class="sec-title">👥 Друзья</div>
         <div class="friends-row">
             <?php foreach($friendsList as $fl): ?>
             <a href="/u/<?=htmlspecialchars($fl['username'])?>" class="friend-chip">
                 <div class="friend-chip-av">
-                    <?php if(!empty($fl['avatar_url'])): ?><img src="<?=htmlspecialchars($fl['avatar_url'])?>" alt=""><?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
+                    <?php if(!empty($fl['avatar_url'])): ?><img src="<?=htmlspecialchars($fl['avatar_url'])?>" alt=""><?php else: ?>👤<?php endif; ?>
                 </div>
                 <div class="friend-chip-name"><?=htmlspecialchars($fl['username'])?></div>
             </a>
@@ -4480,13 +3801,13 @@ function showToast(msg){const t=document.createElement('div');t.className='toast
 async function addFriend(username){
     const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
     const d=await res.json();
-    if(d.success){showToast('Запрос отправлен');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('✅ Запрос отправлен!');setTimeout(()=>location.reload(),800);}
     else showToast('❌ '+(d.error||'Ошибка'));
 }
 async function acceptFriend(id){
     const res=await fetch(`/api/friends/${id}/accept`,{method:'POST'});
     const d=await res.json();
-    if(d.success){showToast('Теперь вы друзья');setTimeout(()=>location.reload(),800);}
+    if(d.success){showToast('✅ Теперь вы друзья!');setTimeout(()=>location.reload(),800);}
 }
 async function removeFriend(id){
     if(!confirm('Удалить из друзей?'))return;
@@ -4534,7 +3855,7 @@ p{color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6}
 <body>
 <div class="box">
     <a href="/" class="logo">⚫ BLACKWATCH</a>
-    <div class="icon" style="font-size:32px;margin-bottom:16px">✉</div>
+    <div class="icon">📧</div>
     <h1>Подтверди email</h1>
     <p>Мы отправили 6-значный код на <strong style="color:var(--text)"><?=htmlspecialchars($account['email'])?></strong></p>
     <div class="err" id="err"></div>
@@ -4558,7 +3879,7 @@ async function verify(){
 async function resend(){
     const res=await fetch('/api/auth/resend-verify',{method:'POST'});
     const d=await res.json();
-    alert(d.success?'Код отправлен повторно':'Ошибка: '+d.error);
+    alert(d.success?'📧 Код отправлен повторно!':'Ошибка: '+d.error);
 }
 document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter')verify();});
 </script>
@@ -4588,7 +3909,7 @@ if (preg_match('#^/view/(\d+)$#',$path,$m)){
 <div class="counter"><span id="counter">—</span></div>
 <div class="nav-area prev" id="nav-prev"></div>
 <div class="nav-area next" id="nav-next"></div>
-<div class="reader"><div id="loading">Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p><?php if($telegraphUrl):?><a href="<?=$telegraphUrl?>" target="_blank" class="telegraph-link">📄 Telegraph</a><?php endif;?></div></div>
+<div class="reader"><div id="loading">📖 Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p><?php if($telegraphUrl):?><a href="<?=$telegraphUrl?>" target="_blank" class="telegraph-link">📄 Telegraph</a><?php endif;?></div></div>
 <script>
 let pages=[],current=0;
 const loadEl=document.getElementById('loading'),pageEl=document.getElementById('page'),fallEl=document.getElementById('fallback'),cntEl=document.getElementById('counter');
@@ -4645,11 +3966,11 @@ if (preg_match('#^/view-chapter/(\d+)$#',$path,$m)){
 <div class="counter"><span id="counter">—</span></div>
 <div class="nav-area prev" id="nav-prev"></div>
 <div class="nav-area next" id="nav-next"></div>
-<div class="reader"><div id="loading">Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p></div></div>
+<div class="reader"><div id="loading">📖 Загрузка...</div><img id="page" alt=""><div class="fallback" id="fallback"><p>❌ Страницы не найдены</p></div></div>
 <div class="chapter-end" id="chapter-end">
     <h2>🎉 Глава завершена!</h2>
     <p>Глава <?=$chapter['chapter_num']?><?=$chapter['title']?': '.htmlspecialchars($chapter['title']):''?></p>
-    <?php if($nextChapter):?><a class="end-btn end-next" href="/view-chapter/<?=$nextChapter['id']?>">▶ Читать главу <?=$nextChapter['chapter_num']?></a><?php else:?><p style="color:#7c5cff;font-weight:600">Это последняя глава</p><?php endif;?>
+    <?php if($nextChapter):?><a class="end-btn end-next" href="/view-chapter/<?=$nextChapter['id']?>">▶ Читать главу <?=$nextChapter['chapter_num']?></a><?php else:?><p style="color:#7c5cff;font-weight:600">✅ Это последняя глава</p><?php endif;?>
     <a class="end-btn end-back" href="/read/<?=$chapter['manga_id']?>">← К информации о манге</a>
 </div>
 <script>
@@ -4700,7 +4021,7 @@ p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}
 <body>
 <div class="box">
     <a href="/" class="back">← Каталог</a>
-    <div class="lock" style="font-size:48px">&#128274;</div>
+    <div class="lock">🔒</div>
     <div class="manga-title">«<?=$title?>»</div>
     <h1>Нужна регистрация</h1>
     <p>Чтобы читать мангу, следить за прогрессом и сохранять в библиотеку — создай аккаунт. Это бесплатно!</p>
@@ -4888,11 +4209,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
 <div class="manga-page">
     <div class="hero">
         <div class="cover-wrap">
-            <?php if($coverSrc):?><img class="cover-img" src="<?=$coverSrc?>" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cover-ph" style="display:none"></div><?php else:?><div class="cover-ph"></div><?php endif;?>
+            <?php if($coverSrc):?><img class="cover-img" src="<?=$coverSrc?>" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cover-ph" style="display:none">📖</div><?php else:?><div class="cover-ph">📖</div><?php endif;?>
         </div>
         <div class="meta">
             <div class="manga-title"><?=htmlspecialchars($manga['title'])?></div>
-            <?php if($manga['is_series']):?><div><span class="badge-series">Серия глав</span></div><?php endif;?>
+            <?php if($manga['is_series']):?><div><span class="badge-series">📚 Серия глав</span></div><?php endif;?>
             <?php if($manga['description']):?><div class="manga-desc"><?=nl2br(htmlspecialchars($manga['description']))?></div><?php endif;?>
             <?php if(!empty($mangaGenres)||!empty($mangaTags)):?>
             <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
@@ -4912,9 +4233,9 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
                 <span class="rate-avg" id="rate-avg-text"><?=($ratingData['cnt']>0)?round((float)$ratingData['avg'],1).' / 10 ('.(int)$ratingData['cnt'].' оценок)':'Нет оценок'?></span>
             </div>
             <div class="status-row" id="status-row">
-                <button class="status-btn <?=$currentStatus==='now'?'active-now':''?>" onclick="setStatus('now')">Читаю</button>
-                <button class="status-btn <?=$currentStatus==='will'?'active-will':''?>" onclick="setStatus('will')">Буду читать</button>
-                <button class="status-btn <?=$currentStatus==='read'?'active-read':''?>" onclick="setStatus('read')">Прочитано</button>
+                <button class="status-btn <?=$currentStatus==='now'?'active-now':''?>" onclick="setStatus('now')">📖 Читаю</button>
+                <button class="status-btn <?=$currentStatus==='will'?'active-will':''?>" onclick="setStatus('will')">🔖 Буду читать</button>
+                <button class="status-btn <?=$currentStatus==='read'?'active-read':''?>" onclick="setStatus('read')">✅ Прочитано</button>
                 <?php foreach($customStatuses as $cs):?>
                 <button class="status-btn <?=$currentStatus===$cs['name']?'active-custom':''?>" style="<?=$currentStatus===$cs['name']?'background:'.htmlspecialchars($cs['color']).'22;border-color:'.htmlspecialchars($cs['color']).';color:'.htmlspecialchars($cs['color']):''?>" onclick="setStatus('<?=htmlspecialchars(addslashes($cs['name']))?>')"><?=htmlspecialchars($cs['name'])?></button>
                 <?php endforeach;?>
@@ -4924,11 +4245,11 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     </div>
     <div class="read-section">
         <?php if($manga['is_series']):?>
-        <h3>Список глав</h3>
+        <h3>📚 Список глав</h3>
         <div class="chapters-list" id="chapters-list"><div style="color:var(--muted);padding:8px 0">Загрузка глав...</div></div>
         <?php else:?>
-        <h3>Читать</h3>
-        <?php if($pagesCount>0):?><a href="/view/<?=$id?>" class="read-btn read-primary">Читать (<?=$pagesCount?> стр.)</a><?php endif;?>
+        <h3>📖 Читать</h3>
+        <?php if($pagesCount>0):?><a href="/view/<?=$id?>" class="read-btn read-primary">📖 Читать (<?=$pagesCount?> стр.)</a><?php endif;?>
         <?php if($manga['telegraph_url']):?><a href="<?=htmlspecialchars($manga['telegraph_url'])?>" target="_blank" class="read-btn read-secondary">📄 Telegraph</a><?php endif;?>
         <?php if(!$pagesCount&&!$manga['telegraph_url']):?><p style="color:var(--muted);font-size:14px">😔 Страницы ещё не добавлены</p><?php endif;?>
         <?php endif;?>
@@ -4941,7 +4262,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
             <?php foreach($similarManga as $sm):$smCover=!empty($sm['cover_imgbb_url'])?htmlspecialchars($sm['cover_imgbb_url']):'';?>
             <a class="sim-card" href="/read/<?=(int)$sm['id']?>">
                 <?php if($smCover):?><img class="sim-cover" src="<?=$smCover?>" alt="" onerror="this.style.background='#1a1a2e'">
-                <?php else:?><div class="sim-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px"></div><?php endif;?>
+                <?php else:?><div class="sim-cover" style="display:flex;align-items:center;justify-content:center;font-size:28px">📖</div><?php endif;?>
                 <div class="sim-title"><?=htmlspecialchars($sm['title'])?></div>
             </a>
             <?php endforeach;?>
@@ -4952,7 +4273,7 @@ body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-he
     <!-- ===== КОММЕНТАРИИ НА СТРАНИЦЕ МАНГИ ===== -->
     <div id="manga-comments-section" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:16px">
         <div style="font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif">
-            Комментарии <span style="background:rgba(255,255,255,0.07);color:var(--muted);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:600" id="manga-comments-count">(0)</span>
+            💬 Комментарии <span style="background:rgba(255,255,255,0.07);color:var(--muted);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:600" id="manga-comments-count">(0)</span>
         </div>
         <?php if($currentAccount): ?>
         <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px">
@@ -5034,7 +4355,7 @@ function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.innerText=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
 async function vote(type){try{const res=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,vote_type:type,tg_user_id:getTgUser()})});const data=await res.json();if(data.success){document.getElementById('likes').textContent=data.likes;document.getElementById('dislikes').textContent=data.dislikes;showToast(type==='like'?'👍 Лайк!':'👎 Дизлайк');}}catch(e){}}
-async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';b.removeAttribute('style');});const map={'now':'active-now','will':'active-will','read':'active-read'};if(map[s])event.target.classList.add(map[s]);else{event.target.classList.add('active-custom');const clr=event.target.style.borderColor||'var(--accent)';event.target.style.cssText=`background:${clr}22;border-color:${clr};color:${clr};border-width:2px`;}showToast('Статус обновлён');}catch(e){}}
+async function setStatus(s){try{await fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:mangaId,status:s,tg_user_id:getTgUser()})});document.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';b.removeAttribute('style');});const map={'now':'active-now','will':'active-will','read':'active-read'};if(map[s])event.target.classList.add(map[s]);else{event.target.classList.add('active-custom');const clr=event.target.style.borderColor||'var(--accent)';event.target.style.cssText=`background:${clr}22;border-color:${clr};color:${clr};border-width:2px`;}showToast('✅ Статус обновлён');}catch(e){}}
 // Rating
 function openRatingModal(){document.getElementById('rating-modal').classList.add('open');initStars();}
 function closeRatingModal(){document.getElementById('rating-modal').classList.remove('open');}
@@ -5044,7 +4365,7 @@ async function submitRating(){if(!selectedRating){showToast('Выбери оце
 function openCStatusModal(){const cr=document.getElementById('cs-colors');cr.innerHTML=colors.map(c=>`<div class="color-opt${c===selectedColor?' sel':''}" style="background:${c}" data-c="${c}" onclick="pickColor(this,'${c}')"></div>`).join('');document.getElementById('cstatus-modal').classList.add('open');}
 function closeCStatusModal(){document.getElementById('cstatus-modal').classList.remove('open');}
 function pickColor(el,c){selectedColor=c;document.querySelectorAll('.color-opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');}
-async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
+async function saveCustomStatus(){const name=document.getElementById('cs-name').value.trim();if(!name){showToast('Введи название');return;}try{await fetch('/api/custom-statuses/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color:selectedColor,tg_user_id:getTgUser()})});showToast('✅ Статус добавлен');closeCStatusModal();setTimeout(()=>location.reload(),800);}catch(e){}}
 let _delStatusId=null;
 function confirmDeleteStatus(id,name){_delStatusId=id;document.getElementById('del-status-name').textContent=name;const m=document.getElementById('delete-status-modal');m.style.display='flex';}
 function cancelDeleteStatus(){_delStatusId=null;document.getElementById('delete-status-modal').style.display='none';}
@@ -5091,7 +4412,7 @@ async function loadMangaComments(mangaId) {
                     </div>
                     <div style="display:flex;gap:5px;flex-shrink:0">
                         ${_mangaCurrentAccId ? `<button onclick="setMangaReply(${c.id},'${escapeHtml(c.username).replace(/'/g,"\\'")}')" style="padding:3px 9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.color='var(--text2)';this.style.borderColor='var(--border2)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Ответить</button>` : ''}
-                        ${canDel ? `<button onclick="deleteMangaComment(${c.id},${mangaId})" style="padding:3px 9px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:#f87171;font-size:10px;cursor:pointer;font-family:inherit" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">Удалить</button>` : ''}
+                        ${canDel ? `<button onclick="deleteMangaComment(${c.id},${mangaId})" style="padding:3px 9px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:6px;color:#f87171;font-size:10px;cursor:pointer;font-family:inherit" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">🗑 Удалить</button>` : ''}
                     </div>
                 </div>
                 <div style="font-size:13px;color:var(--text2);line-height:1.55;padding-left:39px;margin-top:-30px;padding-top:30px">${replyRef}${escapeHtml(c.text)}</div>
@@ -5148,7 +4469,7 @@ async function submitMangaComment(mangaId) {
         if (data.success) {
             input.value = '';
             cancelMangaReply();
-            showToast('Комментарий добавлен');
+            showToast('✅ Комментарий добавлен!');
             loadMangaComments(mangaId);
         } else {
             showToast('❌ Сначала войди в аккаунт');
@@ -5165,7 +4486,7 @@ if ($path==='/library'){
 ?><!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Библиотека | BLACKWATCH</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>:root{--bg:#0c0c0c;--card:#161616;--border:#242424;--text:#f2f2f2;--muted:#666;--accent:#7c5cff}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:Outfit,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}.box{max-width:360px;width:100%}.lock{font-size:56px;margin-bottom:16px}h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:28px}.btns{display:flex;gap:10px;flex-direction:column}.btn-reg{padding:14px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;display:block}.btn-login{padding:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;display:block}.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:28px}</style>
-</head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock"></div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
+</head><body><div class="box"><a href="/" class="back">← Каталог</a><div class="lock">📚</div><h1>Библиотека закрыта</h1><p>Войди или зарегистрируйся чтобы сохранять мангу в библиотеку и следить за прогрессом.</p><div class="btns"><a href="/register" class="btn-reg">🚀 Зарегистрироваться</a><a href="/login?redirect=/library" class="btn-login">Войти</a></div></div></body></html><?php exit; }
     $userId=getEffectiveUserId($pdo);
     // Get custom statuses
     $csStmt=$pdo->prepare("SELECT id,name,color FROM user_custom_statuses WHERE user_id=? ORDER BY created_at ASC");$csStmt->execute([$userId]);$customStatuses=$csStmt->fetchAll();
@@ -5304,27 +4625,27 @@ header{position:sticky;top:0;z-index:200;backdrop-filter:blur(28px);-webkit-back
 @keyframes loaderSpin{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.1);background:var(--text2)}}
 </style>
 <header><div class="header-inner">
-    <a href="/" class="logo">BLACKWATCH</a>
+    <a href="/" class="logo">⬛ <span>BLACKWATCH</span></a>
     <a href="/" class="back-btn" style="margin-left:auto">← Каталог</a>
 </div></header>
 <div class="wrap">
-    <div class="lib-title">Моя библиотека <span id="lib-total-count"></span></div>
+    <div class="lib-title">📚 Моя библиотека <span id="lib-total-count"></span></div>
     <div class="lib-controls">
-        <input class="lib-search" type="text" placeholder="Поиск в библиотеке..." id="lib-search" oninput="filterLib()">
+        <input class="lib-search" type="text" placeholder="🔍 Поиск в библиотеке..." id="lib-search" oninput="filterLib()">
         <select class="sort-select" id="sort-select" onchange="filterLib()">
             <option value="all">Все статусы</option>
             <option value="popular">По популярности</option>
-            <option value="now">Читаю</option>
-            <option value="read">Прочитано</option>
-            <option value="will">Буду читать</option>
+            <option value="now">📖 Читаю</option>
+            <option value="read">✅ Прочитано</option>
+            <option value="will">🔖 Буду читать</option>
             <?php foreach($customStatuses as $cs):?><option value="custom_<?=htmlspecialchars($cs['name'])?>"><?=htmlspecialchars($cs['name'])?></option><?php endforeach;?>
         </select>
         <div class="view-btns">
-            <button class="view-btn active" id="vb-grid" onclick="setView('grid')">Плитка</button>
-            <button class="view-btn" id="vb-list" onclick="setView('list')">Список</button>
+            <button class="view-btn active" id="vb-grid" onclick="setView('grid')">⊞ Плитка</button>
+            <button class="view-btn" id="vb-list" onclick="setView('list')">☰ Список</button>
         </div>
     </div>
-    <div id="content"><div class="empty-page">Загрузка...</div></div>
+    <div id="content"><div class="empty-page">📖 Загрузка...</div></div>
 </div>
 <script>
 function getTgUser(){try{if(window.Telegram?.WebApp?.initDataUnsafe?.user){const id=window.Telegram.WebApp.initDataUnsafe.user.id;document.cookie='tg_user_id='+id+';max-age='+(86400*30)+';path=/';return id;}}catch(e){}const p=new URLSearchParams(location.search);const u=p.get('tg_user_id');if(u)return u;const c=document.cookie.match(/tg_user_id=(\d+)/);return c?c[1]:'';}
@@ -5333,7 +4654,7 @@ function escapeHtml(t){const d=document.createElement('div');d.textContent=t;ret
 window.addEventListener('load',()=>{const l=document.getElementById('lib-loader');if(l){l.style.opacity='0';l.style.visibility='hidden';setTimeout(()=>l.remove(),450);}});
 let allItems=[],currentView='grid';
 const badgeMap={now:'badge-now',will:'badge-will',read:'badge-read'};
-const labelMap={now:'Читаю',will:'Буду читать',read:'Прочитано'};
+const labelMap={now:'📖 Читаю',will:'🔖 Буду читать',read:'✅ Прочитано'};
 function getBadgeClass(status){return badgeMap[status]||'badge-will';}
 function getBadgeLabel(status){return labelMap[status]||status;}
 function setView(v){currentView=v;document.getElementById('vb-grid').classList.toggle('active',v==='grid');document.getElementById('vb-list').classList.toggle('active',v==='list');renderLib(allItems);}
@@ -5341,22 +4662,22 @@ function filterLib(){const q=document.getElementById('lib-search').value.toLower
 function renderLib(items){
     const c=document.getElementById('content');
     const tc=document.getElementById('lib-total-count');if(tc)tc.textContent='('+items.length+')';
-    if(!items.length){c.innerHTML='<div class="empty-page">Ничего не найдено<br><br><a href="/" style="color:var(--accent)">Каталог →</a></div>';return;}
+    if(!items.length){c.innerHTML='<div class="empty-page">📭 Ничего не найдено<br><br><a href="/" style="color:var(--accent)">Каталог →</a></div>';return;}
     if(currentView==='grid'){
         // Group by status
         const groups={now:[],will:[],read:[],custom:{}};
         items.forEach(m=>{if(m.status==='now')groups.now.push(m);else if(m.status==='will')groups.will.push(m);else if(m.status==='read')groups.read.push(m);else{if(!groups.custom[m.status])groups.custom[m.status]=[];groups.custom[m.status].push(m);}});
         let html='';
-        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map((m,i)=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;const rHtml=m.avg_rating>0?`<div style="font-size:9px;color:#f59e0b;margin-top:2px">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}<span style="color:var(--muted);margin-left:3px">${m.avg_rating}</span></div>`:'';return `<a class="card" href="/read/${m.id}" style="animation-delay:${i*25}ms">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div>${rHtml}</div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title}<span class="sec-count">${arr.length}</span></div><div class="grid-view">${cards}</div></div>`;};
-        if(groups.now.length)html+=renderSection('','Читаю сейчас',groups.now);
-        if(groups.will.length)html+=renderSection('','Буду читать',groups.will);
-        if(groups.read.length)html+=renderSection('','Прочитано',groups.read);
-        Object.entries(groups.custom).forEach(([name,arr])=>{if(arr.length)html+=renderSection('',name,arr);});
-        c.innerHTML=html||'<div class="empty-page">Список пуст</div>';
+        const renderSection=(icon,title,arr)=>{if(!arr.length)return '';let src='';let cards=arr.map((m,i)=>{src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='cv'+m.id,phId='ph'+m.id;const imgHtml=src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' ;const rHtml=m.avg_rating>0?`<div style="font-size:9px;color:#f59e0b;margin-top:2px">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}<span style="color:var(--muted);margin-left:3px">${m.avg_rating}</span></div>`:'';return `<a class="card" href="/read/${m.id}" style="animation-delay:${i*25}ms">${imgHtml}<div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div><div class="card-info"><div class="card-title">${escapeHtml(m.title)}</div>${rHtml}</div></a>`;}).join('');return `<div class="section"><div class="section-title"><span>${icon}</span>${title}<span class="sec-count">${arr.length}</span></div><div class="grid-view">${cards}</div></div>`;};
+        if(groups.now.length)html+=renderSection('📖','Читаю сейчас',groups.now);
+        if(groups.will.length)html+=renderSection('🔖','Буду читать',groups.will);
+        if(groups.read.length)html+=renderSection('✅','Прочитано',groups.read);
+        Object.entries(groups.custom).forEach(([name,arr])=>{if(arr.length)html+=renderSection('🏷',name,arr);});
+        c.innerHTML=html||'<div class="empty-page">📭 Список пуст</div>';
     } else {
         // List view
         let html='<div class="list-view">';
-        items.forEach(m=>{let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='lc'+m.id,phId='lp'+m.id;html+=`<a class="list-item" href="/read/${m.id}">${src?`<img class="list-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="list-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div><div class="list-body"><div class="list-title">${escapeHtml(m.title)}</div><div class="list-date">${getBadgeLabel(m.status)}</div></div><div class="list-status"><span class="badge ${getBadgeClass(m.status)}">${getBadgeLabel(m.status)}</span></div></a>`;});
+        items.forEach(m=>{let src=m.cover_imgbb_url||'';if(!src&&m.file_id)src='/api/cover/'+m.file_id;const covId='lc'+m.id,phId='lp'+m.id;html+=`<a class="list-item" href="/read/${m.id}">${src?`<img class="list-cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';document.getElementById('${phId}').style.display='flex'">`:''}<div class="list-cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}">📖</div><div class="list-body"><div class="list-title">${escapeHtml(m.title)}</div><div class="list-date">${getBadgeLabel(m.status)}</div></div><div class="list-status"><span class="badge ${getBadgeClass(m.status)}">${getBadgeLabel(m.status)}</span></div></a>`;});
         html+='</div>';c.innerHTML=html;
     }
 }
@@ -5367,7 +4688,6 @@ load();
 # ========================= HOME =========================
 
 # ========================= HOME =========================
-error_log("BW_DEBUG: reached HOME, path=" . $path . " mem=" . memory_get_usage());
 $total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 // Count unread admin messages
@@ -5546,26 +4866,20 @@ header{
 }
 .light .sidebar-rail{background:rgba(255,255,255,.98)}
 .sidebar-icon-btn{
-    min-width:38px;height:38px;border-radius:8px;
+    width:38px;height:38px;border-radius:8px;
     border:1px solid var(--border);background:transparent;
-    color:var(--muted);font-size:13px;cursor:pointer;
-    display:flex;align-items:center;gap:6px;
-    padding:0 10px 0 8px;
+    color:var(--muted);font-size:17px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
     transition:all var(--t);position:relative;text-decoration:none;
-    white-space:nowrap;
 }
 .sidebar-icon-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
 .light .sidebar-icon-btn:hover{background:rgba(232,25,44,.06)}
-.sib-icon{font-size:16px;flex-shrink:0;line-height:1}
-.sib-label{font-size:11px;font-weight:600;letter-spacing:.2px}
 .sidebar-badge{position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#f87171;border:2px solid var(--bg);animation:pulse-red 2s infinite}
 @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.5)}50%{box-shadow:0 0 0 5px rgba(248,113,113,0)}}
 @media(max-width:600px){
     .sidebar-icons{display:flex;bottom:0;top:auto;right:0;left:0;transform:none;z-index:400}
-    .sidebar-rail{flex-direction:row;border-radius:0;border:none;border-top:1px solid var(--border);width:100%;padding:7px 6px;justify-content:space-around;backdrop-filter:blur(28px);background:rgba(6,6,8,.97)}
-    .sidebar-icon-btn{min-width:0;width:auto;height:48px;flex-direction:column;gap:2px;padding:4px 8px;font-size:10px}
-    .sib-icon{font-size:20px}
-    .sib-label{font-size:9px}
+    .sidebar-rail{flex-direction:row;border-radius:0;border:none;border-top:1px solid var(--border);width:100%;padding:7px 16px;justify-content:space-around;backdrop-filter:blur(28px);background:rgba(6,6,8,.97)}
+    .sidebar-icon-btn{width:44px;height:44px;font-size:20px}
 }
 .light .sidebar-rail{background:rgba(250,250,250,.98)}
 
@@ -5928,6 +5242,7 @@ header{
     .hero-dots{left:18px;bottom:14px}
     .sec-box{padding:14px 12px;border-radius:12px}
     .grid{grid-template-columns:repeat(auto-fill,minmax(134px,1fr));gap:10px}
+    .admin-modal{max-width:100%}
     .stats-layout{grid-template-columns:1fr}
     .func-orange-row{grid-template-columns:1fr 1fr}
     .modal{padding:18px 14px;border-radius:14px}
@@ -5950,12 +5265,23 @@ header{
 /* ═══════════════════════════════════════
    ADMIN PANEL — MODERN REDESIGN
 ═══════════════════════════════════════ */
+.admin-modal{max-width:960px;width:96vw;padding:0;overflow:hidden;border-radius:18px;max-height:90vh;display:flex;flex-direction:column}
+.admin-modal .modal-head{padding:20px 24px 0;font-size:19px;flex-shrink:0}
+.admin-modal .modal-x{top:18px;right:18px}
 
 /* Tabs */
 .admin-tabs{display:flex;gap:2px;padding:14px 24px 0;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
 .admin-tabs::-webkit-scrollbar{display:none}
+.atab{padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;white-space:nowrap;border-radius:0;margin-bottom:-1px}
+.atab:hover{color:var(--text2)}
+.atab.active{color:var(--text);border-bottom-color:var(--accent)}
 
+/* Panels — scrollable */
+.apanel{display:none;padding:18px 24px 24px;overflow-y:auto;max-height:calc(90vh - 120px)}
+.apanel.active{display:block}
 
+/* Stats layout — side by side, responsive */
+.stats-layout{display:grid;grid-template-columns:1fr 260px;gap:14px}
 @media(max-width:720px){.stats-layout{grid-template-columns:1fr}}
 
 /* Stat cards grid */
@@ -6044,32 +5370,6 @@ header{
 .suggest-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;text-transform:uppercase}
 .suggest-status.new{background:rgba(59,130,246,.1);color:#3b82f6}
 .suggest-status.read{background:rgba(34,197,94,.1);color:#22c55e}
-
-/* ═══ УЛУЧШЕННЫЙ МОБИЛЬНЫЙ ПОИСК ═══ */
-@media(max-width:768px){
-    #mobile-search-row .search{
-        height:48px;
-        border-radius:14px;
-        font-size:14px;
-        padding:0 44px 0 44px;
-        background:var(--card);
-        border-color:var(--border2);
-        box-shadow:0 2px 12px rgba(0,0,0,0.3);
-    }
-    #mobile-search-row .search:focus{
-        border-color:var(--accent);
-        box-shadow:0 0 0 3px var(--accent-glow), 0 4px 20px rgba(0,0,0,0.4);
-    }
-    #mobile-search-row{
-        padding:12px 0 8px;
-    }
-    #search-dropdown{
-        border-radius:14px !important;
-        margin-top:8px !important;
-        box-shadow:0 16px 48px rgba(0,0,0,0.8) !important;
-        border:1px solid var(--border2) !important;
-    }
-}
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -6098,20 +5398,18 @@ header{
 
     <!-- Right Actions -->
     <div class="header-actions">
-        <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn"></button>
+        <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn">🌙</button>
         <button class="hbtn hbtn-ghost" onclick="openRandom()" title="Случайная манга">🎲</button>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
-        <a href="/messages" class="hbtn" title="Чаты" style="gap:5px">💬 <span>Чаты</span></a>
         <a href="/profile" class="hbtn" style="gap:6px">
-            <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?><?php endif;?></span>
+            👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span>
         </a>
         <?php else: ?>
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn hbtn-accent">Регистрация</a>
         <?php endif; ?>
-        <button class="hbtn hbtn-admin hbtn-accent" id="add-manga-btn" onclick="openAddModal()" style="display:none">＋ <span>Манга</span></button>
-        <a href="/admin" class="hbtn hbtn-admin" id="admin-btn" style="text-decoration:none">️ <span>Админ</span></a>
+        <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
     </div>
 </div>
 </header>
@@ -6119,42 +5417,28 @@ header{
 <!-- SIDEBAR ICONS -->
 <div class="sidebar-icons">
     <div class="sidebar-rail">
-        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">
-            <span class="sib-icon"></span><span class="sib-label">Библиотека</span>
-        </a>
-        <a href="/messages" class="sidebar-icon-btn" title="Чаты" style="text-decoration:none" id="sidebar-messages-link">
-            <span class="sib-icon">💬</span><span class="sib-label">Чаты</span>
+        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
+        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
+            💬
             <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
             <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
-        </a>
+        </button>
         <?php if ($currentAccount): ?>
-        <button class="sidebar-icon-btn" onclick="openAdminMessagesModal()" title="Уведомления от администрации" id="bell-btn" style="position:relative">
-            <span class="sib-icon">🔔</span><span class="sib-label">Новости</span>
-            <?php if ($msgCount > 0): ?><span class="sidebar-badge" style="background:var(--accent)"><?=$msgCount?></span><?php endif; ?>
-        </button>
-        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">
-            <span class="sib-icon"></span><span class="sib-label">Профиль</span>
-        </a>
+        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">👤</a>
         <?php endif; ?>
-        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">
-            <span class="sib-icon"></span><span class="sib-label">Telegram</span>
-        </a>
-        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
-            <span class="sib-icon">🛟</span><span class="sib-label">Поддержка</span>
-        </button>
+        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">🤖</a>
+        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">🛟</button>
+        <div style="width:100%;height:1px;background:var(--border);margin:2px 0"></div>
+        <button class="sidebar-icon-btn theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn-side">🌙</button>
     </div>
 </div>
 
 <div class="wrap">
-    <!-- ПОИСК (mobile) — красивый -->
-    <div id="mobile-search-row" style="display:none;padding:14px 0 4px">
-        <div style="position:relative">
-            <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none;z-index:1">🔍</span>
-            <input class="search" type="text" id="search" placeholder="Поиск манги..." oninput="onSearch(this.value)" autocomplete="off"
-                style="padding-left:42px;height:46px;border-radius:12px;font-size:14px;width:100%;letter-spacing:0.1px">
-            <button id="mobile-search-clear" onclick="clearMobileSearch()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px;display:none;line-height:1">✕</button>
-        </div>
-        <div class="search-dropdown" id="search-dropdown" style="border-radius:12px;margin-top:6px"></div>
+    <!-- ПОИСК (mobile) -->
+    <div class="top-search-wrap" id="mobile-search-row" style="display:none;padding:16px 0 0">
+        <span class="search-icon">🔍</span>
+        <input class="search" type="text" placeholder="Поиск манги..." id="search" oninput="onSearch(this.value)" autocomplete="off">
+        <div class="search-dropdown" id="search-dropdown"></div>
     </div>
     <!-- Desktop hidden search input sync -->
     <div id="search-hidden" style="display:none"></div>
@@ -6249,7 +5533,7 @@ header{
         <a href="/u/<?=htmlspecialchars($tw['username'])?>" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:9px 13px;transition:all .18s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
             <div style="width:22px;font-size:13px;font-weight:800;color:<?=$i===0?'#f59e0b':($i===1?'#9ca3af':($i===2?'#b45309':'var(--muted)'))?>;text-align:center"><?=$i+1?></div>
             <div style="width:32px;height:32px;border-radius:50%;background:#1a1a2e;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">
-                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?><span style="font-size:22px;color:#555;font-weight:700">U</span><?php endif; ?>
+                <?php if(!empty($tw['avatar_url'])): ?><img src="<?=htmlspecialchars($tw['avatar_url'])?>" style="width:100%;height:100%;object-fit:cover"><?php else: ?>👤<?php endif; ?>
             </div>
             <div style="flex:1;min-width:0">
                 <div style="font-size:12px;font-weight:600;color:var(--text2)"><?=htmlspecialchars($tw['username'])?></div>
@@ -6266,16 +5550,16 @@ header{
     <div class="filters">
         <button class="filter-btn active" id="f-new" onclick="setFilter('new')">🕒 Новые</button>
         <button class="filter-btn" id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
-        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">А-Я</button>
+        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">🔤 А-Я</button>
         <button class="filter-btn" id="f-genre-tag" onclick="toggleGenreFilter()" style="gap:5px">🏷 Жанр/Тег</button>
         <span class="stats-label" id="stats">Манг: <strong><?=(int)$total?></strong></span>
     </div>
 
     <!-- GENRE/TAG FILTER PANEL -->
     <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Жанры</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🎭 Жанры</div>
         <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;max-height:100px;overflow-y:auto"></div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Теги</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🏷 Теги</div>
         <div id="gfp-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
         <button onclick="clearGenreFilter()" style="padding:5px 13px;background:transparent;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">✕ Сбросить</button>
     </div>
@@ -6293,8 +5577,8 @@ header{
     <div class="modal-sub">Загрузи обложку и страницы</div>
     <div class="fg">
         <div class="toggle-row">
-            <button class="toggle-btn active" id="type-single" onclick="setMangaType('single')">Обычная</button>
-            <button class="toggle-btn" id="type-series" onclick="setMangaType('series')">Серия</button>
+            <button class="toggle-btn active" id="type-single" onclick="setMangaType('single')">📄 Обычная</button>
+            <button class="toggle-btn" id="type-series" onclick="setMangaType('series')">📚 Серия</button>
         </div>
     </div>
     <div class="fg"><label class="fl">Название</label><input class="fi" type="text" id="manga-title" placeholder="Название манги..."></div>
@@ -6311,7 +5595,7 @@ header{
         <label class="fl">Обложка</label>
         <div class="upload-zone" id="cover-zone">
             <input type="file" id="cover-input" accept="image/*" onchange="onCoverChange(this)">
-            <div class="upload-icon"></div>
+            <div class="upload-icon">🖼</div>
             <div class="upload-text"><strong>Загрузить обложку</strong><br>JPG, PNG, WebP</div>
             <div class="upload-preview" id="cover-preview"></div>
         </div>
@@ -6326,7 +5610,7 @@ header{
             <div class="file-panel active" id="panel-zip">
                 <div class="upload-zone" id="zip-zone">
                     <input type="file" id="zip-input" accept=".zip" onchange="onZipChange(this)">
-                    <div class="upload-icon"></div>
+                    <div class="upload-icon">📦</div>
                     <div class="upload-text"><strong>ZIP-архив страниц</strong><br>Сортировка по дате</div>
                     <div class="upload-preview" id="zip-preview"></div>
                 </div>
@@ -6334,7 +5618,7 @@ header{
             <div class="file-panel" id="panel-photos">
                 <div class="upload-zone" id="photos-zone">
                     <input type="file" id="photos-input" accept="image/*" multiple onchange="onPhotosChange(this)">
-                    <div class="upload-icon"></div>
+                    <div class="upload-icon">📸</div>
                     <div class="upload-text"><strong>Выбери страницы</strong><br>001.jpg, 002.jpg...</div>
                     <div class="upload-preview" id="photos-preview"></div>
                 </div>
@@ -6342,7 +5626,7 @@ header{
         </div>
     </div>
     <div class="upbar" id="upload-progress"><div class="upbar-fill" id="upload-progress-fill"></div></div>
-    <button class="sbtn" id="submit-btn" onclick="submitManga()"><span class="btn-text">Опубликовать</span><div class="spinner"></div></button>
+    <button class="sbtn" id="submit-btn" onclick="submitManga()"><span class="btn-text">🚀 Опубликовать</span><div class="spinner"></div></button>
     <div class="result-banner" id="result-banner"></div>
 </div>
 </div>
@@ -6369,22 +5653,200 @@ header{
 </div>
 </div>
 
+<!-- MODAL: ADMIN PANEL -->
+<div class="modal-overlay" id="admin-modal" onclick="if(event.target===this)closeAdminPanel()">
+<div class="modal admin-modal">
+    <button class="modal-x" onclick="closeAdminPanel()">✕</button>
+    <div class="modal-head" style="flex-shrink:0">⚙️ Админ-панель</div>
+    <div class="admin-tabs">
+        <button class="atab active" onclick="switchAdminTab('stats')">📊 Статистика</button>
+        <button class="atab" onclick="switchAdminTab('messages')">📨 Сообщения</button>
+        <button class="atab" onclick="switchAdminTab('edit')">✏️ Редактирование</button>
+        <button class="atab" onclick="switchAdminTab('add-chapter')">📚 Добавить главу</button>
+        <button class="atab" onclick="switchAdminTab('tags')">🏷 Теги/Жанры</button>
+    </div>
 
+    <!-- STATS -->
+    <div class="apanel active" id="panel-stats">
+        <div class="stats-layout">
+            <div class="stats-left">
+                <div class="stats-tabs">
+                    <button class="stab active" onclick="showStatsView('grid')">📊 Статистика</button>
+                    <button class="stab" onclick="showStatsView('archive')">🗂 Архив</button>
+                </div>
+                <div id="stats-grid-view">
+                    <div class="scard-grid" id="stat-grid"><div style="color:var(--muted);grid-column:1/-1;padding:10px 0;font-size:12px">Загрузка...</div></div>
+                    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Топ по лайкам</div>
+                    <div class="top-list" id="top-list"></div>
+                    <button class="edit-manga-btn" onclick="switchAdminTab('edit')">✏️ Редактировать мангу</button>
+                </div>
+                <div id="stats-archive-view" style="display:none">
+                    <div class="archive-list" id="archive-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+                    <div class="pagination" id="archive-pagination"></div>
+                </div>
+            </div>
+            <div class="stats-right">
+                <div class="func-title">Функционал</div>
+                <button class="func-btn func-green" onclick="closeAdminPanel();openAddModal()">➕ Добавить мангу<br><small style="font-size:10px;opacity:0.8">ZIP, обложка, описание</small></button>
+                <div class="func-orange-row">
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📚 Добавить серию</button>
+                    <button class="func-btn func-amber" onclick="switchAdminTab('add-chapter')">📑 Добавить главу</button>
+                </div>
+                <button class="func-btn func-purple" onclick="switchAdminTab('messages')">📨 Написать всем <span id="suggest-badge" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <button class="func-btn func-blue" id="suggest-btn" onclick="showStatsView('suggestions')">💡 Предложки <span id="suggest-badge2" style="background:rgba(255,255,255,0.2);border-radius:10px;padding:1px 7px;font-size:10px"></span></button>
+                <div class="admins-wrap" style="margin-top:14px">
+                    <div class="admin-lbl">Список админов</div>
+                    <div id="admins-list"><div style="color:var(--muted);font-size:11px">Загрузка...</div></div>
+                    <button onclick="toggleAdminAddPanel()" id="admin-add-toggle-btn" style="width:100%;margin-top:8px;padding:8px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">➕ Добавить нового администратора</button>
+                    <div id="admin-add-panel" style="display:none;margin-top:9px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:12px">
+                        <div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:9px">⚡ Назначить администратора</div>
+                        <input id="ap-admin-input" type="text" placeholder="Email или TG ID" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <input id="ap-admin-tag" type="text" placeholder="Тег (например: Редактор)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 10px;font-family:inherit;outline:none;margin-bottom:7px">
+                        <div style="display:flex;gap:6px">
+                            <button onclick="submitAddAdmin()" style="flex:1;padding:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:7px;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">&#10003; Назначить</button>
+                            <button onclick="toggleAdminAddPanel()" style="padding:8px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">Отмена</button>
+                        </div>
+                        <div id="ap-admin-result" style="font-size:11px;margin-top:7px"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="stats-suggestions-view" style="display:none;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                <div style="font-size:12px;font-weight:700">💡 Предложения пользователей</div>
+                <button onclick="showStatsView('grid')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">← Назад</button>
+            </div>
+            <div class="suggest-preview" id="suggest-list"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+            <div class="pagination" id="suggest-pagination"></div>
+        </div>
+    </div>
 
+    <!-- MESSAGES panel -->
+    <div class="apanel" id="panel-messages">
+        <div class="msg-compose">
+            <label class="fl" style="margin-bottom:6px">Написать всем пользователям</label>
+            <textarea id="admin-msg-text" placeholder="Введи сообщение..."></textarea>
+            <button class="msg-send-btn" onclick="sendAdminMessage()">📨 Отправить всем</button>
+        </div>
+        <div class="func-title" style="margin-top:14px">Отправленные сообщения</div>
+        <div class="msg-list" id="admin-msg-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Загрузка...</div></div>
+    </div>
+
+    <!-- EDIT -->
+    <div class="apanel" id="panel-edit">
+        <div class="esearch-row">
+            <input class="esearch-inp" id="edit-search-input" type="text" placeholder="🔍 Поиск манги...">
+            <button class="esearch-btn" onclick="searchMangaEdit()">Найти</button>
+        </div>
+        <div class="manga-edit-list" id="manga-edit-list"><div style="color:var(--muted);padding:10px 0;font-size:12px">Введи название или оставь пустым</div></div>
+        <div class="pagination" id="edit-pagination"></div>
+        <div id="edit-manga-form-wrap" style="display:none">
+            <button class="back-edit-btn" onclick="backToMangaList()">← Назад к списку</button>
+            <div class="edit-form-wrap" id="edit-manga-form"></div>
+        </div>
+    </div>
+
+    <!-- ADD CHAPTER -->
+    <div class="apanel" id="panel-add-chapter">        <div class="fg">
+            <label class="fl">Манга / Серия</label>
+            <div class="esearch-row">
+                <input class="esearch-inp" id="ch-manga-search" type="text" placeholder="Поиск серии...">
+                <button class="esearch-btn" onclick="searchMangaForChapter()">Найти</button>
+            </div>
+            <div class="manga-edit-list" id="ch-manga-list" style="max-height:160px"><div style="color:var(--muted);padding:9px 0;font-size:12px">Найдите серию выше</div></div>
+        </div>
+        <div id="ch-add-form" style="display:none">
+            <div class="add-ch-form">
+                <h4>➕ Новая глава</h4>
+                <div class="ch-inputs">
+                    <input type="number" id="ch-num" placeholder="Номер (1, 2, 2.5...)" step="0.1" min="0">
+                    <input type="text" id="ch-title-input" placeholder="Название (необязательно)">
+                </div>
+                <div class="file-tabs">
+                    <div class="file-tab active" id="ch-tab-zip" onclick="switchChTab('zip')">📦 ZIP</div>
+                    <div class="file-tab" id="ch-tab-photos" onclick="switchChTab('photos')">📸 Фото</div>
+                </div>
+                <div class="file-panel active" id="ch-panel-zip">
+                    <div class="upload-zone" id="ch-zip-zone" style="padding:13px">
+                        <input type="file" id="ch-zip-input" accept=".zip" onchange="onChZipChange(this)">
+                        <div class="upload-icon" style="font-size:20px">📦</div>
+                        <div class="upload-text" style="font-size:11px">ZIP со страницами</div>
+                        <div class="upload-preview" id="ch-zip-preview"></div>
+                    </div>
+                </div>
+                <div class="file-panel" id="ch-panel-photos">
+                    <div class="upload-zone" id="ch-photos-zone" style="padding:13px">
+                        <input type="file" id="ch-photos-input" accept="image/*" multiple onchange="onChPhotosChange(this)">
+                        <div class="upload-icon" style="font-size:20px">📸</div>
+                        <div class="upload-text" style="font-size:11px">Страницы главы</div>
+                        <div class="upload-preview" id="ch-photos-preview"></div>
+                    </div>
+                </div>
+                <div class="upbar" id="ch-upload-progress"><div class="upbar-fill" id="ch-upload-fill"></div></div>
+                <button class="sbtn" id="ch-submit-btn" onclick="submitChapter()" style="margin-top:7px"><span class="btn-text">📤 Загрузить главу</span><div class="spinner"></div></button>
+                <div class="result-banner" id="ch-result-banner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANEL: TAGS & GENRES -->
+    <div class="apanel" id="panel-tags">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+            <!-- ЖАНРЫ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🎭 Жанры <span id="genre-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить жанр -->
+                <div style="display:flex;gap:6px;margin-bottom:10px">
+                    <input id="new-genre-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-genre-slug" placeholder="slug (action)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <button onclick="addGenre()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="genres-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+            <!-- ТЕГИ -->
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px">🏷 Теги <span id="tag-count-badge" style="background:rgba(255,255,255,0.07);border-radius:10px;padding:1px 7px;font-size:10px;color:var(--muted)">0</span></div>
+                <!-- Добавить тег -->
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                    <input id="new-tag-name" placeholder="Название" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                    <input id="new-tag-slug" placeholder="slug (isekai)" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;font-family:inherit">
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+                    <label style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" id="new-tag-nsfw"> 🔞 NSFW</label>
+                    <button onclick="addTag()" style="padding:7px 12px;background:rgba(124,92,255,0.15);border:1px solid rgba(124,92,255,0.3);border-radius:7px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.25)'" onmouseout="this.style.background='rgba(124,92,255,0.15)'">➕ Добавить</button>
+                </div>
+                <div id="tags-manage-list" style="display:flex;flex-direction:column;gap:4px;max-height:350px;overflow-y:auto"></div>
+            </div>
+
+        </div>
+        <!-- Кнопки внизу -->
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button onclick="reseedAllTags()" style="padding:8px 16px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:8px;color:#a78bfa;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(124,92,255,0.2)'" onmouseout="this.style.background='rgba(124,92,255,0.1)'">🔄 Загрузить все дефолтные теги и жанры</button>
+            <button onclick="dedupTagsGenres()" style="padding:8px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#f87171;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🧹 Удалить дубли</button>
+            <span style="font-size:11px;color:var(--muted)">Если жанров больше 15 или тегов больше 54 — нажми «Удалить дубли»</span>
+        </div>
+    </div>
+
+</div>
+</div>
 
 <script>
 // ===== THEME =====
 (function(){
     const saved=localStorage.getItem('bw_theme')||'dark';
     if(saved==='light')document.body.classList.add('light');
-    const icon = saved==='light'?'':'☀️';
+    const icon = saved==='light'?'🌙':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
+    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 })();
 function toggleTheme(){
     const isLight=document.body.classList.toggle('light');
     localStorage.setItem('bw_theme',isLight?'light':'dark');
-    const icon=isLight?'':'☀️';
+    const icon=isLight?'🌙':'☀️';
     if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
+    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 }
 
 // ===== TG =====
@@ -6395,28 +5857,7 @@ function showToast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove(
 
 // ===== ADMIN CHECK =====
 async function checkAdmin(){
-    try{
-        const res=await fetch('/api/check-admin?tg_user_id='+getTgUser());
-        const data=await res.json();
-        if(data.is_admin){
-            const btn=document.getElementById('admin-btn');
-            if(btn)btn.classList.add('visible');
-            const addBtn=document.getElementById('add-manga-btn');
-            if(addBtn)addBtn.classList.add('visible');
-            // Add admin icon to sidebar
-            const rail=document.querySelector('.sidebar-rail');
-            if(rail && !document.getElementById('sidebar-admin-btn')){
-                const adminBtn=document.createElement('a');
-                adminBtn.id='sidebar-admin-btn';
-                adminBtn.href='/admin';
-                adminBtn.className='sidebar-icon-btn';
-                adminBtn.title='Админ-панель';
-                adminBtn.style.cssText='text-decoration:none;color:var(--accent);border-color:rgba(232,25,44,0.3);background:rgba(232,25,44,0.05)';
-                adminBtn.textContent='️';
-                rail.insertBefore(adminBtn, rail.firstChild);
-            }
-        }
-    }catch(e){}
+    try{const res=await fetch('/api/check-admin?tg_user_id='+getTgUser());const data=await res.json();if(data.is_admin)document.getElementById('admin-btn').classList.add('visible');}catch(e){}
 }
 
 // ===== CATALOG =====
@@ -6505,7 +5946,7 @@ function onHeaderSearch(val){
                 const rating=m.avg_rating>0?`<div class="sd-rating">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))} ${m.avg_rating}</div>`:'';
                 return `<a class="sd-item" href="/read/${m.id}">
                     ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
-                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'Серия':'Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div>${rating}</div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div>${rating}</div>
                 </a>`;
             }).join('');
             if(data.total>7){
@@ -6521,9 +5962,7 @@ document.addEventListener('click',e=>{
     if(!e.target.closest('.top-search-wrap')&&searchDrop)searchDrop.classList.remove('open');
 });
 
-function clearMobileSearch(){const inp=document.getElementById('search');inp.value='';q='';document.getElementById('mobile-search-clear').style.display='none';if(searchDrop)searchDrop.classList.remove('open');load(true);}
 function onSearch(val){
-    const clr=document.getElementById('mobile-search-clear');if(clr)clr.style.display=val?'flex':'none';
     clearTimeout(searchTimeout);
     q=val.trim();
     if(!q){if(searchDrop)searchDrop.classList.remove('open');load(true);return;}
@@ -6538,7 +5977,7 @@ function onSearch(val){
                 let src=m.cover_display||'';if(src&&src.startsWith('tg://'))src='';
                 return `<a class="sd-item" href="/read/${m.id}">
                     ${src?`<img class="sd-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="sd-cover-ph" style="${src?'display:none':'display:flex'}">📖</div>
-                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'Серия':'Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div></div>
+                    <div class="sd-info"><div class="sd-title">${escapeHtml(m.title)}</div><div class="sd-meta">${m.is_series?'📚 Серия':'📄 Манга'}${m.likes>0?' · ♥ '+m.likes:''}</div></div>
                 </a>`;
             }).join('');
             searchDrop.classList.add('open');
@@ -6549,7 +5988,7 @@ function onSearch(val){
 async function load(reset=false){
     if(loading)return;loading=true;
     if(reset){page=0;grid.innerHTML='';hasMore=true;moreBtn.style.display='none';}
-    if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">Загрузка...</div>';
+    if(page===0&&!grid.children.length)grid.innerHTML='<div class="empty">📖 Загрузка...</div>';
     try{
         const _gp=activeGenre?'&genre='+encodeURIComponent(activeGenre):activeTag?'&tag='+encodeURIComponent(activeTag):'';
         const res=await fetch('/api/manga?page='+page+'&q='+encodeURIComponent(q)+'&sort='+currentSort+_gp);
@@ -6565,10 +6004,10 @@ async function load(reset=false){
             el.style.animationDelay=(i*30)+'ms';
             el.innerHTML=`${m.is_new?'<div class="card-new-badge">Новое</div>':''}
                 ${src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' }
-                <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"></div>
+                <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div>
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
-                    ${m.is_series?'<div class="card-series-badge">Серия</div>':''}
+                    ${m.is_series?'<div class="card-series-badge">📚 Серия</div>':''}
                     ${m.avg_rating>0?`<div class="card-rating"><span class="card-stars">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}</span><span class="card-rating-val">${m.avg_rating}</span></div>`:(m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:'')}
                 </div>`;
             grid.appendChild(el);
@@ -6628,7 +6067,7 @@ async function loadAdminNotifications(){
 function openSupportModal(){document.getElementById('support-modal').classList.add('open');}
 function closeSupportModal(){document.getElementById('support-modal').classList.remove('open');}
 async function sendSupport(){const text=document.getElementById('support-text').value.trim();if(!text){showToast('Введи сообщение');return;}
-try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();const b=document.getElementById('support-result');if(d.success){b.className='result-banner success open';b.innerHTML='Сообщение отправлено!';document.getElementById('support-text').value='';}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){}}
+try{const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();const b=document.getElementById('support-result');if(d.success){b.className='result-banner success open';b.innerHTML='✅ Сообщение отправлено!';document.getElementById('support-text').value='';}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}}catch(e){}}
 
 // ===== ADD MANGA MODAL =====
 let coverFile=null,photoFiles=[],currentMangaType='single';
@@ -6661,12 +6100,273 @@ async function submitManga(){
         const addTagIds=[...document.querySelectorAll('#add-tags-list input[type=checkbox][data-add-tid]:checked')].map(el=>parseInt(el.dataset.addTid));
         const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,tg_user_id:getTgUser(),is_series:isSeries,genre_ids:addGenreIds,tag_ids:addTagIds})});
         const data=await res.json();pf.style.width='100%';
-        if(data.success){showResult('success',`<strong>Манга добавлена!</strong><br>${isSeries?'Серия создана<br>':''}${data.pages>0?`${data.pages} страниц<br>`:''}${data.telegraph?`<a href="${escapeHtml(data.telegraph)}" target="_blank">Telegraph</a><br>`:''}<a href="${escapeHtml(data.site_url)}" target="_blank">Открыть →</a>`);setTimeout(()=>{load(true);loadNew();},1500);}
+        if(data.success){showResult('success',`✅ <strong>Манга добавлена!</strong><br>${isSeries?'📚 Серия создана<br>':''}${data.pages>0?`📄 ${data.pages} страниц<br>`:''}${data.telegraph?`🔗 <a href="${escapeHtml(data.telegraph)}" target="_blank">Telegraph</a><br>`:''}<a href="${escapeHtml(data.site_url)}" target="_blank">🌐 Открыть →</a>`);setTimeout(()=>{load(true);loadNew();},1500);}
         else{showResult('error','❌ '+(data.error||'Неизвестная ошибка'));}
     }catch(e){showResult('error','❌ '+e.message);}
-    const t=btn.querySelector('.btn-text');if(t)t.textContent='Опубликовать';btn.disabled=false;btn.classList.remove('loading');
+    const t=btn.querySelector('.btn-text');if(t)t.textContent='🚀 Опубликовать';btn.disabled=false;btn.classList.remove('loading');
 }
 ['cover-zone','zip-zone','photos-zone'].forEach(zId=>{const z=document.getElementById(zId);if(!z)return;z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});z.addEventListener('dragleave',()=>z.classList.remove('drag'));z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const inp=z.querySelector('input[type=file]');if(inp&&e.dataTransfer.files.length){const dt=new DataTransfer();Array.from(e.dataTransfer.files).forEach(f=>dt.items.add(f));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}});});
+
+// ===== ADMIN PANEL =====
+function openAdminPanel(){document.getElementById('admin-modal').classList.add('open');loadAdminStats();loadAdmins();}
+function closeAdminPanel(){document.getElementById('admin-modal').classList.remove('open');}
+function switchAdminTab(tab){
+    const tabs=['stats','messages','edit','add-chapter','tags'];
+    document.querySelectorAll('.atab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
+    document.querySelectorAll('.apanel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('panel-'+tab).classList.add('active');
+    if(tab==='stats')loadAdminStats();
+    if(tab==='messages')loadAdminMessages();
+    if(tab==='edit')loadMangaEditList('',0);
+    if(tab==='tags')loadTagsPanel();
+}
+function showStatsView(view){
+    document.getElementById('stats-grid-view').style.display=view==='grid'?'block':'none';
+    document.getElementById('stats-archive-view').style.display=view==='archive'?'block':'none';
+    document.getElementById('stats-suggestions-view').style.display=view==='suggestions'?'block':'none';
+    if(view==='archive')loadArchive(0);
+    if(view==='suggestions')loadSuggestions(0);
+}
+async function loadAdminStats(){
+    try{const res=await fetch('/api/admin/stats?tg_user_id='+getTgUser());const data=await res.json();
+    if(data.error){document.getElementById('stat-grid').innerHTML='<div style="color:var(--muted);grid-column:1/-1;font-size:12px">Нет прав</div>';return;}
+    document.getElementById('stat-grid').innerHTML=`
+        <div class="scard"><div class="scard-val">${data.manga_count}</div><div class="scard-label">📚 Манг</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--green)">${data.users_count}</div><div class="scard-label">👤 Юзеров</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--orange)">${data.votes_count}</div><div class="scard-label">👍 Голосов</div></div>
+        <div class="scard"><div class="scard-val">${data.chapters_count}</div><div class="scard-label">📖 Глав</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--accent)">${data.new_today}</div><div class="scard-label">🔥 Сегодня</div></div>
+        <div class="scard"><div class="scard-val" style="color:var(--blue)">${data.suggest_count}</div><div class="scard-label">💡 Предложек</div></div>`;
+    document.getElementById('top-list').innerHTML=(data.top_manga||[]).map(m=>`<div class="top-row"><div class="top-name">${escapeHtml(m.title)}</div><div class="top-likes">♥ ${m.likes}</div></div>`).join('');
+    const sb=document.getElementById('suggest-badge2');if(sb)sb.textContent=data.suggest_count>0?data.suggest_count:'';}catch(e){}
+}
+async function loadArchive(pg){
+    try{const res=await fetch(`/api/admin/archive?page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    document.getElementById('archive-list').innerHTML=data.items.map(a=>`<div class="aitem"><div class="atype">${escapeHtml(a.action_type)}</div><div class="atext">${escapeHtml(a.action_text)}</div><div class="adate">${new Date(a.created_at).toLocaleString('ru-RU')}</div></div>`).join('');
+    const totalPages=Math.ceil(data.total/20);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadArchive(${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadArchive(${pg+1})">Вперёд →</button>`;
+    document.getElementById('archive-pagination').innerHTML=pages;}catch(e){}
+}
+async function loadSuggestions(pg){
+    try{const res=await fetch(`/api/admin/suggestions?page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    document.getElementById('suggest-list').innerHTML=data.items.map(s=>`<div class="sug-item"><div class="sug-text">${escapeHtml(s.text)}</div><div class="sug-meta">User #${s.user_id} · ${new Date(s.created_at).toLocaleDateString('ru-RU')}</div><button class="sug-read-btn" onclick="markSuggestion(${s.id},this)">✓ Прочитано</button></div>`).join('')||'<div style="color:var(--muted);font-size:12px">Новых нет</div>';
+    const totalPages=Math.ceil(data.total/15);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadSuggestions(${pg+1})">Вперёд →</button>`;
+    document.getElementById('suggest-pagination').innerHTML=pages;}catch(e){}
+}
+async function markSuggestion(id,btn){try{await fetch(`/api/admin/suggestions/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'read',tg_user_id:getTgUser()})});btn.closest('.sug-item').remove();}catch(e){}}
+async function loadAdmins(){try{const res=await fetch('/api/admin/admins?tg_user_id='+getTgUser());const data=await res.json();if(!data.admins)return;document.getElementById('admins-list').innerHTML=data.admins.map(a=>`<div class="admin-item"><div><div class="admin-item-name">${escapeHtml(a.tag)}</div><div class="admin-item-id">ID: ${a.user_id}</div></div><button class="copy-btn" onclick="navigator.clipboard?.writeText?.('${a.user_id}');showToast('📋 Скопировано')">Копировать</button></div>`).join('');}catch(e){}}
+function toggleAdminAddPanel(){const p=document.getElementById('admin-add-panel');p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block'){document.getElementById('ap-admin-input').focus();document.getElementById('ap-admin-result').textContent='';}}
+async function submitAddAdmin(){const input=document.getElementById('ap-admin-input').value.trim();const tag=document.getElementById('ap-admin-tag').value.trim()||'Администратор';const result=document.getElementById('ap-admin-result');if(!input){result.style.color='var(--red)';result.textContent='❌ Введи email или TG ID';return;}let endpoint='/api/admin/assign';let body={tag,action:'add'};if(/^\d+$/.test(input)){endpoint='/api/admin/assign-by-tgid';body.tg_id=parseInt(input);}else{body.email=input;}try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await res.json();if(d.success){result.style.color='var(--green)';result.textContent='✅ '+d.message;document.getElementById('ap-admin-input').value='';document.getElementById('ap-admin-tag').value='';setTimeout(()=>{toggleAdminAddPanel();loadAdmins();},1500);}else{result.style.color='var(--red)';result.textContent='❌ '+d.error;}}catch(e){result.style.color='var(--red)';result.textContent='❌ Ошибка сети';}}
+
+// ===== ADMIN MESSAGES =====
+async function loadAdminMessages(){
+    try{const res=await fetch('/api/admin/messages?tg_user_id='+getTgUser());const data=await res.json();
+    const list=document.getElementById('admin-msg-list');
+    if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px 0">Сообщений нет</div>';return;}
+    list.innerHTML=data.items.map(m=>`<div class="msg-item" id="amsg-${m.id}"><button class="msg-del" onclick="deleteAdminMessage(${m.id})">Удалить</button><div class="msg-text">${escapeHtml(m.text)}</div><div class="msg-meta">${new Date(m.created_at).toLocaleString('ru-RU')}</div></div>`).join('');}catch(e){}
+}
+async function sendAdminMessage(){
+    const text=document.getElementById('admin-msg-text').value.trim();
+    if(!text){showToast('Введи сообщение');return;}
+    try{const res=await fetch('/api/admin/messages/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,tg_user_id:getTgUser()})});const d=await res.json();if(d.success){showToast('✅ Сообщение отправлено');document.getElementById('admin-msg-text').value='';loadAdminMessages();}else showToast('❌ Ошибка');}catch(e){}
+}
+async function deleteAdminMessage(id){if(!confirm('Удалить сообщение?'))return;try{await fetch(`/api/admin/messages/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tg_user_id:getTgUser()})});const el=document.getElementById('amsg-'+id);if(el)el.remove();showToast('🗑 Удалено');}catch(e){}}
+
+// ===== EDIT =====
+let editQuery='',editPage=0;
+async function loadMangaEditList(q='',pg=0){
+    editQuery=q;editPage=pg;
+    try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=${pg}&tg_user_id=`+getTgUser());const data=await res.json();
+    const list=document.getElementById('manga-edit-list');
+    if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:10px 0;font-size:12px">Ничего не найдено</div>';document.getElementById('edit-pagination').innerHTML='';return;}
+    list.innerHTML=data.items.map(m=>{const src=m.cover_imgbb_url||'';return`<div class="manga-edit-item" onclick="openEditManga(${m.id})">${src?`<img class="manga-edit-cover" src="${escapeHtml(src)}" alt="" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`:''}<div class="manga-edit-cover-ph" style="${src?'display:none':'display:flex'}">📖</div><div class="manga-edit-title">${escapeHtml(m.title)}</div><div style="font-size:10px;color:var(--muted);flex-shrink:0">${m.is_series?'📚':'📄'}</div></div>`;}).join('');
+    const totalPages=Math.ceil(data.total/10);let pages='';if(pg>0)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg-1})">← Назад</button>`;if(totalPages>1)pages+=`<span style="color:var(--muted);font-size:11px">${pg+1}/${totalPages}</span>`;if((pg+1)<totalPages)pages+=`<button class="page-btn" onclick="loadMangaEditList('${escapeHtml(editQuery)}',${pg+1})">Вперёд →</button>`;
+    document.getElementById('edit-pagination').innerHTML=pages;}catch(e){}
+}
+function searchMangaEdit(){loadMangaEditList(document.getElementById('edit-search-input').value.trim(),0);}
+document.getElementById('edit-search-input').addEventListener('keydown',e=>{if(e.key==='Enter')searchMangaEdit();});
+async function openEditManga(mangaId){
+    try{const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser());const manga=await res.json();
+    document.getElementById('manga-edit-list').style.display='none';document.getElementById('edit-pagination').style.display='none';document.querySelector('#panel-edit .esearch-row').style.display='none';
+    const fw=document.getElementById('edit-manga-form-wrap');fw.style.display='block';
+    let chaptersHtml='';
+    if(manga.is_series&&manga.chapters?.length){chaptersHtml=`<div style="margin-top:12px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Главы</div><div class="ch-admin-list">${manga.chapters.map(ch=>`<div class="ch-admin-item"><span style="font-size:11px;font-weight:600">Гл. ${ch.chapter_num}${ch.title?' — '+escapeHtml(ch.title):''}</span><button class="del-ch-btn" onclick="deleteChapter(${ch.id},this)">🗑</button></div>`).join('')}</div></div>`;}
+    // Load genres/tags for the form
+    let allGenres=[], allTags=[], mangaGenreIds=new Set(), mangaTagIds=new Set();
+    try{const gr=await fetch('/api/genres');const gd=await gr.json();allGenres=gd.genres||[];allTags=gd.tags||[];}catch(e){}
+    try{const mgr=await fetch(`/api/manga/${mangaId}/genres`);const mgd=await mgr.json();
+    mgd.genres?.forEach(g=>mangaGenreIds.add(g.id));mgd.tags?.forEach(t=>mangaTagIds.add(t.id));}catch(e){}
+    const genresHtml=allGenres.length?`<div class="ef"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🎭 Жанры</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto;padding:4px 0">${allGenres.map(g=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaGenreIds.has(g.id)?'var(--border2)':'var(--border)'};border-radius:20px;background:${mangaGenreIds.has(g.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-gid="${g.id}" ${mangaGenreIds.has(g.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(g.name)}</label>`).join('')}</div></div>`:'';
+    const tagsHtml=allTags.length?`<div class="ef" style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🏷 Теги</label><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:140px;overflow-y:auto;padding:4px 0">${allTags.map(t=>`<label style="font-size:10px;cursor:pointer;padding:3px 8px;border:1px solid ${mangaTagIds.has(t.id)?'var(--border2)':t.is_nsfw?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:20px;background:${mangaTagIds.has(t.id)?'rgba(124,92,255,0.15)':'transparent'};transition:all .15s;display:inline-flex;align-items:center;gap:3px"><input type="checkbox" data-tid="${t.id}" ${mangaTagIds.has(t.id)?'checked':''} style="display:none" onchange="this.closest('label').style.background=this.checked?'rgba(124,92,255,0.15)':'transparent';this.closest('label').style.borderColor=this.checked?'var(--border2)':'var(--border)'">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</label>`).join('')}</div></div>`:'';
+    document.getElementById('edit-manga-form').innerHTML=`
+        <div class="ef"><label>Название</label><input type="text" id="ef-title" value="${escapeHtml(manga.title)}"></div>
+        <div class="ef"><label>Описание</label><textarea id="ef-desc">${escapeHtml(manga.description||'')}</textarea></div>
+        <div class="ef"><label>Ссылка Telegraph</label><input type="text" id="ef-link" value="${escapeHtml(manga.telegraph_url||'')}"></div>
+        <div class="ef"><label>URL обложки</label><input type="text" id="ef-cover" value="${escapeHtml(manga.cover_imgbb_url||'')}"></div>
+        ${manga.cover_imgbb_url?`<img src="${escapeHtml(manga.cover_imgbb_url)}" style="width:64px;height:86px;object-fit:cover;border-radius:8px;margin-bottom:9px">`:''}
+        ${genresHtml}${tagsHtml}
+        ${chaptersHtml}
+        <div class="edit-actions">
+            <button class="save-btn" onclick="saveMangaEdit(${mangaId})">💾 Сохранить</button>
+            <button class="del-btn" onclick="deleteManga(${mangaId})">🗑 Удалить</button>
+        </div>
+        <div class="result-banner" id="ef-result"></div>`;}catch(e){showToast('❌ Ошибка загрузки');}
+}
+function backToMangaList(){document.getElementById('edit-manga-form-wrap').style.display='none';document.getElementById('manga-edit-list').style.display='flex';document.getElementById('manga-edit-list').style.flexDirection='column';document.getElementById('edit-pagination').style.display='flex';document.querySelector('#panel-edit .esearch-row').style.display='flex';}
+async function saveMangaEdit(mangaId){try{
+    const res=await fetch(`/api/admin/manga/${mangaId}?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('ef-title').value.trim(),description:document.getElementById('ef-desc').value.trim(),telegraph_url:document.getElementById('ef-link').value.trim(),cover_imgbb_url:document.getElementById('ef-cover').value.trim()})});
+    const data=await res.json();
+    const b=document.getElementById('ef-result');
+    // Save genres/tags
+    const genreIds=[...document.querySelectorAll('#edit-manga-form input[type=checkbox][data-gid]:checked')].map(el=>parseInt(el.dataset.gid));
+    const tagIds=[...document.querySelectorAll('#edit-manga-form input[type=checkbox][data-tid]:checked')].map(el=>parseInt(el.dataset.tid));
+    if(genreIds.length>=0||tagIds.length>=0){try{await fetch(`/api/admin/manga/${mangaId}/genres?tg_user_id=`+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genre_ids:genreIds,tag_ids:tagIds})});}catch(e){}}
+    if(data.success){b.className='result-banner success open';b.innerHTML='✅ Сохранено!';load(true);}else{b.className='result-banner error open';b.innerHTML='❌ Ошибка';}
+}catch(e){showToast('❌ Ошибка');}}
+async function deleteManga(mangaId){if(!confirm('Удалить эту мангу?'))return;try{const res=await fetch(`/api/admin/manga/${mangaId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){showToast('🗑 Удалено');backToMangaList();loadMangaEditList(editQuery,editPage);load(true);}}catch(e){}}
+async function deleteChapter(chapterId,btn){if(!confirm('Удалить главу?'))return;try{const res=await fetch(`/api/admin/chapter/${chapterId}/delete?tg_user_id=`+getTgUser(),{method:'POST'});const data=await res.json();if(data.success){btn.closest('.ch-admin-item').remove();showToast('🗑 Глава удалена');}}catch(e){}}
+
+// ===== ADD CHAPTER =====
+let selectedMangaId=null,chPhotoFiles=[];
+async function searchMangaForChapter(){
+    const q=document.getElementById('ch-manga-search').value.trim();
+    try{const res=await fetch(`/api/admin/manga-list?q=${encodeURIComponent(q)}&page=0&tg_user_id=`+getTgUser());const data=await res.json();const list=document.getElementById('ch-manga-list');if(!data.items?.length){list.innerHTML='<div style="color:var(--muted);padding:9px 0;font-size:12px">Ничего не найдено</div>';return;}list.innerHTML=data.items.map(m=>`<div class="meitem" onclick="selectMangaForChapter(${m.id},'${escapeHtml(m.title).replace(/'/g,"\\'")}')"><div class="me-cover">📖</div><div><div class="me-title">${escapeHtml(m.title)}</div><div class="me-meta">${m.is_series?'📚 Серия':'📄 Обычная'}</div></div></div>`).join('');}catch(e){}
+}
+function selectMangaForChapter(id,title){selectedMangaId=id;document.getElementById('ch-add-form').style.display='block';document.getElementById('ch-manga-list').innerHTML=`<div style="background:rgba(124,92,255,0.07);border:1px solid rgba(124,92,255,0.22);border-radius:9px;padding:8px 11px;font-weight:600;color:var(--accent);font-size:12px">✅ ${escapeHtml(title)}</div>`;showToast('Выбрана: '+title);}
+document.getElementById('ch-manga-search').addEventListener('keydown',e=>{if(e.key==='Enter')searchMangaForChapter();});
+function switchChTab(tab){['zip','photos'].forEach(t=>{document.getElementById('ch-tab-'+t).classList.toggle('active',t===tab);document.getElementById('ch-panel-'+t).classList.toggle('active',t===tab);});}
+function onChPhotosChange(input){chPhotoFiles=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));document.getElementById('ch-photos-preview').innerHTML=`<div class="preview-count">📸 ${chPhotoFiles.length} стр.</div>`;}
+async function onChZipChange(input){if(!input.files[0])return;const preview=document.getElementById('ch-zip-preview');preview.innerHTML=`<div class="preview-count">⏳ Распаковка...</div>`;try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(input.files[0]);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((relPath,file)=>{if(file.dir)return;const ext=relPath.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:relPath,file,lastMod:file.date||new Date(0),name:relPath.split('/').pop()});});files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;if(dt!==0)return dt;return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});});const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}chPhotoFiles=blobs;preview.innerHTML=`<div class="preview-count">📦 ${blobs.length} стр.</div>`;}catch(e){preview.innerHTML=`<div class="preview-count" style="color:#ff5050">❌ ${escapeHtml(e.message)}</div>`;}}
+async function submitChapter(){
+    if(!selectedMangaId){showToast('❌ Выбери мангу!');return;}
+    const chNum=parseFloat(document.getElementById('ch-num').value);const chTitle=document.getElementById('ch-title-input').value.trim();
+    if(!chNum||chNum<0){showToast('❌ Укажи номер!');return;}if(!chPhotoFiles.length){showToast('❌ Загрузи страницы!');return;}
+    const btn=document.getElementById('ch-submit-btn');btn.disabled=true;btn.classList.add('loading');
+    const pb=document.getElementById('ch-upload-progress'),pf=document.getElementById('ch-upload-fill');pb.classList.add('active');pf.style.width='2%';
+    const rb=document.getElementById('ch-result-banner');rb.className='result-banner';rb.innerHTML='';
+    try{
+        const keysRes=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const keysData=await keysRes.json();if(!keysData.success){showToast('❌ Нет доступа');btn.disabled=false;btn.classList.remove('loading');return;}
+        const keys=keysData.keys;const pageUrls=[];const total=chPhotoFiles.length;
+        for(let i=0;i<total;i++){pf.style.width=(2+Math.round((i/total)*90))+'%';const t=btn.querySelector('.btn-text');if(t)t.textContent=`⬆️ ${i+1}/${total}`;const url=await uploadOneToImgbb(chPhotoFiles[i],keys);if(url)pageUrls.push(url);}
+        pf.style.width='95%';
+        const res=await fetch('/api/save-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manga_id:selectedMangaId,chapter_num:chNum,chapter_title:chTitle,page_urls:pageUrls,tg_user_id:getTgUser()})});
+        const data=await res.json();pf.style.width='100%';
+        if(data.success){rb.className='result-banner success open';rb.innerHTML=`✅ Глава ${chNum} добавлена! ${pageUrls.length} стр.${data.telegraph?`<br><a href="${escapeHtml(data.telegraph)}" target="_blank">📄 Telegraph</a>`:''}`;document.getElementById('ch-num').value='';document.getElementById('ch-title-input').value='';chPhotoFiles=[];document.getElementById('ch-zip-preview').innerHTML='';document.getElementById('ch-photos-preview').innerHTML='';}
+        else{rb.className='result-banner error open';rb.innerHTML='❌ '+(data.error||'Ошибка');}
+    }catch(e){rb.className='result-banner error open';rb.innerHTML='❌ '+e.message;}
+    const t=btn.querySelector('.btn-text');if(t)t.textContent='📤 Загрузить главу';btn.disabled=false;btn.classList.remove('loading');
+}
+
+// ===== TAGS & GENRES ADMIN PANEL =====
+async function loadTagsPanel(){
+    try{
+        const res=await fetch('/api/genres?_='+Date.now());
+        const data=await res.json();
+        if(data.error){showToast('❌ Ошибка API: '+data.error);console.error('[TagsPanel] error:',data.error);}
+        renderGenreManageList(data.genres||[]);
+        renderTagManageList(data.tags||[]);
+        document.getElementById('genre-count-badge').textContent=data.genres?.length||0;
+        document.getElementById('tag-count-badge').textContent=data.tags?.length||0;
+    }catch(e){showToast('❌ Ошибка загрузки: '+e.message);console.error('[TagsPanel]',e);}
+}
+function renderGenreManageList(genres){
+    const el=document.getElementById('genres-manage-list');
+    if(!genres.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Жанров нет. Нажми «Загрузить все дефолтные»</div>';return;}
+    el.innerHTML=genres.map(g=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--card2);border:1px solid var(--border);border-radius:7px">
+            <span style="flex:1;font-size:12px;color:var(--text)">${escapeHtml(g.name)}</span>
+            <span style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(g.slug)}</span>
+            <button onclick="deleteGenre(${g.id},this)" style="padding:3px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:5px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🗑</button>
+        </div>`).join('');
+}
+function renderTagManageList(tags){
+    const el=document.getElementById('tags-manage-list');
+    if(!tags.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">Тегов нет. Нажми «Загрузить все дефолтные»</div>';return;}
+    el.innerHTML=tags.map(t=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--card2);border:1px solid ${t.is_nsfw?'rgba(239,68,68,0.2)':'var(--border)'};border-radius:7px">
+            <span style="flex:1;font-size:12px;color:${t.is_nsfw?'#f87171':'var(--text)'}">${escapeHtml(t.name)}${t.is_nsfw?' 🔞':''}</span>
+            <span style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(t.slug)}</span>
+            <button onclick="deleteTag(${t.id},this)" style="padding:3px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:5px;color:#f87171;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">🗑</button>
+        </div>`).join('');
+}
+async function addGenre(){
+    const name=document.getElementById('new-genre-name').value.trim();
+    const slug=document.getElementById('new-genre-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');
+    if(!name||!slug){showToast('❌ Заполни название и slug');return;}
+    try{
+        const res=await fetch('/api/admin/genres/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug})});
+        const data=await res.json();
+        if(data.success){showToast('✅ Жанр добавлен');document.getElementById('new-genre-name').value='';document.getElementById('new-genre-slug').value='';loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+async function deleteGenre(id,btn){
+    if(!confirm('Удалить жанр? Он будет убран у всех манг'))return;
+    btn.disabled=true;
+    try{
+        const res=await fetch(`/api/admin/genres/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){showToast('🗑 Жанр удалён');loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');btn.disabled=false;}
+}
+async function addTag(){
+    const name=document.getElementById('new-tag-name').value.trim();
+    const slug=document.getElementById('new-tag-slug').value.trim().toLowerCase().replace(/[^a-z0-9\-]/g,'');
+    const isNsfw=document.getElementById('new-tag-nsfw').checked;
+    if(!name||!slug){showToast('❌ Заполни название и slug');return;}
+    try{
+        const res=await fetch('/api/admin/tags/add?tg_user_id='+getTgUser(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,slug,is_nsfw:isNsfw})});
+        const data=await res.json();
+        if(data.success){showToast('✅ Тег добавлен');document.getElementById('new-tag-name').value='';document.getElementById('new-tag-slug').value='';document.getElementById('new-tag-nsfw').checked=false;loadTagsPanel();_genreTagsData=null;}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+async function deleteTag(id,btn){
+    if(!confirm('Удалить тег? Он будет убран у всех манг'))return;
+    btn.disabled=true;
+    try{
+        const res=await fetch(`/api/admin/tags/${id}/delete?tg_user_id=`+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){showToast('🗑 Тег удалён');_genreTagsData=null;loadTagsPanel();}
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');btn.disabled=false;}
+}
+async function dedupTagsGenres(){
+    if(!confirm('Удалить дубли жанров и тегов? Оставит первый вариант каждого.'))return;
+    try{
+        const res=await fetch('/api/admin/dedup-genres?tg_user_id='+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){
+            _genreTagsData=null;
+            showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);
+            setTimeout(()=>loadTagsPanel(), 300);
+        } else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+async function reseedAllTags(){
+    if(!confirm('Загрузить все стандартные теги и жанры? Дубли не добавятся.'))return;
+    try{
+        const res=await fetch('/api/admin/reseed-tags?tg_user_id='+getTgUser(),{method:'POST'});
+        const data=await res.json();
+        if(data.success){
+            _genreTagsData=null; // сбросить кеш
+            showToast(`✅ Готово! Тегов: ${data.tags}, жанров: ${data.genres}`);
+            // Подождать и перезагрузить
+            setTimeout(()=>loadTagsPanel(), 300);
+        }
+        else showToast('❌ '+(data.error||'Ошибка'));
+    }catch(e){showToast('❌ Ошибка');}
+}
+// Авто-генерация slug из названия
+document.addEventListener('DOMContentLoaded',()=>{
+    const autoSlug=(nameId,slugId)=>{
+        const nameEl=document.getElementById(nameId),slugEl=document.getElementById(slugId);
+        if(nameEl&&slugEl)nameEl.addEventListener('input',()=>{if(!slugEl.dataset.manual)slugEl.value=nameEl.value.toLowerCase().replace(/ё/g,'e').replace(/[а-яёА-ЯЁ]/g,c=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[c.toLowerCase()]||c)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');});
+        if(slugEl)slugEl.addEventListener('input',()=>slugEl.dataset.manual='1');
+    };
+    autoSlug('new-genre-name','new-genre-slug');
+    autoSlug('new-tag-name','new-tag-slug');
+});
 
 // ===== INIT =====
 // Hide page loader
@@ -6699,7 +6399,7 @@ async function loadHero(){
                 <div class="hero-slide-accentbar"></div>
                 <div class="hero-content">
                     <div class="hero-label">ТОП НЕДЕЛИ</div>
-                    <div class="hero-rank">#${i+1} ${m.is_series?'Серия':'Манга'}</div>
+                    <div class="hero-rank">#${i+1} ${m.is_series?'📚 Серия':'📄 Манга'}</div>
                     <h1 class="hero-title">${escapeHtml(m.title)}</h1>
                     ${m.description?`<p class="hero-desc">${escapeHtml(m.description)}</p>`:''}
                     <div class="hero-stats">${rat}${lk}${vw}</div>
@@ -6741,12 +6441,6 @@ function heroSlide(dir){
 })();
 
 load();loadNew();loadContinue();checkAdmin();
-// Auto-open add manga modal if redirected from admin panel
-if(new URLSearchParams(location.search).get('add')==='1'){
-    checkAdmin().then(()=>{setTimeout(openAddModal,400);});
-    // Clean URL without reload
-    history.replaceState(null,'',location.pathname);
-}
 document.addEventListener('DOMContentLoaded',function(){loadHero();loadTopWeek();setInterval(loadTopWeek,30*60*1000);});
 
 
@@ -6824,7 +6518,7 @@ let chatCurrentUsername = null;
 let chatPollInterval = null;
 let chatLastMsgCount = 0;
 
-const EMOJIS = ['😀','😂','😍','🥰','😎','😭','😤','🤔','😮','🥺','❤️','🔥','👍','👎','✨','💯','🎉','😈','🤣','😊','🙄','😅','🫡','💀','🫶','💪','🎮','','⭐','🏆'];
+const EMOJIS = ['😀','😂','😍','🥰','😎','😭','😤','🤔','😮','🥺','❤️','🔥','👍','👎','✨','💯','🎉','😈','🤣','😊','🙄','😅','🫡','💀','🫶','💪','🎮','📖','⭐','🏆'];
 
 function openMessagesModal() {
     const modal = document.getElementById('messages-modal');
@@ -6870,7 +6564,7 @@ async function loadMessagesList() {
         updateChatBadge(totalUnread);
         listDiv.innerHTML = data.messages.map(m => `
             <div class="message-item${m.unread_count>0?' unread':''}" onclick="openDialog(${m.other_id}, '${escapeHtml(m.other_username)}')">
-                <div class="message-avatar">U</div>
+                <div class="message-avatar">👤</div>
                 <div class="message-content">
                     <div class="message-username">${escapeHtml(m.other_username)}</div>
                     <div class="message-preview">${m.last_text ? escapeHtml(m.last_text.substring(0,40)) : 'Нет сообщений'}</div>
@@ -6899,7 +6593,7 @@ async function openDialog(userId, username) {
     backBtn.style.display = 'flex';
     document.getElementById('chat-header-name').textContent = username;
     document.getElementById('chat-header-sub').textContent = 'В сети · пишет...';
-    document.getElementById('chat-header-avatar').textContent = '';
+    document.getElementById('chat-header-avatar').textContent = '👤';
     document.getElementById('chat-input').value = '';
     document.getElementById('chat-input').style.height = 'auto';
     const emojiPicker = document.getElementById('emoji-picker');
@@ -6991,7 +6685,7 @@ function searchUsers(query) {
             if (data.success && data.users) {
                 document.getElementById('user-search-results').innerHTML = data.users.map(u => `
                     <div class="user-search-item" onclick="openDialog(${u.id},'${escapeHtml(u.username)}');document.getElementById('message-search').value='';">
-                        <div class="user-search-avatar">U</div>
+                        <div class="user-search-avatar">👤</div>
                         <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--text);font-size:12px">${escapeHtml(u.username)}</div></div>
                     </div>`).join('');
             }
@@ -7091,7 +6785,7 @@ async function loadUserLevel(accountId) {
                 container.innerHTML = `
                     <div style="background:linear-gradient(135deg,#7c5cff 0%,#5a4ca0 100%);border-radius:10px;padding:12px;color:#fff;margin:12px 0">
                         <div style="display:flex;align-items:center;gap:10px">
-                            <div style="font-size:24px;font-weight:800">${data.level}</div>
+                            <div style="font-size:24px;font-weight:800">⭐ ${data.level}</div>
                             <div style="flex:1">
                                 <div style="font-size:11px;opacity:0.9;margin-bottom:4px">Уровень пользователя</div>
                                 <div style="height:4px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden">
@@ -7208,7 +6902,7 @@ document.addEventListener('click', function(e) {
                 <div style="display:flex;gap:7px;align-items:flex-end">
                     <button onclick="toggleEmojiPicker()" title="Смайлики"
                         style="width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center"
-                        onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">☺</button>
+                        onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">😊</button>
                     <textarea id="chat-input" placeholder="Напиши сообщение..." rows="1"
                         style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:13px;padding:9px 12px;outline:none;resize:none;min-height:36px;max-height:100px;line-height:1.45;transition:border-color .18s;scrollbar-width:none"
                         onfocus="this.style.borderColor='var(--border2)'" onblur="this.style.borderColor='var(--border)'"
@@ -7261,12 +6955,12 @@ document.addEventListener('click', function(e) {
 <!-- ===== КОММЕНТАРИИ ===== -->
 <div id="comments-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:20px 0;display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px">
-        Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
+        💬 Комментарии <span style="background:rgba(255,255,255,0.08);color:var(--muted);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600" id="comments-count">(0)</span>
     </div>
     <div id="comments-form" style="margin-bottom:16px;display:<?php echo isset($currentAccount) && $currentAccount ? 'block' : 'none'; ?>">
         <textarea id="comment-input" placeholder="Поделитесь мнением о манге..." style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-family:Outfit,sans-serif;font-size:13px;resize:none;outline:none;min-height:70px;max-height:150px;line-height:1.4"></textarea>
         <button onclick="submitComment()" style="margin-top:8px;padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s" onmouseover="this.style.transform='translateY(-1px)';this.style.opacity='0.9'" onmouseout="this.style.transform='translateY(0)';this.style.opacity='1'">
-            Отправить комментарий
+            📤 Отправить комментарий
         </button>
     </div>
     <div id="comments-list" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
@@ -7275,4 +6969,3 @@ document.addEventListener('click', function(e) {
 
 </body>
 </html>
-<?php while(ob_get_level()) ob_end_flush(); ?>
