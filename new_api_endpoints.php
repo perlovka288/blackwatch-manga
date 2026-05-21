@@ -380,6 +380,16 @@ if (preg_match('#^/api/admin/manga/(\d+)/tags$#', $path, $m) && $_SERVER['REQUES
     exit;
 }
 
+// Генерация slug без зависимости от intl/transliterator
+function makeSlug(string $name): string {
+    $cyr = ['а','б','в','г','д','е','ё','ж','з','и','й','к','л','м','н','о','п','р','с','т','у','ф','х','ц','ч','ш','щ','ъ','ы','ь','э','ю','я',
+            'А','Б','В','Г','Д','Е','Ё','Ж','З','И','Й','К','Л','М','Н','О','П','Р','С','Т','У','Ф','Х','Ц','Ч','Ш','Щ','Ъ','Ы','Ь','Э','Ю','Я'];
+    $lat = ['a','b','v','g','d','e','yo','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya',
+            'a','b','v','g','d','e','yo','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya'];
+    $name = str_replace($cyr, $lat, $name);
+    return trim(strtolower(preg_replace('/[^a-z0-9]+/', '-', $name)), '-');
+}
+
 // POST /api/admin/genres/add
 if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     header('Content-Type: application/json');
@@ -387,9 +397,12 @@ if ($path==='/api/admin/genres/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $input = json_decode(file_get_contents('php://input'), true);
     $name = trim($input['name'] ?? '');
     if (!$name) { echo json_encode(['success'=>false,'error'=>'Пустое название']); exit; }
-    $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/','-', transliterator_transliterate('Any-Latin; Latin-ASCII', $name)));
-    try { $pdo->prepare("INSERT INTO genres (name, slug) VALUES (?,?) ON CONFLICT DO NOTHING")->execute([$name, $slug]); echo json_encode(['success'=>true]); }
-    catch (Exception $e) { echo json_encode(['success'=>false,'error'=>$e->getMessage()]); }
+    $slug = makeSlug($name);
+    if (!$slug) $slug = 'genre-' . time();
+    try {
+        $pdo->prepare("INSERT INTO genres (name, slug) VALUES (?,?) ON CONFLICT DO NOTHING")->execute([$name, $slug]);
+        echo json_encode(['success'=>true]);
+    } catch (Exception $e) { echo json_encode(['success'=>false,'error'=>$e->getMessage()]); }
     exit;
 }
 
@@ -401,10 +414,13 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $name = trim($input['name'] ?? '');
     $isNsfw = !empty($input['is_nsfw']);
     if (!$name) { echo json_encode(['success'=>false,'error'=>'Пустое название']); exit; }
-    $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/','-', $name));
+    $slug = makeSlug($name);
+    if (!$slug) $slug = 'tag-' . time();
     $isNsfwVal = $isNsfw ? 'true' : 'false';
-    try { $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?,?,$isNsfwVal) ON CONFLICT DO NOTHING")->execute([$name, $slug]); echo json_encode(['success'=>true]); }
-    catch (Exception $e) { echo json_encode(['success'=>false,'error'=>$e->getMessage()]); }
+    try {
+        $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?,?,$isNsfwVal) ON CONFLICT DO NOTHING")->execute([$name, $slug]);
+        echo json_encode(['success'=>true]);
+    } catch (Exception $e) { echo json_encode(['success'=>false,'error'=>$e->getMessage()]); }
     exit;
 }
 
