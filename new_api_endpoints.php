@@ -402,7 +402,8 @@ if ($path==='/api/admin/tags/add' && $_SERVER['REQUEST_METHOD']==='POST') {
     $isNsfw = !empty($input['is_nsfw']);
     if (!$name) { echo json_encode(['success'=>false,'error'=>'Пустое название']); exit; }
     $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/','-', $name));
-    try { $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?,?,?) ON CONFLICT DO NOTHING")->execute([$name, $slug, $isNsfw]); echo json_encode(['success'=>true]); }
+    $isNsfwVal = $isNsfw ? 'true' : 'false';
+    try { $pdo->prepare("INSERT INTO tags (name, slug, is_nsfw) VALUES (?,?,$isNsfwVal) ON CONFLICT DO NOTHING")->execute([$name, $slug]); echo json_encode(['success'=>true]); }
     catch (Exception $e) { echo json_encode(['success'=>false,'error'=>$e->getMessage()]); }
     exit;
 }
