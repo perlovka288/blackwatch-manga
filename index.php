@@ -1,26 +1,41 @@
 <?php
-ob_start();
+// ===== ВРЕМЕННО ДЛЯ ДЕБАГА — убрать после фикса =====
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', '/tmp/bw_errors.log');
 error_reporting(E_ALL);
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
 
-// Перехватываем фатальные ошибки — показываем страницу ошибки вместо белого экрана
+ob_start();
+
+// Перехватываем фатальные ошибки — показываем страницу ошибки с точным текстом
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        while (ob_get_level()) ob_end_clean();
-        http_response_code(500);
-        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ошибка</title></head>'
-           . '<body style="background:#0c0c0c;color:#f2f2f2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">'
-           . '<div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">⚠️</div>'
-           . '<h1 style="font-size:20px;margin-bottom:8px">Что-то пошло не так</h1>'
-           . '<p style="color:#888;font-size:13px">' . htmlspecialchars($error['message'] . ' in ' . basename($error['file']) . ':' . $error['line']) . '</p>'
-           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:block;margin-top:16px">← На главную</a>'
-           . '</div></body></html>';
+        // Пишем в лог
+        @file_put_contents('/tmp/bw_errors.log',
+            date('[Y-m-d H:i:s] ') . $error['message'] . ' in ' . $error['file'] . ':' . $error['line'] . "\n",
+            FILE_APPEND
+        );
+        // Сбрасываем буфер
+        while (ob_get_level() > 0) { @ob_end_clean(); }
+        // Отправляем заголовки напрямую
+        if (!headers_sent()) {
+            header('HTTP/1.1 500 Internal Server Error');
+            header('Content-Type: text/html; charset=utf-8');
+        }
+        $msg = htmlspecialchars($error['message'] . "\n" . 'in ' . $error['file'] . ' line ' . $error['line']);
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatal Error</title></head>'
+           . '<body style="background:#0c0c0c;color:#f2f2f2;font-family:monospace;padding:32px;margin:0">'
+           . '<h2 style="color:#e8192c;margin-bottom:16px">⚠️ Fatal Error</h2>'
+           . '<pre style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:20px;white-space:pre-wrap;word-break:break-all;color:#f87171;font-size:13px;line-height:1.6">'
+           . $msg
+           . '</pre>'
+           . '<a href="/" style="color:#7c5cff;text-decoration:none;display:inline-block;margin-top:16px;font-size:13px">← На главную</a>'
+           . '</body></html>';
         flush();
     } else {
-        while (ob_get_level()) ob_end_flush();
+        while (ob_get_level() > 0) { @ob_end_flush(); }
         flush();
     }
 });
