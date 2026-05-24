@@ -4692,6 +4692,16 @@ $total=$pdo->query("SELECT COUNT(*) FROM manga")->fetchColumn();
 $botUsername=getenv('BOT_USERNAME')?:'blackwatch_manga_bot';
 // Count unread admin messages
 $msgCount=(int)$pdo->query("SELECT COUNT(*) FROM admin_messages WHERE is_deleted=FALSE")->fetchColumn();
+// Get avatar for navbar
+$navAvatarUrl = '';
+if ($currentAccount) {
+    try {
+        $navAvatarStmt = $pdo->prepare("SELECT avatar_url FROM profile_customizations WHERE account_id=?");
+        $navAvatarStmt->execute([$currentAccount['id']]);
+        $navAvatarRow = $navAvatarStmt->fetch();
+        $navAvatarUrl = $navAvatarRow['avatar_url'] ?? '';
+    } catch(Exception $e) { $navAvatarUrl = ''; }
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -5426,18 +5436,6 @@ header{
         BLACKWATCH
     </a>
 
-    <!-- Center Search -->
-    <div class="header-search-wrap" style="position:relative;flex:1;max-width:380px;margin:0 auto 0 180px">
-        <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onHeaderSearch(this.value)" autocomplete="off">
-        <button class="header-search-btn" onclick="document.getElementById('header-search-inp').focus()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        </button>
-        <button class="header-filter-btn" onclick="toggleGenreFilter()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        </button>
-        <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
-    </div>
-
     <!-- Right Actions -->
     <div class="header-actions" style="margin-left:auto">
         <button class="theme-btn" onclick="toggleTheme()" id="theme-btn" title="Тема">
@@ -5450,7 +5448,11 @@ header{
         <?php endif; ?>
         <a href="/profile" class="hbtn hbtn-user" style="gap:8px;font-weight:600">
             <div style="width:26px;height:26px;border-radius:50%;background:var(--border2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+                <?php if (!empty($navAvatarUrl)): ?>
+                <img src="<?=htmlspecialchars($navAvatarUrl)?>" alt="" style="width:100%;height:100%;object-fit:cover">
+                <?php else: ?>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <?php endif; ?>
             </div>
             <span><?=htmlspecialchars($currentAccount['username'])?></span>
         </a>
@@ -5539,6 +5541,19 @@ header{
             <div class="sarrow right hidden" id="sl-right" onclick="slideRight()">›</div>
         </div>
         </div>
+    </div>
+
+    <!-- ПОИСК над Топ недели -->
+    <div class="top-search-wrap" style="margin-bottom:14px;position:relative">
+        <span class="search-icon" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none">🔍</span>
+        <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onHeaderSearch(this.value)" autocomplete="off" style="width:100%;padding-left:42px;padding-right:42px">
+        <button class="header-search-btn" onclick="document.getElementById('header-search-inp').focus()" style="right:6px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+        <button class="header-filter-btn" onclick="toggleGenreFilter()" style="right:36px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </button>
+        <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
     </div>
 
     <!-- ТОП НЕДЕЛИ — MANGA слайдер -->
@@ -6789,7 +6804,7 @@ async function loadTopWeek() {
             
             track.innerHTML = data.items.map((m, i) => {
                 const src = (m.cover_display && !m.cover_display.startsWith('tg://')) ? m.cover_display : '';
-                const rating = m.avg_rating > 0 ? m.avg_rating : '9.1';
+                const rating = m.avg_rating > 0 ? m.avg_rating : '-';
                 return `
                 <div style="flex:0 0 240px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;transition:transform 0.25s,box-shadow 0.25s;display:flex;flex-direction:column" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 16px 40px rgba(0,0,0,0.7),0 0 0 1px var(--accent)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
                     <div style="position:relative;flex-shrink:0">
