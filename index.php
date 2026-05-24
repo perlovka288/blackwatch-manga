@@ -4702,6 +4702,30 @@ if ($currentAccount) {
         $navAvatarUrl = $navAvatarRow['avatar_url'] ?? '';
     } catch(Exception $e) { $navAvatarUrl = ''; }
 }
+
+// ===== ТОП НЕДЕЛИ И ФИЛЬТРЫ =====
+$weekStart = date('Y-m-d H:i:s', strtotime('last Monday'));
+$topOfWeekStmt = $pdo->prepare("
+    SELECT m.id, m.title, m.likes, m.cover_imgbb_url, 
+        AVG(mr.rating) as avg_rating
+    FROM manga m
+    LEFT JOIN manga_ratings mr ON m.id = mr.manga_id
+    WHERE m.created_at >= ?
+    GROUP BY m.id
+    ORDER BY m.likes DESC, avg_rating DESC
+    LIMIT 6
+");
+$topOfWeekStmt->execute([$weekStart]);
+$weeklyTop = $topOfWeekStmt->fetchAll();
+
+// Получить все жанры и теги для фильтров
+try {
+    $allGenres = $pdo->query("SELECT * FROM genres ORDER BY name")->fetchAll();
+    $allTags = $pdo->query("SELECT * FROM tags WHERE is_nsfw = FALSE ORDER BY name")->fetchAll();
+} catch (Exception $e) {
+    $allGenres = [];
+    $allTags = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -5078,6 +5102,15 @@ header{
 /* ── TOP WEEK ── */
 .top-week-section{margin-bottom:16px}
 .top-week-accent-line{position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--accent) 0%,transparent 50%)}
+.weekly-compact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:12px;margin-bottom:16px}
+.weekly-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;text-decoration:none;color:var(--text);cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column}
+.weekly-card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:0 8px 24px rgba(232,25,44,0.15)}
+.weekly-card-cover{width:100%;aspect-ratio:2/3;background:var(--card2);background-size:cover;background-position:center;border-bottom:1px solid var(--border)}
+.weekly-card-info{padding:10px;flex:1;display:flex;flex-direction:column}
+.weekly-card-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
+.weekly-card-rating{display:flex;align-items:center;gap:3px;padding:5px 7px;background:rgba(232,25,44,0.15);border-radius:5px;margin-top:auto;font-size:10px;font-weight:600;color:var(--accent);justify-content:center}
+.weekly-card-likes{font-size:10px;color:var(--muted);margin-bottom:5px}
+
 
 /* ── CONTINUE READING ── */
 .cont-section{margin-bottom:16px}
@@ -5550,11 +5583,65 @@ header{
         <button class="header-search-btn" onclick="document.getElementById('header-search-inp').focus()" style="right:6px">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         </button>
-        <button class="header-filter-btn" onclick="toggleGenreFilter()" style="right:36px">
+        <button class="header-filter-btn" onclick="toggleAdvancedFilters()" style="right:36px" title="Расширенные фильтры">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         </button>
         <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
+        
+        <!-- ADVANCED FILTERS DROPDOWN -->
+        <div id="advanced-filters-dropdown" style="position:absolute;top:calc(100% + 8px);right:0;width:340px;background:var(--card);border:1px solid var(--border2);border-radius:12px;z-index:601;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:520px;overflow-y:auto;padding:14px 16px">
+            <div style="font-weight:700;font-size:12px;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Сортировка</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+                <button onclick="applyQuickFilter('new')" style="padding:8px 12px;text-align:left;background:rgba(232,25,44,0.1);border:1px solid rgba(232,25,44,0.2);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;transition:all 0.2s">⏰ Новое</button>
+                <button onclick="applyQuickFilter('popular')" style="padding:8px 12px;text-align:left;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;transition:all 0.2s">👍 По лайкам</button>
+                <button onclick="applyQuickFilter('rating')" style="padding:8px 12px;text-align:left;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;transition:all 0.2s">⭐ По рейтингу</button>
+                <button onclick="applyQuickFilter('az')" style="padding:8px 12px;text-align:left;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;transition:all 0.2s">🔤 А-Я</button>
+            </div>
+            
+            <div style="font-weight:700;font-size:12px;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Жанры</div>
+            <div id="filter-genres-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                <?php foreach ($allGenres as $g): ?>
+                <button onclick="applyGenreFilter('<?php echo htmlspecialchars($g['slug']); ?>')" style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap">
+                    <?php echo htmlspecialchars($g['name']); ?>
+                </button>
+                <?php endforeach; ?>
+            </div>
+            
+            <div style="font-weight:700;font-size:12px;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Теги</div>
+            <div id="filter-tags-list" style="display:flex;flex-wrap:wrap;gap:6px">
+                <?php foreach ($allTags as $t): ?>
+                <button onclick="applyTagFilter('<?php echo htmlspecialchars($t['slug']); ?>')" style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.2s;white-space:nowrap">
+                    <?php echo htmlspecialchars($t['name']); ?>
+                </button>
+                <?php endforeach; ?>
+            </div>
+        </div>
     </div>
+
+    <!-- ТОП НЕДЕЛИ — КОМПАКТНАЯ СЕТКА -->
+    <?php if (!empty($weeklyTop)): ?>
+    <div class="sec-box" style="margin-bottom:20px">
+        <div class="sec-header" style="margin-bottom:14px">
+            <div class="sec-title"><div class="sec-bar" style="background:#f59e0b"></div>📈 Топ недели<span class="sec-count" style="background:var(--accent-glow);color:var(--accent)">🔥 ГОРЯЧЕЕ</span></div>
+        </div>
+        <div class="weekly-compact-grid">
+            <?php foreach ($weeklyTop as $m): 
+                $avg = $m['avg_rating'] ? round($m['avg_rating'], 1) : 0;
+                $likes = $m['likes'] ?? 0;
+                $cover = $m['cover_imgbb_url'] ? "style=\"background-image:url('" . htmlspecialchars($m['cover_imgbb_url']) . "')\"" : '';
+            ?>
+            <a href="/read/<?php echo (int)$m['id']; ?>" class="weekly-card">
+                <div class="weekly-card-cover" <?php echo $cover; ?>></div>
+                <div class="weekly-card-info">
+                    <div class="weekly-card-title"><?php echo htmlspecialchars(substr($m['title'], 0, 35)); ?></div>
+                    <div class="weekly-card-likes">👍 <?php echo $likes; ?></div>
+                    <div class="weekly-card-rating">⭐ <?php echo $avg; ?>/10</div>
+                </div>
+            </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- ТОП НЕДЕЛИ — MANGA слайдер -->
     <div id="top-week-section" style="display:none" class="top-week-section">
@@ -5939,6 +6026,41 @@ async function checkAdmin(){
 let page=0,q='',loading=false,hasMore=true,currentSort='new',activeGenre='',activeTag='';
 const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
 function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
+
+// ===== ADVANCED FILTERS =====
+function toggleAdvancedFilters(){
+    const dropdown = document.getElementById('advanced-filters-dropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyQuickFilter(sortType) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('sort', sortType);
+    params.delete('genre');
+    params.delete('tag');
+    window.location.search = params;
+}
+
+function applyGenreFilter(slug) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('genre', slug);
+    params.delete('tag');
+    window.location.search = params;
+}
+
+function applyTagFilter(slug) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('tag', slug);
+    params.delete('genre');
+    window.location.search = params;
+}
+
+// Close filters when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.header-filter-btn') && !e.target.closest('#advanced-filters-dropdown')) {
+        document.getElementById('advanced-filters-dropdown').style.display = 'none';
+    }
+});
 
 // ===== GENRE/TAG FILTER =====
 let _genreTagsData=null;
