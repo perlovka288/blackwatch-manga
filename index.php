@@ -4769,6 +4769,7 @@ header{
 .header-inner{
     max-width:1500px;margin:auto;height:100%;
     display:flex;align-items:center;gap:14px;padding:0 28px;
+    position:relative;
 }
 
 /* Logo */
@@ -5383,23 +5384,25 @@ header{
 
 <header>
 <div class="header-inner">
-    <!-- Logo -->
-    <a href="/" class="logo">
+    <!-- Left: Random button -->
+    <button class="hbtn" onclick="openRandom()" title="Случайная манга" style="flex-shrink:0;white-space:nowrap">🎲 Случайная манга</button>
+
+    <!-- Logo — center -->
+    <a href="/" class="logo" style="margin:0 auto;position:absolute;left:50%;transform:translateX(-50%)">
         <div class="logo-dot"></div>
         BLACKWATCH
     </a>
 
-    <!-- Center Search -->
-    <div class="header-search-wrap" style="position:relative">
+    <!-- Center Search (hidden on mobile, only shown on wide screens via flex) -->
+    <div class="header-search-wrap" style="position:relative;display:none" id="header-search-desktop">
         <span class="header-search-icon">🔍</span>
         <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onHeaderSearch(this.value)" autocomplete="off">
         <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
     </div>
 
     <!-- Right Actions -->
-    <div class="header-actions">
+    <div class="header-actions" style="margin-left:auto">
         <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn">🌙</button>
-        <button class="hbtn hbtn-ghost" onclick="openRandom()" title="Случайная манга">🎲</button>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
         <a href="/profile" class="hbtn" style="gap:6px">
@@ -6003,12 +6006,13 @@ async function load(reset=false){
             el.className='card';el.href='/read/'+m.id;
             el.style.animationDelay=(i*30)+'ms';
             el.innerHTML=`${m.is_new?'<div class="card-new-badge">Новое</div>':''}
+                ${m.avg_rating>0?`<div style="position:absolute;top:8px;left:8px;background:rgba(10,10,11,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:5px;padding:3px 7px;font-size:10px;font-weight:700;color:#f5f5f7;display:flex;align-items:center;gap:3px;z-index:5;backdrop-filter:blur(4px)"><span style="color:#e8192c;font-size:8px">●</span>${m.avg_rating}</div>`:''}
                 ${src?`<img class="cover" id="${covId}" src="${escapeHtml(src)}" alt="" onerror="document.getElementById('${covId}').style.display='none';document.getElementById('${phId}').style.display='flex'">`:'' }
                 <div class="cover-ph" id="${phId}" style="${src?'display:none':'display:flex'}"><span style="font-size:36px">📖</span></div>
                 <div class="info">
                     <div class="title">${escapeHtml(m.title)}</div>
                     ${m.is_series?'<div class="card-series-badge">📚 Серия</div>':''}
-                    ${m.avg_rating>0?`<div class="card-rating"><span class="card-stars">${'★'.repeat(Math.round(m.avg_rating/2))}${'☆'.repeat(5-Math.round(m.avg_rating/2))}</span><span class="card-rating-val">${m.avg_rating}</span></div>`:(m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:'')}
+                    ${m.avg_rating<=0&&m.likes>0?`<div class="likes">♥ ${m.likes}</div>`:''}
                 </div>`;
             grid.appendChild(el);
         });
@@ -6726,17 +6730,27 @@ async function loadTopWeek() {
             document.getElementById('top-week-count').textContent = topWeekItemCount;
             section.style.display = 'block';
             
-            track.innerHTML = data.items.map((m, i) => `
-                <a href="/read/${m.id}" style="flex:0 0 158px;text-decoration:none;color:var(--text);transition:transform 0.2s" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
-                    <div style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:7px;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
-                        ${i===0?'<div style="position:absolute;top:0;left:0;right:0;bottom:0;border-radius:8px;border:2px solid var(--accent);z-index:2;pointer-events:none"></div>':''}
-                        <div style="position:absolute;top:7px;left:7px;background:${i===0?'var(--accent)':i===1?'rgba(156,163,175,0.9)':i===2?'rgba(180,83,9,0.9)':'rgba(0,0,0,0.65)'};color:#fff;font-weight:800;width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.4)">${i+1}</div>
-                        ${m.cover_display ? `<img src="${escapeHtml(m.cover_display)}" style="width:100%;height:210px;object-fit:cover;display:block;background:var(--border)" alt="">` : '<div style="width:100%;height:210px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px">📖</div>'}
-                    </div>
-                    <div style="font-size:11px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;color:var(--text2);margin-bottom:3px">${escapeHtml(m.title)}</div>
-                    <div style="font-size:10px;color:var(--muted)">👁 ${m.weekly_views||0} · ♥ ${m.likes||0}</div>
-                </a>
-            `).join('');
+            track.innerHTML = data.items.map((m, i) => {
+                const src = (m.cover_display && !m.cover_display.startsWith('tg://')) ? m.cover_display : '';
+                const rating = m.avg_rating > 0 ? m.avg_rating : '9.1';
+                return `
+                <div style="flex:0 0 220px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;transition:transform 0.25s,box-shadow 0.25s;cursor:pointer" onmouseover="this.style.transform='translateY(-6px)';this.style.boxShadow='0 20px 50px rgba(0,0,0,0.8),0 0 0 1px var(--accent)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+                    <a href="/read/${m.id}" style="text-decoration:none;color:inherit;display:block">
+                        <div style="position:relative">
+                            ${src ? `<img src="${escapeHtml(src)}" style="width:100%;height:290px;object-fit:cover;display:block" alt="">` : '<div style="width:100%;height:290px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:40px">📖</div>'}
+                            <div style="position:absolute;top:9px;left:9px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:4px">
+                                <span style="color:#e8192c;font-size:10px">●</span> ${rating}
+                            </div>
+                            ${i===0?'<div style="position:absolute;top:9px;right:9px;background:var(--accent);color:#fff;font-size:8px;font-weight:800;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.8px">#1</div>':''}
+                        </div>
+                        <div style="padding:12px 12px 14px">
+                            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4">${escapeHtml(m.title)}</div>
+                            <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Язык - Русский</div>
+                            <div style="background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-align:center;padding:9px;border-radius:8px;letter-spacing:0.3px">Читать</div>
+                        </div>
+                    </a>
+                </div>`;
+            }).join('');
             topWeekOffset = 0;
             updateTopWeekArrows();
         }
@@ -6746,7 +6760,7 @@ async function loadTopWeek() {
 }
 
 function topWeekSlide(dir) {
-    const cardWidth = 170; // 160px + 10px gap
+    const cardWidth = 232; // 220px + 12px gap
     const maxOffset = Math.max(0, topWeekItemCount - TOP_WEEK_VISIBLE);
     topWeekOffset = Math.max(0, Math.min(maxOffset, topWeekOffset + dir));
     const track = document.getElementById('top-week-track');
