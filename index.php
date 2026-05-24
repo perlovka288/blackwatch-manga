@@ -401,15 +401,10 @@ if (preg_match('~^/api/messages(?:/(\d+))?$~', $path, $m)) {
 if ($path === '/api/top-week') {
     try {
         $week_start = date('Y-m-d H:i:s', strtotime('monday this week'));
-        $stmt = $pdo->prepare("SELECT m.id, m.title, m.cover_imgbb_url as cover_display, COUNT(DISTINCT rp.user_id) as weekly_views, COALESCE(m.likes, 0) as likes, COUNT(DISTINCT mc.id) as comment_count, COALESCE(AVG(mr.rating), 0) as avg_rating, COUNT(mr.rating) as rating_count FROM manga m LEFT JOIN reading_progress rp ON m.id = rp.manga_id AND rp.updated_at >= ? LEFT JOIN manga_comments mc ON m.id = mc.manga_id AND mc.created_at >= ? LEFT JOIN manga_ratings mr ON m.id = mr.manga_id WHERE m.id IS NOT NULL GROUP BY m.id ORDER BY weekly_views DESC, COALESCE(AVG(mr.rating), 0) DESC, m.likes DESC, comment_count DESC LIMIT 15");
+        $stmt = $pdo->prepare("SELECT m.id, m.title, m.cover_imgbb_url as cover_display, COUNT(DISTINCT rp.user_id) as weekly_views, COALESCE(m.likes, 0) as likes, COUNT(DISTINCT mc.id) as comment_count FROM manga m LEFT JOIN reading_progress rp ON m.id = rp.manga_id AND rp.updated_at >= ? LEFT JOIN manga_comments mc ON m.id = mc.manga_id AND mc.created_at >= ? WHERE m.id IS NOT NULL GROUP BY m.id ORDER BY weekly_views DESC, m.likes DESC, comment_count DESC LIMIT 15");
         $stmt->execute([$week_start, $week_start]);
-        $items = $stmt->fetchAll();
-        foreach ($items as &$item) {
-            $item['avg_rating'] = $item['avg_rating'] > 0 ? round((float)$item['avg_rating'], 1) : 0;
-        }
-        unset($item);
         header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'items' => $items]);
+        echo json_encode(['success' => true, 'items' => $stmt->fetchAll()]);
     } catch (Exception $e) { echo json_encode(['success' => false]); }
     exit;
 }
@@ -1068,7 +1063,7 @@ input,textarea,select{font-family:inherit}
             <button class="btn btn-green btn-sm" onclick="admNav('add-chapter', document.querySelector('.adm-nav-item:nth-child(5)'))">
                 + Глава
             </button>
-            <button class="btn btn-primary btn-sm" onclick="openAddMangaModal()">
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='/'">
                 ➕ Манга
             </button>
         </div>
@@ -1097,7 +1092,7 @@ input,textarea,select{font-family:inherit}
                     <div class="adm-section-title">⚡ Быстрые действия</div>
                 </div>
                 <div class="qa-grid">
-                    <button class="qa-btn qa-green" onclick="openAddMangaModal()">
+                    <button class="qa-btn qa-green" onclick="window.location.href='/'">
                         <div class="qa-btn-icon">➕</div>
                         <div class="qa-btn-label">Добавить мангу</div>
                         <div class="qa-btn-sub">ZIP, обложка, описание</div>
@@ -1544,96 +1539,6 @@ autoSlug('adm-new-tag-name','adm-new-tag-slug');
 let _jszip=null;
 async function loadJSZip(){if(_jszip)return _jszip;await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});_jszip=window;return _jszip;}
 async function uploadOneToImgbb(blob,keys){for(const key of keys){try{const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=()=>rej(new Error('read error'));r.readAsDataURL(blob);});const fd=new FormData();fd.append('key',key);fd.append('image',b64);const r=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});if(r.ok){const d=await r.json();if(d?.data?.url)return d.data.url;}}catch(e){}}return null;}
-
-// ── ADD MANGA MODAL (from admin topbar button) ──
-let _admAmType='single',_admAmCoverFile=null,_admAmPageFiles=[];
-function openAddMangaModal(){
-    const ex=document.getElementById('adm-add-manga-overlay');
-    if(ex){ex.style.display='flex';return;}
-    const overlay=document.createElement('div');
-    overlay.id='adm-add-manga-overlay';
-    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)';
-    overlay.innerHTML=`<div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:24px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto;position:relative;scrollbar-width:thin">
-        <button onclick="document.getElementById('adm-add-manga-overlay').style.display='none'" style="position:absolute;top:14px;right:14px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);width:30px;height:30px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
-        <div style="font-size:16px;font-weight:700;margin-bottom:4px">➕ Добавить мангу</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:18px">Загрузи обложку, страницы и заполни название</div>
-        <div style="display:flex;gap:6px;margin-bottom:14px">
-            <button id="adm-am-type-single" onclick="admAmSetType('single')" style="flex:1;padding:8px;border-radius:7px;border:1px solid var(--accent);background:rgba(232,25,44,.1);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📄 Обычная</button>
-            <button id="adm-am-type-series" onclick="admAmSetType('series')" style="flex:1;padding:8px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📚 Серия</button>
-        </div>
-        <div style="margin-bottom:10px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px">Название</label>
-        <input id="adm-am-title" type="text" placeholder="Название манги..." class="adm-inp"></div>
-        <div style="margin-bottom:10px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px">Описание</label>
-        <textarea id="adm-am-desc" placeholder="Краткое описание..." class="adm-inp adm-textarea"></textarea></div>
-        <div style="margin-bottom:10px"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:5px">Обложка</label>
-        <div class="adm-upload-zone"><input type="file" id="adm-am-cover-inp" accept="image/*" onchange="admAmCoverChange(this)">
-        <div class="adm-upload-icon">🖼</div><div class="adm-upload-text">Загрузить обложку</div>
-        <div class="adm-preview-count" id="adm-am-cover-prev"></div></div></div>
-        <div id="adm-am-pages-wrap"><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:8px">Страницы</label>
-        <div class="adm-file-tabs"><div class="adm-ftab active" id="adm-am-tab-zip" onclick="admAmSwitchTab('zip')">📦 ZIP</div><div class="adm-ftab" id="adm-am-tab-photos" onclick="admAmSwitchTab('photos')">📸 Фото</div></div>
-        <div class="adm-fpanel active" id="adm-am-panel-zip"><div class="adm-upload-zone"><input type="file" id="adm-am-zip-inp" accept=".zip" onchange="admAmZipChange(this)">
-        <div class="adm-upload-icon">📦</div><div class="adm-upload-text">ZIP архив со страницами</div>
-        <div class="adm-preview-count" id="adm-am-zip-prev"></div></div></div>
-        <div class="adm-fpanel" id="adm-am-panel-photos"><div class="adm-upload-zone"><input type="file" id="adm-am-photos-inp" accept="image/*" multiple onchange="admAmPhotosChange(this)">
-        <div class="adm-upload-icon">📸</div><div class="adm-upload-text">Выбери страницы</div>
-        <div class="adm-preview-count" id="adm-am-photos-prev"></div></div></div></div>
-        <div class="adm-upbar" id="adm-am-upbar"><div class="adm-upbar-fill" id="adm-am-upbar-fill"></div></div>
-        <button class="btn btn-primary btn-wide" id="adm-am-submit" onclick="admAmSubmit()" style="margin-top:12px">
-            <span class="adm-spinner" id="adm-am-spinner"></span><span id="adm-am-btn-label" class="btn-label">📤 Загрузить мангу</span>
-        </button>
-        <div class="adm-result" id="adm-am-result"></div>
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.style.display='none';});
-}
-function admAmSetType(t){
-    _admAmType=t;
-    ['single','series'].forEach(s=>{
-        const el=document.getElementById('adm-am-type-'+s);
-        if(!el)return;
-        el.style.borderColor=t===s?'var(--accent)':'var(--border)';
-        el.style.background=t===s?'rgba(232,25,44,.1)':'transparent';
-        el.style.color=t===s?'var(--accent)':'var(--muted)';
-    });
-    const pw=document.getElementById('adm-am-pages-wrap');
-    if(pw)pw.style.display=t==='single'?'block':'none';
-}
-function admAmSwitchTab(tab){
-    ['zip','photos'].forEach(t=>{
-        const p=document.getElementById('adm-am-panel-'+t);const b=document.getElementById('adm-am-tab-'+t);
-        if(p)p.classList.toggle('active',t===tab);if(b)b.classList.toggle('active',t===tab);
-    });
-}
-function admAmCoverChange(inp){if(!inp.files[0])return;_admAmCoverFile=inp.files[0];const p=document.getElementById('adm-am-cover-prev');if(p)p.textContent='✅ '+inp.files[0].name;}
-function admAmPhotosChange(inp){_admAmPageFiles=Array.from(inp.files).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));const p=document.getElementById('adm-am-photos-prev');if(p)p.textContent=`📸 ${_admAmPageFiles.length} стр.`;}
-async function admAmZipChange(inp){if(!inp.files[0])return;const prev=document.getElementById('adm-am-zip-prev');if(prev)prev.textContent='⏳ Распаковка...';
-    try{const{JSZip}=await loadJSZip();const zip=await JSZip.loadAsync(inp.files[0]);const allowed=['jpg','jpeg','png','webp','gif'];const files=[];zip.forEach((p,f)=>{if(f.dir)return;const ext=p.split('.').pop().toLowerCase();if(!allowed.includes(ext))return;files.push({path:p,file:f,lastMod:f.date||new Date(0),name:p.split('/').pop()});});
-    files.sort((a,b)=>{const dt=a.lastMod-b.lastMod;return dt!==0?dt:a.name.localeCompare(b.name,undefined,{numeric:true});});
-    const blobs=[];for(const{path,file}of files){const ext=path.split('.').pop().toLowerCase();const mime={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif'}[ext]||'image/jpeg';const blob=await file.async('blob');blobs.push(new File([blob],path.replace(/\//g,'_'),{type:mime}));}
-    _admAmPageFiles=blobs;if(prev)prev.textContent=`📦 ${blobs.length} стр. распаковано`;}catch(e){if(prev)prev.textContent='❌ '+e.message;}}
-async function admAmSubmit(){
-    const title=document.getElementById('adm-am-title')?.value.trim();
-    const desc=document.getElementById('adm-am-desc')?.value.trim()||'';
-    if(!title){alert('❌ Укажи название!');return;}
-    const btn=document.getElementById('adm-am-submit');const result=document.getElementById('adm-am-result');
-    const upbar=document.getElementById('adm-am-upbar');const upfill=document.getElementById('adm-am-upbar-fill');
-    if(btn){btn.disabled=true;btn.classList.add('loading');}if(upbar)upbar.classList.add('active');if(upfill)upfill.style.width='2%';
-    try{
-        const kr=await fetch('/api/imgbb-keys?tg_user_id='+getTgUser());const kd=await kr.json();
-        if(!kd.success){alert('❌ Нет доступа к ключам');if(btn){btn.disabled=false;btn.classList.remove('loading');}return;}
-        const keys=kd.keys;
-        let coverUrl='';
-        if(_admAmCoverFile){if(upfill)upfill.style.width='10%';coverUrl=await uploadOneToImgbb(_admAmCoverFile,keys)||'';}
-        const pageUrls=[];
-        if(_admAmType==='single'&&_admAmPageFiles.length){for(let i=0;i<_admAmPageFiles.length;i++){if(upfill)upfill.style.width=(10+Math.round(i/_admAmPageFiles.length*80))+'%';const u=await uploadOneToImgbb(_admAmPageFiles[i],keys);if(u)pageUrls.push(u);}}
-        if(upfill)upfill.style.width='95%';
-        const res=await fetch('/api/save-manga',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description:desc,cover_url:coverUrl,page_urls:pageUrls,is_series:_admAmType==='series',tg_user_id:getTgUser()})});
-        const data=await res.json();if(upfill)upfill.style.width='100%';
-        if(data.success){if(result){result.className='adm-result success';result.textContent=`✅ Манга "${title}" добавлена!`;}document.getElementById('adm-am-title').value='';document.getElementById('adm-am-desc').value='';_admAmCoverFile=null;_admAmPageFiles=[];const cp=document.getElementById('adm-am-cover-prev');if(cp)cp.textContent='';}
-        else{if(result){result.className='adm-result error';result.textContent='❌ '+(data.error||'Ошибка');}}
-    }catch(e){if(result){result.className='adm-result error';result.textContent='❌ '+e.message;}}
-    if(btn){btn.disabled=false;btn.classList.remove('loading');}
-}
 
 // ── INIT ──
 admLoadStats();
@@ -4816,13 +4721,12 @@ $weekStart = date('Y-m-d H:i:s', strtotime('last Monday'));
 try {
     $topWeekStmt = $pdo->prepare("
         SELECT m.id, m.title, m.likes, m.cover_imgbb_url, m.file_id, 
-            COALESCE(AVG(mr.rating), 0) as avg_rating,
-            COUNT(mr.rating) as rating_count
+            COALESCE(AVG(mr.rating), 0) as avg_rating
         FROM manga m
         LEFT JOIN manga_ratings mr ON m.id = mr.manga_id
-        LEFT JOIN reading_progress rp ON m.id = rp.manga_id AND rp.updated_at >= ?
+        WHERE m.created_at >= ?
         GROUP BY m.id
-        ORDER BY COUNT(DISTINCT rp.user_id) DESC, COALESCE(AVG(mr.rating), 0) DESC, m.likes DESC
+        ORDER BY m.likes DESC, avg_rating DESC
         LIMIT 6
     ");
     $topWeekStmt->execute([$weekStart]);
@@ -5742,41 +5646,6 @@ header{
                 <div style="font-size:10px;color:var(--muted)">Ур. <?=(int)$tw['level']?> · <?=(int)$tw['weekly_pages']?> стр. за неделю</div>
             </div>
             <div style="font-size:10px;color:var(--muted);text-align:right"><?=(int)$tw['weekly_chapters']?> гл.</div>
-        </a>
-        <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <!-- ТОП НЕДЕЛИ МАНГИ — минималистичный стиль -->
-    <?php if (!empty($weeklyTop)): ?>
-    <div style="margin-bottom:18px">
-        <div class="sec-header" style="margin-bottom:12px">
-            <div class="sec-title"><div class="sec-bar"></div>Топ недели<span class="sec-count" id="top-week-static-count"><?=count($weeklyTop)?></span></div>
-        </div>
-        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch" id="top-week-static-list">
-        <?php foreach ($weeklyTop as $idx => $m):
-            $avg = $m['avg_rating'] > 0 ? round((float)$m['avg_rating'], 1) : null;
-            $ratingCnt = (int)($m['rating_count'] ?? 0);
-            $cover = $m['cover_imgbb_url'] ? htmlspecialchars($m['cover_imgbb_url']) : '';
-        ?>
-        <a href="/read/<?=(int)$m['id']?>" style="flex:0 0 130px;text-decoration:none;color:var(--text);position:relative">
-            <div style="position:relative">
-                <?php if ($cover): ?>
-                <img src="<?=$cover?>" alt="" style="width:130px;height:175px;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--border)" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                <div style="display:none;width:130px;height:175px;border-radius:8px;background:var(--card2);align-items:center;justify-content:center;font-size:28px;border:1px solid var(--border)">📖</div>
-                <?php else: ?>
-                <div style="width:130px;height:175px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid var(--border)">📖</div>
-                <?php endif; ?>
-                <div style="position:absolute;top:6px;left:6px;background:var(--accent);color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:.5px">#<?=$idx+1?></div>
-                <?php if ($avg !== null): ?>
-                <div style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.75);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;backdrop-filter:blur(4px)">★ <?=$avg?></div>
-                <?php endif; ?>
-            </div>
-            <div style="margin-top:7px;font-size:11px;font-weight:600;color:var(--text2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4"><?=htmlspecialchars(substr($m['title'],0,50))?></div>
-            <?php if ($avg === null): ?>
-            <div style="margin-top:3px;font-size:10px;color:var(--muted)">👍 <?=(int)$m['likes']?></div>
-            <?php endif; ?>
         </a>
         <?php endforeach; ?>
         </div>
@@ -6950,7 +6819,8 @@ function selectMessageUser(userId, username) {
 // Функции для топа недели
 let topWeekOffset = 0;
 let topWeekItemCount = 0;
-const TOP_WEEK_VISIBLE = 4; // видимых карточек
+const TW_CARD_W = 292; // ширина карточки + gap
+const TOP_WEEK_VISIBLE = 4;
 
 async function loadTopWeek() {
     try {
@@ -6960,26 +6830,29 @@ async function loadTopWeek() {
             const section = document.getElementById('top-week-section');
             const track = document.getElementById('top-week-track');
             if (!section || !track) return;
-            
+
             topWeekItemCount = data.items.length;
             document.getElementById('top-week-count').textContent = topWeekItemCount;
             section.style.display = 'block';
-            
+
             track.innerHTML = data.items.map((m, i) => {
                 const src = (m.cover_display && !m.cover_display.startsWith('tg://')) ? m.cover_display : '';
-                const rating = m.avg_rating > 0 ? '★ ' + m.avg_rating : (m.likes > 0 ? '♥ ' + m.likes : '—');
+                const ratingVal = m.avg_rating > 0 ? parseFloat(m.avg_rating).toFixed(1) : null;
+                const imgHtml = src
+                    ? `<img src="${escapeHtml(src)}" style="width:86px;height:118px;object-fit:cover;border-radius:8px;display:block;flex-shrink:0;border:1px solid var(--border)" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+                    : '';
+                const phHtml = `<div style="${src?'display:none;':''}width:86px;height:118px;border-radius:8px;background:var(--card2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid var(--border)">📖</div>`;
                 return `
-                <div style="flex:0 0 240px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;transition:transform 0.25s,box-shadow 0.25s;display:flex;flex-direction:column" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 16px 40px rgba(0,0,0,0.7),0 0 0 1px var(--accent)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+                <div style="flex:0 0 280px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;gap:11px;align-items:flex-start;transition:border-color .2s,box-shadow .2s;cursor:pointer" onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 8px 28px rgba(0,0,0,0.5)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
                     <div style="position:relative;flex-shrink:0">
-                        ${src ? `<img src="${escapeHtml(src)}" style="width:100%;height:320px;object-fit:cover;display:block" alt="" loading="lazy">` : '<div style="width:100%;height:320px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:40px">?</div>'}
-                        <div style="position:absolute;top:8px;left:8px;background:rgba(10,10,11,0.88);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:700;color:#f5f5f7;display:flex;align-items:center;gap:4px;backdrop-filter:blur(4px)">
-                            <span style="color:#e8192c;font-size:9px;line-height:1">&#9679;</span> ${rating}
-                        </div>
+                        ${imgHtml}${phHtml}
+                        ${ratingVal ? `<div style="position:absolute;top:5px;left:5px;background:rgba(10,10,11,0.85);border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;backdrop-filter:blur(4px)"><span style="color:#f59e0b;font-size:9px">★</span>${ratingVal}</div>` : ''}
                     </div>
-                    <div style="padding:12px 12px 14px;display:flex;flex-direction:column;gap:6px;flex:1">
-                        <div style="font-size:13px;font-weight:700;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35">${escapeHtml(m.title)}</div>
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;padding-top:2px">
+                        <div style="font-size:12px;font-weight:700;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(m.title)}</div>
                         <div style="font-size:10px;color:var(--muted)">Язык - Русский</div>
-                        <a href="/read/${m.id}" style="display:block;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-align:center;padding:9px;border-radius:8px;text-decoration:none;letter-spacing:0.3px;transition:background 0.2s;margin-top:auto" onmouseover="this.style.background='var(--accent2)'" onmouseout="this.style.background='var(--accent)'">Читать</a>
+                        ${ratingVal ? `<div style="font-size:10px;color:#f59e0b;font-weight:600">★ ${ratingVal} / 10</div>` : `<div style="font-size:10px;color:var(--muted)">♥ ${m.likes||0}</div>`}
+                        <a href="/read/${m.id}" style="display:block;background:var(--accent);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:7px 10px;border-radius:7px;text-decoration:none;transition:background .18s;margin-top:auto" onmouseover="this.style.background='var(--accent2)'" onmouseout="this.style.background='var(--accent)'">Читать</a>
                     </div>
                 </div>`;
             }).join('');
@@ -6992,11 +6865,10 @@ async function loadTopWeek() {
 }
 
 function topWeekSlide(dir) {
-    const cardWidth = 232; // 220px + 12px gap
     const maxOffset = Math.max(0, topWeekItemCount - TOP_WEEK_VISIBLE);
     topWeekOffset = Math.max(0, Math.min(maxOffset, topWeekOffset + dir));
     const track = document.getElementById('top-week-track');
-    if (track) track.style.transform = `translateX(-${topWeekOffset * cardWidth}px)`;
+    if (track) track.style.transform = `translateX(-${topWeekOffset * TW_CARD_W}px)`;
     updateTopWeekArrows();
 }
 
