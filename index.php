@@ -4774,8 +4774,8 @@ header{
 
 /* Logo */
 .logo{
-    font-family:'Bebas Neue',sans-serif;font-size:20px;
-    letter-spacing:5px;color:var(--text);
+    font-family:'Bebas Neue',sans-serif;font-size:22px;
+    letter-spacing:5px;color:var(--accent);
     text-decoration:none;flex-shrink:0;transition:opacity var(--t);
     display:flex;align-items:center;gap:8px;
 }
@@ -4786,24 +4786,37 @@ header{
     box-shadow:0 0 10px var(--accent);
 }
 
-/* Header search — center */
+/* Header search redesign — mockup style */
 .header-search-wrap{
-    flex:1;max-width:500px;margin:0 auto;
+    flex:1;max-width:460px;margin:0 auto;
     position:relative;
+    display:flex;align-items:center;
 }
 .header-search{
-    width:100%;background:rgba(255,255,255,.04);
-    border:1px solid var(--border);border-radius:8px;
+    width:100%;background:rgba(255,255,255,.05);
+    border:1px solid var(--border2);border-radius:10px;
     color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;
-    padding:9px 18px 9px 40px;
+    padding:10px 82px 10px 16px;
     transition:all var(--t);outline:none;letter-spacing:.1px;
 }
-.light .header-search{background:rgba(0,0,0,.04)}
+.light .header-search{background:rgba(0,0,0,.05)}
 .header-search:focus{
-    border-color:var(--accent);
-    background:rgba(255,255,255,.06);
-    box-shadow:0 0 0 3px var(--accent-glow);
+    border-color:var(--border2);
+    background:rgba(255,255,255,.07);
 }
+.header-filter-btn,.header-search-btn{
+    position:absolute;top:50%;transform:translateY(-50%);
+    border:none;background:transparent;color:var(--muted);
+    width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:color var(--t);border-radius:6px;
+}
+.header-filter-btn{right:36px}
+.header-filter-btn:hover,.header-search-btn:hover{color:var(--text)}
+.header-search-btn{
+    right:6px;background:var(--accent);color:#fff;border-radius:7px;
+    width:28px;height:28px;
+}
+.header-search-btn:hover{background:var(--accent2)}
 .header-search-icon{
     position:absolute;left:14px;top:50%;transform:translateY(-50%);
     color:var(--muted);font-size:14px;pointer-events:none;
@@ -4811,6 +4824,24 @@ header{
 .light .search{background:var(--card)}
 .search:focus{border-color:var(--accent);background:var(--card2);box-shadow:0 0 0 3px var(--accent-glow)}
 .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
+
+/* hbtn-random style (left button) */
+.hbtn-random{
+    border:1px solid var(--border2)!important;
+    color:var(--text2)!important;
+    font-size:12px!important;
+    display:flex!important;align-items:center!important;gap:6px!important;
+}
+.hbtn-random:hover{border-color:var(--text)!important;color:var(--text)!important;}
+
+/* hbtn-user */
+.hbtn-user{
+    background:var(--card2)!important;
+    border:1px solid var(--border2)!important;
+    border-radius:30px!important;
+    padding:5px 12px 5px 5px!important;
+    color:var(--text)!important;
+}
 .search-dropdown{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);z-index:300;overflow:hidden;max-height:400px;overflow-y:auto;opacity:0;transform:translateY(-8px) scale(.98);transition:opacity .2s ease,transform .2s ease;pointer-events:none}
 .search-dropdown.open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .sd-item{display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;transition:background .12s;text-decoration:none;color:var(--text);border-bottom:1px solid var(--border)}
@@ -5385,34 +5416,49 @@ header{
 <header>
 <div class="header-inner">
     <!-- Left: Random button -->
-    <button class="hbtn" onclick="openRandom()" title="Случайная манга" style="flex-shrink:0;white-space:nowrap">🎲 Случайная манга</button>
+    <button class="hbtn hbtn-random" onclick="openRandom()" title="Случайная манга" style="flex-shrink:0;white-space:nowrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+        Случайная манга
+    </button>
 
     <!-- Logo — center -->
-    <a href="/" class="logo" style="margin:0 auto;position:absolute;left:50%;transform:translateX(-50%)">
-        <div class="logo-dot"></div>
+    <a href="/" class="logo" style="position:absolute;left:50%;transform:translateX(-50%)">
         BLACKWATCH
     </a>
 
-    <!-- Center Search (hidden on mobile, only shown on wide screens via flex) -->
-    <div class="header-search-wrap" style="position:relative;display:none" id="header-search-desktop">
-        <span class="header-search-icon">🔍</span>
+    <!-- Center Search -->
+    <div class="header-search-wrap" style="position:relative;flex:1;max-width:380px;margin:0 auto 0 180px">
         <input class="header-search" type="text" placeholder="Поиск манги..." id="header-search-inp" oninput="onHeaderSearch(this.value)" autocomplete="off">
+        <button class="header-search-btn" onclick="document.getElementById('header-search-inp').focus()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+        <button class="header-filter-btn" onclick="toggleGenreFilter()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </button>
         <div id="header-search-dropdown" style="position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--card2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;z-index:600;display:none;box-shadow:0 12px 40px rgba(0,0,0,0.7);max-height:380px;overflow-y:auto"></div>
     </div>
 
     <!-- Right Actions -->
     <div class="header-actions" style="margin-left:auto">
-        <button class="theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn">🌙</button>
+        <button class="theme-btn" onclick="toggleTheme()" id="theme-btn" title="Тема">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
         <?php if ($currentAccount): ?>
         <?php $isHdrAdmin = in_array((int)($currentAccount['tg_user_id']??0), $hardcodedAdmins) || !empty($currentAccount['is_admin']); ?>
-        <a href="/profile" class="hbtn" style="gap:6px">
-            👤 <span><?=htmlspecialchars($currentAccount['username'])?><?php if($isHdrAdmin):?> <span style="color:#ef4444;font-size:10px;font-weight:700">⚡</span><?php endif;?></span>
+        <?php if($isHdrAdmin): ?>
+        <a href="/admin" class="hbtn hbtn-accent" style="font-weight:700">Админ</a>
+        <?php endif; ?>
+        <a href="/profile" class="hbtn hbtn-user" style="gap:8px;font-weight:600">
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--border2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <span><?=htmlspecialchars($currentAccount['username'])?></span>
         </a>
         <?php else: ?>
         <a href="/login" class="hbtn">Войти</a>
         <a href="/register" class="hbtn hbtn-accent">Регистрация</a>
         <?php endif; ?>
-        <button class="hbtn hbtn-admin" id="admin-btn" onclick="openAdminPanel()">⚙️ <span>Админ</span></button>
+        <button class="hbtn hbtn-admin" id="admin-btn" style="display:none" onclick="window.location='/admin'">Админ</button>
     </div>
 </div>
 </header>
@@ -5420,19 +5466,29 @@ header{
 <!-- SIDEBAR ICONS -->
 <div class="sidebar-icons">
     <div class="sidebar-rail">
-        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">📚</a>
-        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
-            💬
+        <a href="/library" class="sidebar-icon-btn" title="Библиотека" style="text-decoration:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             <span class="sidebar-badge" id="messages-badge" style="display:none"></span>
+        </a>
+        <button class="sidebar-icon-btn" onclick="openMessagesModal()" title="Сообщения" id="messages-btn" style="position:relative">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             <span class="sidebar-badge" id="msg-badge" style="display:none"></span>
         </button>
         <?php if ($currentAccount): ?>
-        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">👤</a>
+        <a href="/profile" class="sidebar-icon-btn" title="Профиль — <?=htmlspecialchars($currentAccount['username'])?>" style="text-decoration:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </a>
         <?php endif; ?>
-        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">🤖</a>
-        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">🛟</button>
+        <a href="https://t.me/<?=htmlspecialchars($botUsername)?>" target="_blank" class="sidebar-icon-btn" title="Telegram-бот" style="text-decoration:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/></svg>
+        </a>
+        <button class="sidebar-icon-btn" onclick="openSupportModal()" title="Поддержка">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
         <div style="width:100%;height:1px;background:var(--border);margin:2px 0"></div>
-        <button class="sidebar-icon-btn theme-btn" onclick="toggleTheme()" title="Тема" id="theme-btn-side">🌙</button>
+        <button class="sidebar-icon-btn" onclick="toggleTheme()" title="Тема" id="theme-btn-side">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="theme-icon-side"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
     </div>
 </div>
 
@@ -5492,8 +5548,8 @@ header{
         <div class="sec-header" style="margin-bottom:14px">
             <div class="sec-title"><div class="sec-bar" style="background:#f59e0b"></div>Топ недели<span class="sec-count" style="margin-left:2px"><span id="top-week-count">0</span></span></div>
             <div style="display:flex;gap:5px">
-                <button id="tw-left" onclick="topWeekSlide(-1)" class="sarrow" style="width:30px;height:30px;font-size:15px">‹</button>
-                <button id="tw-right" onclick="topWeekSlide(1)" class="sarrow" style="width:30px;height:30px;font-size:15px">›</button>
+                <button id="tw-left" onclick="topWeekSlide(-1)" class="sarrow" style="width:30px;height:30px;font-size:15px">&#8249;</button>
+                <button id="tw-right" onclick="topWeekSlide(1)" class="sarrow" style="width:30px;height:30px;font-size:15px">&#8250;</button>
             </div>
         </div>
         <div style="position:relative;overflow:hidden">
@@ -5840,16 +5896,17 @@ header{
 (function(){
     const saved=localStorage.getItem('bw_theme')||'dark';
     if(saved==='light')document.body.classList.add('light');
-    const icon = saved==='light'?'🌙':'☀️';
-    if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
-    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
 })();
 function toggleTheme(){
     const isLight=document.body.classList.toggle('light');
     localStorage.setItem('bw_theme',isLight?'light':'dark');
-    const icon=isLight?'🌙':'☀️';
-    if(document.getElementById('theme-btn')) document.getElementById('theme-btn').textContent=icon;
-    if(document.getElementById('theme-btn-side')) document.getElementById('theme-btn-side').textContent=icon;
+    const moonSvg='<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    const sunSvg='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+    const icon=isLight?moonSvg:sunSvg;
+    const btn=document.getElementById('theme-btn');
+    if(btn){const svg=btn.querySelector('svg');if(svg)svg.innerHTML=icon;}
+    const sideBtn=document.getElementById('theme-btn-side');
+    if(sideBtn){const svg=sideBtn.querySelector('#theme-icon-side');if(svg)svg.innerHTML=icon;}
 }
 
 // ===== TG =====
@@ -6734,21 +6791,18 @@ async function loadTopWeek() {
                 const src = (m.cover_display && !m.cover_display.startsWith('tg://')) ? m.cover_display : '';
                 const rating = m.avg_rating > 0 ? m.avg_rating : '9.1';
                 return `
-                <div style="flex:0 0 220px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;transition:transform 0.25s,box-shadow 0.25s;cursor:pointer" onmouseover="this.style.transform='translateY(-6px)';this.style.boxShadow='0 20px 50px rgba(0,0,0,0.8),0 0 0 1px var(--accent)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-                    <a href="/read/${m.id}" style="text-decoration:none;color:inherit;display:block">
-                        <div style="position:relative">
-                            ${src ? `<img src="${escapeHtml(src)}" style="width:100%;height:290px;object-fit:cover;display:block" alt="">` : '<div style="width:100%;height:290px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:40px">📖</div>'}
-                            <div style="position:absolute;top:9px;left:9px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:4px">
-                                <span style="color:#e8192c;font-size:10px">●</span> ${rating}
-                            </div>
-                            ${i===0?'<div style="position:absolute;top:9px;right:9px;background:var(--accent);color:#fff;font-size:8px;font-weight:800;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.8px">#1</div>':''}
+                <div style="flex:0 0 240px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;transition:transform 0.25s,box-shadow 0.25s;display:flex;flex-direction:column" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 16px 40px rgba(0,0,0,0.7),0 0 0 1px var(--accent)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+                    <div style="position:relative;flex-shrink:0">
+                        ${src ? `<img src="${escapeHtml(src)}" style="width:100%;height:320px;object-fit:cover;display:block" alt="" loading="lazy">` : '<div style="width:100%;height:320px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:40px">?</div>'}
+                        <div style="position:absolute;top:8px;left:8px;background:rgba(10,10,11,0.88);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:700;color:#f5f5f7;display:flex;align-items:center;gap:4px;backdrop-filter:blur(4px)">
+                            <span style="color:#e8192c;font-size:9px;line-height:1">&#9679;</span> ${rating}
                         </div>
-                        <div style="padding:12px 12px 14px">
-                            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4">${escapeHtml(m.title)}</div>
-                            <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Язык - Русский</div>
-                            <div style="background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-align:center;padding:9px;border-radius:8px;letter-spacing:0.3px">Читать</div>
-                        </div>
-                    </a>
+                    </div>
+                    <div style="padding:12px 12px 14px;display:flex;flex-direction:column;gap:6px;flex:1">
+                        <div style="font-size:13px;font-weight:700;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35">${escapeHtml(m.title)}</div>
+                        <div style="font-size:10px;color:var(--muted)">Язык - Русский</div>
+                        <a href="/read/${m.id}" style="display:block;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-align:center;padding:9px;border-radius:8px;text-decoration:none;letter-spacing:0.3px;transition:background 0.2s;margin-top:auto" onmouseover="this.style.background='var(--accent2)'" onmouseout="this.style.background='var(--accent)'">Читать</a>
+                    </div>
                 </div>`;
             }).join('');
             topWeekOffset = 0;
