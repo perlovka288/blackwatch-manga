@@ -5652,17 +5652,18 @@ header{
     </div>
     <?php endif; ?>
 
-    <!-- FILTERS -->
-    <div class="filters">
-        <button class="filter-btn active" id="f-new" onclick="setFilter('new')">🕒 Новые</button>
-        <button class="filter-btn" id="f-popular" onclick="setFilter('popular')">🔥 Популярные</button>
-        <button class="filter-btn" id="f-alpha" onclick="setFilter('alpha')">🔤 А-Я</button>
-        <button class="filter-btn" id="f-genre-tag" onclick="toggleGenreFilter()" style="gap:5px">🏷 Жанр/Тег</button>
+    <!-- СЧЁТЧИК МАНГ -->
+    <div style="display:flex;align-items:center;justify-content:flex-end;padding:16px 0 10px">
         <span class="stats-label" id="stats">Манг: <strong><?=(int)$total?></strong></span>
     </div>
 
-    <!-- GENRE/TAG FILTER PANEL -->
+    <!-- GENRE/TAG FILTER PANEL (открывается по кнопке фильтра в поиске) -->
     <div id="genre-filter-panel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px">
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+            <button id="f-new" onclick="setFilter('new')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">🕒 Новые</button>
+            <button id="f-popular" onclick="setFilter('popular')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">🔥 Популярные</button>
+            <button id="f-alpha" onclick="setFilter('alpha')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">🔤 А-Я</button>
+        </div>
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🎭 Жанры</div>
         <div id="gfp-genres" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;max-height:100px;overflow-y:auto"></div>
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🏷 Теги</div>
@@ -5970,7 +5971,19 @@ async function checkAdmin(){
 // ===== CATALOG =====
 let page=0,q='',loading=false,hasMore=true,currentSort='new',activeGenre='',activeTag='';
 const grid=document.getElementById('grid'),moreBtn=document.getElementById('more'),statsDiv=document.getElementById('stats');
-function setFilter(sort){if(currentSort===sort)return;currentSort=sort;['new','popular','alpha'].forEach(s=>document.getElementById('f-'+s).classList.toggle('active',s===sort));load(true);}
+function setFilter(sort){
+    if(currentSort===sort)return;
+    currentSort=sort;
+    ['new','popular','alpha'].forEach(s=>{
+        const el=document.getElementById('f-'+s);
+        if(!el)return;
+        const active=s===sort;
+        el.style.background=active?'var(--accent)':'transparent';
+        el.style.color=active?'#fff':'var(--muted)';
+        el.style.borderColor=active?'var(--accent)':'var(--border)';
+    });
+    load(true);
+}
 
 // ===== GENRE/TAG FILTER =====
 let _genreTagsData=null;
@@ -5995,18 +6008,16 @@ function renderGenreFilterPanel(){
 function selectGenre(slug){
     activeGenre=activeGenre===slug?'':slug;
     activeTag='';
-    document.getElementById('f-genre-tag').classList.toggle('active',!!(activeGenre||activeTag));
     renderGenreFilterPanel();
     load(true);
 }
 function selectTag(slug){
     activeTag=activeTag===slug?'':slug;
     activeGenre='';
-    document.getElementById('f-genre-tag').classList.toggle('active',!!(activeGenre||activeTag));
     renderGenreFilterPanel();
     load(true);
 }
-function clearGenreFilter(){activeGenre='';activeTag='';document.getElementById('f-genre-tag').classList.remove('active');renderGenreFilterPanel();load(true);}
+function clearGenreFilter(){activeGenre='';activeTag='';renderGenreFilterPanel();load(true);}
 
 // Load genres for add form
 async function loadGenresForAddForm(){
@@ -6838,14 +6849,13 @@ async function loadTopWeek() {
             track.innerHTML = data.items.map((m, i) => {
                 const src = (m.cover_display && !m.cover_display.startsWith('tg://')) ? m.cover_display : '';
                 const ratingVal = m.avg_rating > 0 ? parseFloat(m.avg_rating).toFixed(1) : null;
-                const imgHtml = src
-                    ? `<img src="${escapeHtml(src)}" style="width:86px;height:118px;object-fit:cover;border-radius:8px;display:block;flex-shrink:0;border:1px solid var(--border)" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-                    : '';
-                const phHtml = `<div style="${src?'display:none;':''}width:86px;height:118px;border-radius:8px;background:var(--card2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid var(--border)">📖</div>`;
+                const coverHtml = src
+                    ? `<img src="${escapeHtml(src)}" style="width:86px;height:118px;object-fit:cover;border-radius:8px;display:block;flex-shrink:0;border:1px solid var(--border)" alt="" loading="lazy">`
+                    : `<div style="width:86px;height:118px;border-radius:8px;background:var(--card2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid var(--border)">📖</div>`;
                 return `
-                <div style="flex:0 0 280px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;gap:11px;align-items:flex-start;transition:border-color .2s,box-shadow .2s;cursor:pointer" onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 8px 28px rgba(0,0,0,0.5)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
+                <div style="flex:0 0 280px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;gap:11px;align-items:flex-start;transition:border-color .2s,box-shadow .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 8px 28px rgba(0,0,0,0.5)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
                     <div style="position:relative;flex-shrink:0">
-                        ${imgHtml}${phHtml}
+                        ${coverHtml}
                         ${ratingVal ? `<div style="position:absolute;top:5px;left:5px;background:rgba(10,10,11,0.85);border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;backdrop-filter:blur(4px)"><span style="color:#f59e0b;font-size:9px">★</span>${ratingVal}</div>` : ''}
                     </div>
                     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;padding-top:2px">
